@@ -2,21 +2,46 @@ import { config } from "../config";
 import type { EventRecord, PaymentStatus, RequestRecord, RequestStatus } from "../types";
 
 async function request<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
-  const response = await fetch(`${config.apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${config.apiBaseUrl}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
+    });
+  } catch {
+    throw new Error("Network request failed. Please refresh and sign in again.");
+  }
 
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Session expired or unauthorized. Please sign in again.");
+    }
     const text = await response.text();
     throw new Error(text || `Request failed: ${response.status}`);
   }
 
   return (await response.json()) as T;
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Unable to read file."));
+        return;
+      }
+      const commaIndex = result.indexOf(",");
+      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+    };
+    reader.onerror = () => reject(new Error("Failed to read selected file."));
+    reader.readAsDataURL(file);
+  });
 }
 
 export const api = {
@@ -101,30 +126,114 @@ export const api = {
 
   async uploadBrandAsset(eventId: string, file: File, token: string) {
     const extension = file.name.split(".").pop() ?? "png";
-    const presign = await request<{ uploadUrl: string; assetUrl: string }>(
+    const contentType = file.type || "application/octet-stream";
+
+    try {
+      const presign = await request<{ uploadUrl?: string; assetUrl: string }>(
+        `/events/${eventId}/assets`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            contentType,
+            extension,
+          }),
+        },
+        token,
+      );
+
+      if (presign.uploadUrl) {
+        const uploadResponse = await fetch(presign.uploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": contentType,
+          },
+          body: file,
+        });
+        if (!uploadResponse.ok) {
+          const text = await uploadResponse.text();
+          throw new Error(text || `Logo upload failed: ${uploadResponse.status}`);
+        }
+        return presign.assetUrl;
+      }
+    } catch {
+      // Fallback path below.
+    }
+
+    // Fallback to direct API upload for smaller files.
+    if (file.size > 4 * 1024 * 1024) {
+      throw new Error("Upload failed. Please use an image smaller than 4MB.");
+    }
+
+    const fileBase64 = await fileToBase64(file);
+    const direct = await request<{ assetUrl: string }>(
       `/events/${eventId}/assets`,
       {
         method: "POST",
-        body: JSON.stringify({ contentType: file.type, extension }),
+        body: JSON.stringify({
+          contentType,
+          extension,
+          fileBase64,
+        }),
       },
       token,
     );
-
-    await fetch(presign.uploadUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": file.type,
-      },
-      body: file,
-    });
-
-    return presign.assetUrl;
+    return direct.assetUrl;
   },
 
   resetRequests(eventId: string, token: string) {
     return request<{ deletedCount: number; message: string }>(
       `/events/${eventId}/reset-requests`,
       { method: "POST" },
+      token,
+    );
+  },
+
+  detectPlayed(
+    eventId: string,
+    payload: {
+      playedTitle: string;
+      playedArtist?: string;
+      sourceId?: string;
+      reviewedBy?: string;
+    },
+    token: string,
+  ) {
+    return request<{
+      matched: boolean;
+      confidenceScore?: number;
+      request?: RequestRecord;
+      reason?: string;
+    }>(
+      `/events/${eventId}/detect-played`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      token,
+    );
+  },
+
+  autoDetectPlayed(eventId: string, token: string) {
+    return request<{
+      matched: boolean;
+      confidenceScore?: number;
+      request?: RequestRecord;
+      reason?: string;
+      sourceId?: string;
+      sourceName?: string;
+      currentTrack?: string;
+      sourceStatuses?: Array<{
+        sourceId: string;
+        sourceName: string;
+        health: "live" | "private" | "no_track_data" | "unreachable";
+        detail?: string;
+        currentTrack?: string;
+      }>;
+    }>(
+      `/events/${eventId}/auto-detect-played`,
+      {
+        method: "POST",
+      },
       token,
     );
   },

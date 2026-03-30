@@ -4,6 +4,30 @@ import { randomUUID } from "node:crypto";
 import type { EventRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
 
+const defaultLiveSources = (seratoLiveUrl?: string, rekordboxLiveUrl?: string) => [
+  {
+    id: "serato-a",
+    name: "Serato A",
+    type: "serato" as const,
+    url: seratoLiveUrl ?? "",
+    active: Boolean(seratoLiveUrl),
+  },
+  {
+    id: "serato-b",
+    name: "Serato B",
+    type: "serato" as const,
+    url: "",
+    active: false,
+  },
+  {
+    id: "rekordbox",
+    name: "Rekordbox",
+    type: "rekordbox" as const,
+    url: rekordboxLiveUrl ?? "",
+    active: Boolean(rekordboxLiveUrl),
+  },
+];
+
 interface CreateEventInput {
   eventId?: string;
   name: string;
@@ -16,6 +40,7 @@ interface CreateEventInput {
   djLogoUrl?: string;
   seratoLiveUrl?: string;
   rekordboxLiveUrl?: string;
+  livePlaylistSources?: EventRecord["livePlaylistSources"];
   venmoHandle?: string;
   primaryColor?: string;
   secondaryColor?: string;
@@ -41,6 +66,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     djLogoUrl: input.djLogoUrl,
     seratoLiveUrl: input.seratoLiveUrl,
     rekordboxLiveUrl: input.rekordboxLiveUrl,
+    livePlaylistSources: input.livePlaylistSources ?? defaultLiveSources(input.seratoLiveUrl, input.rekordboxLiveUrl),
     venmoHandle: input.venmoHandle?.replace("@", ""),
     primaryColor: input.primaryColor ?? "#0f172a",
     secondaryColor: input.secondaryColor ?? "#1e293b",

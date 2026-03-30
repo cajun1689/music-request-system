@@ -1,6 +1,7 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { docClient, env, json, parseBody } from "../shared/utils";
+import type { EventRecord } from "../shared/types";
 
 interface UpdateEventInput {
   name?: string;
@@ -13,6 +14,7 @@ interface UpdateEventInput {
   djLogoUrl?: string;
   seratoLiveUrl?: string;
   rekordboxLiveUrl?: string;
+  livePlaylistSources?: EventRecord["livePlaylistSources"];
   venmoHandle?: string;
   primaryColor?: string;
   secondaryColor?: string;

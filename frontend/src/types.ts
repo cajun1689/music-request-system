@@ -10,6 +10,19 @@ export interface NowPlayingSlot {
   updatedAt?: string;
 }
 
+export interface LivePlaylistSource {
+  id: string;
+  name: string;
+  type: "serato" | "rekordbox";
+  url: string;
+  active: boolean;
+}
+
+export interface AutoMatchSourceState {
+  lastMatchedTrackNorm?: string;
+  lastMatchedAt?: string;
+}
+
 export interface EventRecord {
   eventId: string;
   name: string;
@@ -22,6 +35,8 @@ export interface EventRecord {
   djLogoUrl?: string;
   seratoLiveUrl?: string;
   rekordboxLiveUrl?: string;
+  livePlaylistSources?: LivePlaylistSource[];
+  autoMatchState?: Record<string, AutoMatchSourceState>;
   venmoHandle?: string;
   nowPlayingSlots?: NowPlayingSlot[];
   primaryColor: string;

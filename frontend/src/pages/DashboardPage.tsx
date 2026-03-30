@@ -4,7 +4,7 @@ import { RequestCard } from "../components/RequestCard";
 import { useAuth } from "../context/AuthContext";
 import { useRequests } from "../hooks/useRequests";
 import { api } from "../services/api";
-import type { EventRecord, NowPlayingSlot } from "../types";
+import type { EventRecord, LivePlaylistSource, NowPlayingSlot } from "../types";
 
 type Tab = "pending" | "approved" | "played" | "vetoed";
 
@@ -16,6 +16,26 @@ function defaultNowPlayingSlots(): NowPlayingSlot[] {
   ];
 }
 
+function defaultLiveSources(eventData: EventRecord | null): LivePlaylistSource[] {
+  return [
+    {
+      id: "serato-a",
+      name: "Serato A",
+      type: "serato",
+      url: eventData?.seratoLiveUrl ?? "",
+      active: Boolean(eventData?.seratoLiveUrl),
+    },
+    { id: "serato-b", name: "Serato B", type: "serato", url: "", active: false },
+    {
+      id: "rekordbox",
+      name: "Rekordbox",
+      type: "rekordbox",
+      url: eventData?.rekordboxLiveUrl ?? "",
+      active: Boolean(eventData?.rekordboxLiveUrl),
+    },
+  ];
+}
+
 export function DashboardPage() {
   const { eventId: routeEventId } = useParams();
   const { session, logout } = useAuth();
@@ -23,6 +43,23 @@ export function DashboardPage() {
   const [eventData, setEventData] = useState<EventRecord | null>(null);
   const [nowPlayingSlots, setNowPlayingSlots] = useState<NowPlayingSlot[]>(defaultNowPlayingSlots());
   const [savingNowPlaying, setSavingNowPlaying] = useState(false);
+  const [playedTitle, setPlayedTitle] = useState("");
+  const [playedArtist, setPlayedArtist] = useState("");
+  const [selectedSourceId, setSelectedSourceId] = useState("serato-a");
+  const [detecting, setDetecting] = useState(false);
+  const [detectMessage, setDetectMessage] = useState("");
+  const [autoMatchingEnabled, setAutoMatchingEnabled] = useState(false);
+  const [autoMatchingBusy, setAutoMatchingBusy] = useState(false);
+  const [autoMatchingMessage, setAutoMatchingMessage] = useState("");
+  const [sourceHealth, setSourceHealth] = useState<
+    Array<{
+      sourceId: string;
+      sourceName: string;
+      health: "live" | "private" | "no_track_data" | "unreachable";
+      detail?: string;
+      currentTrack?: string;
+    }>
+  >([]);
   const [tab, setTab] = useState<Tab>("pending");
   const { grouped, loading, applyLocalStatus, refresh } = useRequests(eventId || undefined, "dj");
 
@@ -32,6 +69,7 @@ export function DashboardPage() {
     if (!eventId) {
       return;
     }
+    setSourceHealth([]);
     void api
       .getEvent(eventId)
       .then((evt) => {
@@ -146,6 +184,74 @@ export function DashboardPage() {
     await saveNowPlayingSlots(next);
   }
 
+  async function detectPlayedTrack() {
+    if (!session || !eventId || !playedTitle.trim()) {
+      return;
+    }
+    setDetecting(true);
+    setDetectMessage("");
+    try {
+      const result = await api.detectPlayed(
+        eventId,
+        {
+          playedTitle: playedTitle.trim(),
+          playedArtist: playedArtist.trim() || undefined,
+          sourceId: selectedSourceId,
+          reviewedBy: session.email,
+        },
+        session.idToken,
+      );
+      if (result.matched) {
+        setDetectMessage(`Matched and marked played (score ${result.confidenceScore ?? 0}).`);
+        setPlayedTitle("");
+        setPlayedArtist("");
+        await refresh();
+      } else {
+        setDetectMessage(result.reason ?? "No matching approved request found.");
+      }
+    } catch (error) {
+      setDetectMessage((error as Error).message);
+    } finally {
+      setDetecting(false);
+    }
+  }
+
+  async function runAutoDetectPlayed() {
+    if (!session || !eventId) {
+      return;
+    }
+    setAutoMatchingBusy(true);
+    try {
+      const result = await api.autoDetectPlayed(eventId, session.idToken);
+      setSourceHealth(result.sourceStatuses ?? []);
+      if (result.matched) {
+        setAutoMatchingMessage(
+          `Auto-matched ${result.request?.songTitle ?? "track"} from ${result.sourceName ?? result.sourceId ?? "source"}${
+            result.currentTrack ? ` (live: ${result.currentTrack})` : ""
+          }.`,
+        );
+        await refresh();
+      } else {
+        setAutoMatchingMessage(result.reason ?? "No live match.");
+      }
+    } catch (error) {
+      setAutoMatchingMessage((error as Error).message);
+    } finally {
+      setAutoMatchingBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!autoMatchingEnabled || !session || !eventId) {
+      return;
+    }
+    void runAutoDetectPlayed();
+    const interval = window.setInterval(() => {
+      void runAutoDetectPlayed();
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [autoMatchingEnabled, session, eventId]);
+
   if (!eventId) {
     return (
       <div className="mx-auto max-w-xl p-6 text-slate-100">
@@ -176,26 +282,19 @@ export function DashboardPage() {
             <p className="text-sm text-slate-300">Event: {eventId}</p>
           </div>
           <div className="flex gap-2">
-            {eventData?.seratoLiveUrl ? (
-              <a
-                className="rounded-md border border-sky-500/60 px-3 py-1.5 text-sm text-sky-300"
-                href={eventData.seratoLiveUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open Serato Live
-              </a>
-            ) : null}
-            {eventData?.rekordboxLiveUrl ? (
-              <a
-                className="rounded-md border border-indigo-500/60 px-3 py-1.5 text-sm text-indigo-300"
-                href={eventData.rekordboxLiveUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open Rekordbox Link
-              </a>
-            ) : null}
+            {(eventData?.livePlaylistSources?.length ? eventData.livePlaylistSources : defaultLiveSources(eventData))
+              .filter((source) => source.url)
+              .map((source) => (
+                <a
+                  key={source.id}
+                  className="rounded-md border border-sky-500/60 px-3 py-1.5 text-sm text-sky-300"
+                  href={source.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open {source.name}
+                </a>
+              ))}
             <Link className="rounded-md border border-slate-600 px-3 py-1.5 text-sm" to="/admin">
               Admin
             </Link>
@@ -260,6 +359,90 @@ export function DashboardPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="mb-5 rounded-xl border border-slate-800 bg-slate-900 p-4">
+          <h2 className="mb-3 text-lg font-semibold">Register Played Song (all 3 playlists)</h2>
+          <div className="grid gap-2 md:grid-cols-4">
+            <select
+              className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              value={selectedSourceId}
+              onChange={(e) => setSelectedSourceId(e.target.value)}
+            >
+              {(eventData?.livePlaylistSources?.length ? eventData.livePlaylistSources : defaultLiveSources(eventData)).map(
+                (source) => (
+                  <option key={source.id} value={source.id}>
+                    {source.name}
+                  </option>
+                ),
+              )}
+            </select>
+            <input
+              className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm md:col-span-2"
+              placeholder="Played song title (include remix if needed)"
+              value={playedTitle}
+              onChange={(e) => setPlayedTitle(e.target.value)}
+            />
+            <input
+              className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              placeholder="Artist (optional)"
+              value={playedArtist}
+              onChange={(e) => setPlayedArtist(e.target.value)}
+            />
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              className="rounded bg-emerald-400 px-3 py-1.5 text-sm font-semibold text-emerald-950 disabled:opacity-60"
+              onClick={() => void detectPlayedTrack()}
+              disabled={detecting || !playedTitle.trim()}
+            >
+              {detecting ? "Matching..." : "Match + Mark Played"}
+            </button>
+            {detectMessage ? <p className="text-sm text-slate-300">{detectMessage}</p> : null}
+          </div>
+          <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
+            <p className="text-sm font-semibold">Auto-match from live playlist URLs</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                className="rounded bg-sky-400 px-3 py-1.5 text-sm font-semibold text-sky-950 disabled:opacity-60"
+                onClick={() => void runAutoDetectPlayed()}
+                disabled={autoMatchingBusy}
+              >
+                {autoMatchingBusy ? "Checking..." : "Check Live Playlists Now"}
+              </button>
+              <button
+                className={`rounded px-3 py-1.5 text-sm font-semibold ${
+                  autoMatchingEnabled ? "bg-emerald-400 text-emerald-950" : "bg-slate-700 text-slate-100"
+                }`}
+                onClick={() => setAutoMatchingEnabled((prev) => !prev)}
+              >
+                {autoMatchingEnabled ? "Auto-Match: ON (30s)" : "Auto-Match: OFF"}
+              </button>
+              {autoMatchingMessage ? <p className="text-sm text-slate-300">{autoMatchingMessage}</p> : null}
+            </div>
+            {sourceHealth.length ? (
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                {sourceHealth.map((source) => {
+                  const badgeClass =
+                    source.health === "live"
+                      ? "bg-emerald-400/20 text-emerald-300"
+                      : source.health === "private"
+                        ? "bg-rose-400/20 text-rose-300"
+                        : source.health === "no_track_data"
+                          ? "bg-amber-400/20 text-amber-300"
+                          : "bg-slate-700 text-slate-300";
+                  return (
+                    <div key={source.sourceId} className="rounded border border-slate-700 bg-slate-900 p-2 text-xs">
+                      <p className="font-semibold text-slate-100">{source.sourceName}</p>
+                      <p className={`mt-1 inline-flex rounded px-2 py-0.5 ${badgeClass}`}>{source.health}</p>
+                      {source.currentTrack ? <p className="mt-1 text-slate-300">{source.currentTrack}</p> : null}
+                      {source.detail ? <p className="mt-1 text-slate-400">{source.detail}</p> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         </section>
 

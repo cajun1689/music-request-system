@@ -77,7 +77,13 @@ export class InfrastructureStack extends Stack {
     });
 
     const brandAssetsBucket = new s3.Bucket(this, "BrandAssetsBucket", {
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      blockPublicAccess: new s3.BlockPublicAccess({
+        blockPublicAcls: true,
+        ignorePublicAcls: true,
+        blockPublicPolicy: false,
+        restrictPublicBuckets: false,
+      }),
+      publicReadAccess: true,
       enforceSSL: true,
       cors: [
         {
@@ -210,6 +216,14 @@ export class InfrastructureStack extends Stack {
       "ResetRequestsFn",
       "../../backend/lambdas/api/resetRequests.ts",
     );
+    const detectPlayedFn = makeLambda(
+      "DetectPlayedFn",
+      "../../backend/lambdas/api/detectPlayed.ts",
+    );
+    const autoDetectPlayedFn = makeLambda(
+      "AutoDetectPlayedFn",
+      "../../backend/lambdas/api/autoDetectPlayed.ts",
+    );
     const wsConnectFn = makeLambda("WsConnectFn", "../../backend/lambdas/websocket/connect.ts");
     const wsDisconnectFn = makeLambda(
       "WsDisconnectFn",
@@ -232,6 +246,9 @@ export class InfrastructureStack extends Stack {
     requestsTable.grantReadData(getRequestsFn);
     requestsTable.grantReadWriteData(updateRequestFn);
     requestsTable.grantReadWriteData(resetRequestsFn);
+    requestsTable.grantReadWriteData(detectPlayedFn);
+    requestsTable.grantReadWriteData(autoDetectPlayedFn);
+    eventsTable.grantReadData(autoDetectPlayedFn);
     requestsTable.grantStreamRead(requestStreamFn);
     connectionsTable.grantReadWriteData(wsConnectFn);
     connectionsTable.grantReadWriteData(wsDisconnectFn);
@@ -325,6 +342,28 @@ export class InfrastructureStack extends Stack {
       },
     });
 
+    const gatewayCorsHeaders = {
+      "Access-Control-Allow-Origin": "'*'",
+      "Access-Control-Allow-Headers": "'Content-Type,Authorization'",
+      "Access-Control-Allow-Methods": "'GET,POST,PATCH,OPTIONS'",
+    };
+    restApi.addGatewayResponse("Default4xxCors", {
+      type: apigateway.ResponseType.DEFAULT_4XX,
+      responseHeaders: gatewayCorsHeaders,
+    });
+    restApi.addGatewayResponse("Default5xxCors", {
+      type: apigateway.ResponseType.DEFAULT_5XX,
+      responseHeaders: gatewayCorsHeaders,
+    });
+    restApi.addGatewayResponse("UnauthorizedCors", {
+      type: apigateway.ResponseType.UNAUTHORIZED,
+      responseHeaders: gatewayCorsHeaders,
+    });
+    restApi.addGatewayResponse("AccessDeniedCors", {
+      type: apigateway.ResponseType.ACCESS_DENIED,
+      responseHeaders: gatewayCorsHeaders,
+    });
+
     const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "ApiAuthorizer", {
       cognitoUserPools: [userPool],
     });
@@ -337,6 +376,8 @@ export class InfrastructureStack extends Stack {
     const requestByIdResource = requestsResource.addResource("{requestId}");
     const assetsResource = eventByIdResource.addResource("assets");
     const resetRequestsResource = eventByIdResource.addResource("reset-requests");
+    const detectPlayedResource = eventByIdResource.addResource("detect-played");
+    const autoDetectPlayedResource = eventByIdResource.addResource("auto-detect-played");
 
     eventsResource.addMethod("POST", new apigateway.LambdaIntegration(createEventFn), {
       authorizer,
@@ -362,6 +403,14 @@ export class InfrastructureStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
     resetRequestsResource.addMethod("POST", new apigateway.LambdaIntegration(resetRequestsFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    detectPlayedResource.addMethod("POST", new apigateway.LambdaIntegration(detectPlayedFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    autoDetectPlayedResource.addMethod("POST", new apigateway.LambdaIntegration(autoDetectPlayedFn), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });

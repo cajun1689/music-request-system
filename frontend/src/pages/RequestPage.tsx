@@ -19,6 +19,47 @@ export function RequestPage() {
   const [trackedRequest, setTrackedRequest] = useState<RequestRecord | null>(null);
   const [songsAway, setSongsAway] = useState<number | null>(null);
 
+  function buildVenmoParams() {
+    if (!eventData?.venmoHandle) {
+      return null;
+    }
+
+    const params = new URLSearchParams({
+      txn: "pay",
+      recipients: eventData.venmoHandle,
+    });
+    if (tipAmount) {
+      params.set("amount", tipAmount);
+    }
+    if (songTitle) {
+      params.set("note", `Song request: ${songTitle}`);
+    }
+    return params;
+  }
+
+  function openVenmo() {
+    const params = buildVenmoParams();
+    if (!params) {
+      return;
+    }
+
+    const appUrl = `venmo://paycharge?${params.toString()}`;
+    const webUrl = `https://account.venmo.com/pay?${params.toString()}`;
+    const fallbackTimer = window.setTimeout(() => {
+      window.location.href = webUrl;
+    }, 900);
+
+    const cancelFallback = () => {
+      window.clearTimeout(fallbackTimer);
+      document.removeEventListener("visibilitychange", cancelFallback);
+      window.removeEventListener("pagehide", cancelFallback);
+    };
+
+    document.addEventListener("visibilitychange", cancelFallback);
+    window.addEventListener("pagehide", cancelFallback);
+    window.location.href = appUrl;
+  }
+
   useEffect(() => {
     if (!eventId) {
       return;
@@ -154,18 +195,13 @@ export function RequestPage() {
               />
             </label>
             <div className="mt-2">
-              <a
+              <button
+                type="button"
                 className="inline-flex rounded-md bg-emerald-400 px-3 py-1.5 text-xs font-semibold text-emerald-950"
-                href={`https://account.venmo.com/pay?txn=pay&recipients=${encodeURIComponent(
-                  eventData.venmoHandle,
-                )}${tipAmount ? `&amount=${encodeURIComponent(tipAmount)}` : ""}${
-                  songTitle ? `&note=${encodeURIComponent(`Song request: ${songTitle}`)}` : ""
-                }`}
-                target="_blank"
-                rel="noreferrer"
+                onClick={openVenmo}
               >
-                Open Venmo
-              </a>
+                Open Venmo App
+              </button>
             </div>
             <label className="mt-3 block text-sm">
               Venmo payment reference (optional)

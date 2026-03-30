@@ -4,9 +4,14 @@ import { Link } from "react-router-dom";
 import { QRGenerator } from "../components/QRGenerator";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
-import type { EventRecord } from "../types";
+import type { EventRecord, LivePlaylistSource } from "../types";
 
 const GASLIGHT_SLUG = "gaslight-residency";
+const defaultLiveSources = (seratoUrl = "", rekordboxUrl = ""): LivePlaylistSource[] => [
+  { id: "serato-a", name: "Serato A", type: "serato", url: seratoUrl, active: Boolean(seratoUrl) },
+  { id: "serato-b", name: "Serato B", type: "serato", url: "", active: false },
+  { id: "rekordbox", name: "Rekordbox", type: "rekordbox", url: rekordboxUrl, active: Boolean(rekordboxUrl) },
+];
 
 const emptyForm = {
   name: "",
@@ -14,7 +19,19 @@ const emptyForm = {
   venueName: "",
   djBrandName: "",
   seratoLiveUrl: "",
+  seratoLiveUrl2: "",
   rekordboxLiveUrl: "",
+  venmoHandle: "",
+  primaryColor: "#0f172a",
+  secondaryColor: "#1e293b",
+  accentColor: "#f97316",
+};
+
+const emptyEventDetails = {
+  name: "",
+  date: "",
+  venueName: "",
+  djBrandName: "",
   venmoHandle: "",
   primaryColor: "#0f172a",
   secondaryColor: "#1e293b",
@@ -28,9 +45,12 @@ export function AdminPage() {
   const [djLogoFile, setDjLogoFile] = useState<File | null>(null);
   const [venueLogoFile, setVenueLogoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingLogoType, setUploadingLogoType] = useState<"dj" | "venue" | null>(null);
   const [message, setMessage] = useState<string>("");
+  const [eventDetails, setEventDetails] = useState(emptyEventDetails);
   const [lookupEventId, setLookupEventId] = useState<string>(localStorage.getItem("activeEventId") ?? "");
   const [seratoLiveUrlEdit, setSeratoLiveUrlEdit] = useState<string>("");
+  const [seratoLiveUrl2Edit, setSeratoLiveUrl2Edit] = useState<string>("");
   const [rekordboxLiveUrlEdit, setRekordboxLiveUrlEdit] = useState<string>("");
 
   const requestUrl = useMemo(() => {
@@ -41,8 +61,28 @@ export function AdminPage() {
   }, [eventData]);
 
   useEffect(() => {
-    setSeratoLiveUrlEdit(eventData?.seratoLiveUrl ?? "");
-    setRekordboxLiveUrlEdit(eventData?.rekordboxLiveUrl ?? "");
+    if (eventData) {
+      setEventDetails({
+        name: eventData.name ?? "",
+        date: eventData.date ?? "",
+        venueName: eventData.venueName ?? "",
+        djBrandName: eventData.djBrandName ?? "",
+        venmoHandle: eventData.venmoHandle ?? "",
+        primaryColor: eventData.primaryColor ?? "#0f172a",
+        secondaryColor: eventData.secondaryColor ?? "#1e293b",
+        accentColor: eventData.accentColor ?? "#f97316",
+      });
+    } else {
+      setEventDetails(emptyEventDetails);
+    }
+
+    const sources =
+      eventData?.livePlaylistSources?.length
+        ? eventData.livePlaylistSources
+        : defaultLiveSources(eventData?.seratoLiveUrl ?? "", eventData?.rekordboxLiveUrl ?? "");
+    setSeratoLiveUrlEdit(sources.find((source) => source.id === "serato-a")?.url ?? "");
+    setSeratoLiveUrl2Edit(sources.find((source) => source.id === "serato-b")?.url ?? "");
+    setRekordboxLiveUrlEdit(sources.find((source) => source.id === "rekordbox")?.url ?? "");
   }, [eventData]);
 
   async function onCreate(event: FormEvent) {
@@ -54,7 +94,23 @@ export function AdminPage() {
     setSaving(true);
     setMessage("");
     try {
-      const created = await api.createEvent(form, session.idToken);
+      const created = await api.createEvent(
+        {
+          ...form,
+          livePlaylistSources: [
+            { id: "serato-a", name: "Serato A", type: "serato", url: form.seratoLiveUrl, active: Boolean(form.seratoLiveUrl) },
+            { id: "serato-b", name: "Serato B", type: "serato", url: form.seratoLiveUrl2, active: Boolean(form.seratoLiveUrl2) },
+            {
+              id: "rekordbox",
+              name: "Rekordbox",
+              type: "rekordbox",
+              url: form.rekordboxLiveUrl,
+              active: Boolean(form.rekordboxLiveUrl),
+            },
+          ],
+        },
+        session.idToken,
+      );
       setEventData(created);
       localStorage.setItem("activeEventId", created.eventId);
       setMessage("Event created.");
@@ -71,9 +127,11 @@ export function AdminPage() {
     }
     const file = type === "dj" ? djLogoFile : venueLogoFile;
     if (!file) {
+      setMessage(`Choose a ${type === "dj" ? "DJ" : "Venue"} logo file first.`);
       return;
     }
-    setSaving(true);
+    setUploadingLogoType(type);
+    setMessage("");
     try {
       const logoUrl = await api.uploadBrandAsset(eventData.eventId, file, session.idToken);
       const updated = await api.updateEvent(
@@ -82,9 +140,16 @@ export function AdminPage() {
         session.idToken,
       );
       setEventData(updated);
+      if (type === "dj") {
+        setDjLogoFile(null);
+      } else {
+        setVenueLogoFile(null);
+      }
       setMessage(`${type === "dj" ? "DJ" : "Venue"} logo uploaded.`);
+    } catch (err) {
+      setMessage(`Logo upload failed: ${(err as Error).message}`);
     } finally {
-      setSaving(false);
+      setUploadingLogoType(null);
     }
   }
 
@@ -111,6 +176,23 @@ export function AdminPage() {
           djBrandName: form.djBrandName || "MAPL",
           seratoLiveUrl: form.seratoLiveUrl || "https://serato.com/playlists/cajun1689me_com/live",
           rekordboxLiveUrl: form.rekordboxLiveUrl,
+          livePlaylistSources: [
+            {
+              id: "serato-a",
+              name: "Serato A",
+              type: "serato",
+              url: form.seratoLiveUrl || "https://serato.com/playlists/cajun1689me_com/live",
+              active: true,
+            },
+            { id: "serato-b", name: "Serato B", type: "serato", url: form.seratoLiveUrl2, active: Boolean(form.seratoLiveUrl2) },
+            {
+              id: "rekordbox",
+              name: "Rekordbox",
+              type: "rekordbox",
+              url: form.rekordboxLiveUrl,
+              active: Boolean(form.rekordboxLiveUrl),
+            },
+          ],
           venmoHandle: form.venmoHandle,
           primaryColor: form.primaryColor,
           secondaryColor: form.secondaryColor,
@@ -168,6 +250,11 @@ export function AdminPage() {
         eventData.eventId,
         {
           seratoLiveUrl: seratoLiveUrlEdit || undefined,
+          livePlaylistSources: [
+            { id: "serato-a", name: "Serato A", type: "serato", url: seratoLiveUrlEdit, active: Boolean(seratoLiveUrlEdit) },
+            { id: "serato-b", name: "Serato B", type: "serato", url: seratoLiveUrl2Edit, active: Boolean(seratoLiveUrl2Edit) },
+            { id: "rekordbox", name: "Rekordbox", type: "rekordbox", url: rekordboxLiveUrlEdit, active: Boolean(rekordboxLiveUrlEdit) },
+          ],
           rekordboxLiveUrl: rekordboxLiveUrlEdit || undefined,
         },
         session.idToken,
@@ -176,6 +263,36 @@ export function AdminPage() {
       setMessage("Live playlist links updated.");
     } catch (err) {
       setMessage(`Failed to update live links: ${(err as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onSaveEventDetails() {
+    if (!session || !eventData) {
+      return;
+    }
+    setSaving(true);
+    setMessage("");
+    try {
+      const updated = await api.updateEvent(
+        eventData.eventId,
+        {
+          name: eventDetails.name,
+          date: eventDetails.date,
+          venueName: eventDetails.venueName,
+          djBrandName: eventDetails.djBrandName,
+          venmoHandle: eventDetails.venmoHandle.replace("@", "").trim(),
+          primaryColor: eventDetails.primaryColor,
+          secondaryColor: eventDetails.secondaryColor,
+          accentColor: eventDetails.accentColor,
+        },
+        session.idToken,
+      );
+      setEventData(updated);
+      setMessage("Event details updated.");
+    } catch (err) {
+      setMessage(`Failed to update event details: ${(err as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -272,6 +389,12 @@ export function AdminPage() {
           />
           <input
             className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+            placeholder="Serato Live URL #2 (optional)"
+            value={form.seratoLiveUrl2}
+            onChange={(e) => setForm((prev) => ({ ...prev, seratoLiveUrl2: e.target.value.trim() }))}
+          />
+          <input
+            className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
             placeholder="Venmo Handle (without @)"
             value={form.venmoHandle}
             onChange={(e) =>
@@ -338,6 +461,92 @@ export function AdminPage() {
               Rekordbox Link: {eventData.rekordboxLiveUrl ? "configured" : "not set"}
             </p>
             <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
+              <h3 className="text-sm font-semibold">Playlist Source URLs (2 Serato + 1 Rekordbox)</h3>
+              {(eventData.livePlaylistSources ?? []).map((source) => (
+                <div key={source.id} className="rounded border border-slate-700 bg-slate-900 p-2">
+                  <p className="mb-1 text-xs uppercase text-slate-300">
+                    {source.name} ({source.type})
+                  </p>
+                  <p className="break-all text-xs text-slate-200">{source.url || "not set"}</p>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
+              <h3 className="text-sm font-semibold">Update Weekly Event Details</h3>
+              <input
+                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                placeholder="Event Name"
+                value={eventDetails.name}
+                onChange={(e) => setEventDetails((prev) => ({ ...prev, name: e.target.value }))}
+              />
+              <input
+                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                type="date"
+                value={eventDetails.date}
+                onChange={(e) => setEventDetails((prev) => ({ ...prev, date: e.target.value }))}
+              />
+              <input
+                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                placeholder="Venue Name"
+                value={eventDetails.venueName}
+                onChange={(e) => setEventDetails((prev) => ({ ...prev, venueName: e.target.value }))}
+              />
+              <input
+                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                placeholder="DJ Brand Name"
+                value={eventDetails.djBrandName}
+                onChange={(e) => setEventDetails((prev) => ({ ...prev, djBrandName: e.target.value }))}
+              />
+              <input
+                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                placeholder="Venmo Handle (without @)"
+                value={eventDetails.venmoHandle}
+                onChange={(e) =>
+                  setEventDetails((prev) => ({
+                    ...prev,
+                    venmoHandle: e.target.value.replace("@", ""),
+                  }))
+                }
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <label className="text-xs">
+                  Primary
+                  <input
+                    className="mt-1 h-9 w-full rounded border border-slate-700 bg-slate-900 px-2"
+                    type="color"
+                    value={eventDetails.primaryColor}
+                    onChange={(e) => setEventDetails((prev) => ({ ...prev, primaryColor: e.target.value }))}
+                  />
+                </label>
+                <label className="text-xs">
+                  Secondary
+                  <input
+                    className="mt-1 h-9 w-full rounded border border-slate-700 bg-slate-900 px-2"
+                    type="color"
+                    value={eventDetails.secondaryColor}
+                    onChange={(e) => setEventDetails((prev) => ({ ...prev, secondaryColor: e.target.value }))}
+                  />
+                </label>
+                <label className="text-xs">
+                  Accent
+                  <input
+                    className="mt-1 h-9 w-full rounded border border-slate-700 bg-slate-900 px-2"
+                    type="color"
+                    value={eventDetails.accentColor}
+                    onChange={(e) => setEventDetails((prev) => ({ ...prev, accentColor: e.target.value }))}
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                onClick={() => void onSaveEventDetails()}
+                disabled={saving}
+                className="rounded-md bg-emerald-400 px-3 py-1.5 text-sm font-semibold text-emerald-950 disabled:opacity-60"
+              >
+                Save Event Details
+              </button>
+            </div>
+            <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
               <h3 className="text-sm font-semibold">Update Live Playlist Links (post-creation)</h3>
               <input
                 className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
@@ -350,6 +559,12 @@ export function AdminPage() {
                 placeholder="Rekordbox playlist URL"
                 value={rekordboxLiveUrlEdit}
                 onChange={(e) => setRekordboxLiveUrlEdit(e.target.value)}
+              />
+              <input
+                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                placeholder="Serato Live URL #2"
+                value={seratoLiveUrl2Edit}
+                onChange={(e) => setSeratoLiveUrl2Edit(e.target.value)}
               />
               <button
                 type="button"
@@ -372,12 +587,14 @@ export function AdminPage() {
               <div className="space-y-2">
                 <label className="block text-sm text-slate-300">DJ Logo</label>
                 <input type="file" accept="image/*" onChange={(e) => setDjLogoFile(e.target.files?.[0] ?? null)} />
+                {djLogoFile ? <p className="text-xs text-slate-300">Selected: {djLogoFile.name}</p> : null}
                 <button
+                  type="button"
                   onClick={() => void onUploadLogo("dj")}
-                  disabled={!djLogoFile || saving}
-                  className="rounded-md bg-sky-400 px-3 py-1.5 text-sm font-semibold text-sky-950 disabled:opacity-60"
+                  disabled={uploadingLogoType === "dj"}
+                  className="cursor-pointer rounded-md bg-sky-400 px-3 py-1.5 text-sm font-semibold text-sky-950 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Upload DJ Logo
+                  {uploadingLogoType === "dj" ? "Uploading DJ Logo..." : "Upload DJ Logo"}
                 </button>
                 <label className="mt-2 block text-sm text-slate-300">Venue Logo</label>
                 <input
@@ -385,12 +602,14 @@ export function AdminPage() {
                   accept="image/*"
                   onChange={(e) => setVenueLogoFile(e.target.files?.[0] ?? null)}
                 />
+                {venueLogoFile ? <p className="text-xs text-slate-300">Selected: {venueLogoFile.name}</p> : null}
                 <button
+                  type="button"
                   onClick={() => void onUploadLogo("venue")}
-                  disabled={!venueLogoFile || saving}
-                  className="rounded-md bg-indigo-400 px-3 py-1.5 text-sm font-semibold text-indigo-950 disabled:opacity-60"
+                  disabled={uploadingLogoType === "venue"}
+                  className="cursor-pointer rounded-md bg-indigo-400 px-3 py-1.5 text-sm font-semibold text-indigo-950 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Upload Venue Logo
+                  {uploadingLogoType === "venue" ? "Uploading Venue Logo..." : "Upload Venue Logo"}
                 </button>
               </div>
               {requestUrl ? <QRGenerator value={requestUrl} /> : null}
