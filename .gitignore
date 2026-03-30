@@ -1,0 +1,12 @@
+node_modules/
+**/node_modules/
+cdk.out/
+**/cdk.out/
+infrastructure/cdk-outputs.json
+dist/
+**/dist/
+.DS_Store
+.env
+.env.local
+.env.production
+*.log
