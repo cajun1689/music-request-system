@@ -12,9 +12,11 @@ A lightweight macOS menubar app that reads the currently playing track from Reko
 ## Download & Install
 
 1. Go to the [Releases page](https://github.com/cajun1689/music-request-system/releases) on GitHub.
-2. Download the latest **Rekordbox Bridge .pkg** file for macOS.
-3. Double-click the `.pkg` to run the installer. It will install the app to `/Applications/Rekordbox Bridge.app`.
-4. If macOS warns the app is from an unidentified developer, go to **System Settings > Privacy & Security** and click **Open Anyway**, or right-click the app and select **Open**.
+2. Download the latest **Rekordbox Bridge .dmg** (or .zip) for your Mac:
+   - **arm64** for Apple Silicon (M1/M2/M3/M4)
+   - **x64** for Intel Macs
+3. Open the `.dmg` and drag **Rekordbox Bridge** to your Applications folder. Or unzip the `.zip` and move the app to Applications.
+4. If macOS warns the app is from an unidentified developer, right-click the app and select **Open**, or go to **System Settings > Privacy & Security** and click **Open Anyway**.
 
 ## Requirements
 

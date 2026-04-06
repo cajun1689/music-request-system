@@ -36,8 +36,8 @@ jobs:
         with:
           name: rekordbox-bridge-mac
           path: |
-            rekordbox-agent/out/*.pkg
             rekordbox-agent/out/*.dmg
+            rekordbox-agent/out/*.zip
           if-no-files-found: warn
 
       - name: Create Release (on tag push)
@@ -45,8 +45,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            rekordbox-agent/out/*.pkg
             rekordbox-agent/out/*.dmg
+            rekordbox-agent/out/*.zip
           draft: false
           prerelease: false
         env:

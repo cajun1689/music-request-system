@@ -27,21 +27,15 @@
       "category": "public.app-category.music",
       "target": [
         {
-          "target": "pkg",
-          "arch": ["universal"]
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
         },
         {
-          "target": "dmg",
-          "arch": ["universal"]
+          "target": "zip",
+          "arch": ["x64", "arm64"]
         }
       ],
-      "icon": null
-    },
-    "pkg": {
-      "installLocation": "/Applications",
-      "allowCurrentUserHome": true,
-      "allowAnywhere": true,
-      "overwriteAction": "upgrade"
+      "identity": null
     },
     "directories": {
       "output": "out"
