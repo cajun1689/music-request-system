@@ -40,7 +40,8 @@ jobs:
         run: |
           echo "Certificate configured for code signing"
 
-      - name: Package for macOS
+      - name: Package for macOS (signed)
+        if: env.CSC_LINK != ''
         run: npx electron-builder --mac --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -49,6 +50,13 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Package for macOS (unsigned)
+        if: env.CSC_LINK == ''
+        run: npx electron-builder --mac --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: List build output
         run: ls -la out/ || true
