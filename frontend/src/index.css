@@ -13,6 +13,11 @@ body {
   color: #e2e8f0;
 }
 
+body.overlay-mode,
+body.overlay-mode #root {
+  background: transparent !important;
+}
+
 .brand-bg {
   background: linear-gradient(160deg, var(--brand-primary, #0f172a) 0%, var(--brand-secondary, #1e293b) 100%);
 }

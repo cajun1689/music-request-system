@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rekordbox Bridge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 16px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    h2 { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #94a3b8; }
+    .section {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    label { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 3px; margin-top: 8px; }
+    label:first-child { margin-top: 0; }
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #e2e8f0;
+      font-size: 12px;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: #60a5fa; }
+    button {
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      margin-right: 6px;
+    }
+    button:hover { background: #2563eb; }
+    button.secondary { background: #475569; }
+    button.secondary:hover { background: #64748b; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .dot.green { background: #4ade80; }
+    .dot.yellow { background: #facc15; }
+    .dot.red { background: #f87171; }
+    .status-line { font-size: 12px; margin-bottom: 4px; }
+    .track-info { background: #0f172a; border-radius: 6px; padding: 8px 10px; margin-top: 8px; }
+    .track-info p { font-size: 11px; }
+    .track-info .title { font-weight: 600; font-size: 13px; color: #f1f5f9; }
+    .error { color: #fca5a5; font-size: 11px; margin-top: 6px; }
+    .match-info { color: #86efac; font-size: 11px; margin-top: 4px; }
+    .manual-fields { display: flex; gap: 6px; margin-top: 8px; }
+    .manual-fields input { flex: 1; }
+  </style>
+</head>
+<body>
+  <h1>Rekordbox Bridge</h1>
+  <p style="font-size: 11px; color: #64748b; margin-bottom: 12px;">Pushes now-playing tracks from Rekordbox to the cloud.</p>
+
+  <div class="section" id="status-section">
+    <h2>Status</h2>
+    <div class="status-line"><span class="dot red" id="dot"></span> <span id="conn-label">Disconnected</span></div>
+    <div class="status-line">Mode: <strong id="mode-label">auto</strong></div>
+    <div class="status-line">DB: <span id="db-label">not found</span></div>
+    <div class="status-line">Queue: <span id="queue-label">0 pending</span></div>
+    <div id="last-track-box" class="track-info" style="display:none;">
+      <p class="title" id="track-title"></p>
+      <p id="track-artist"></p>
+      <p id="track-time" style="color:#64748b;"></p>
+    </div>
+    <div id="match-box" class="match-info" style="display:none;">
+      <span id="match-label"></span>
+    </div>
+    <div id="error-box" class="error" style="display:none;"></div>
+    <button id="btn-poll" class="secondary">Poll Now</button>
+  </div>
+
+  <div class="section">
+    <h2>Configuration</h2>
+    <label>API Base URL</label>
+    <input type="text" id="cfg-api-url" placeholder="https://your-api.com/prod" />
+    <label>Event ID</label>
+    <input type="text" id="cfg-event-id" placeholder="gaslight-residency" />
+    <label>Push Token</label>
+    <input type="text" id="cfg-push-token" placeholder="paste from Admin panel" />
+    <label>SQLCipher Key (leave blank for unencrypted)</label>
+    <input type="text" id="cfg-sqlcipher-key" placeholder="optional" />
+    <label>Polling Interval (ms)</label>
+    <input type="number" id="cfg-interval" value="10000" min="3000" max="60000" />
+    <label>Mode</label>
+    <select id="cfg-mode">
+      <option value="auto">Auto (poll Rekordbox DB)</option>
+      <option value="manual">Manual (type tracks)</option>
+    </select>
+    <button id="btn-save-config">Save Config</button>
+    <button id="btn-find-db" class="secondary">Detect DB Path</button>
+  </div>
+
+  <div class="section">
+    <h2>Manual Push</h2>
+    <div class="manual-fields">
+      <input type="text" id="manual-title" placeholder="Song title" />
+      <input type="text" id="manual-artist" placeholder="Artist" />
+    </div>
+    <button id="btn-manual-push">Push Now</button>
+    <div id="manual-error" class="error" style="display:none;"></div>
+  </div>
+
+  <script>
+    const bridge = window.bridge;
+
+    const el = (id) => document.getElementById(id);
+
+    function updateUI(s) {
+      const dot = el("dot");
+      dot.className = "dot " + (s.connected ? "green" : s.error ? "red" : "yellow");
+      el("conn-label").textContent = s.connected ? "Connected" : s.error ? "Error" : "Idle";
+      el("mode-label").textContent = s.mode;
+      el("db-label").textContent = s.dbPath || "not found";
+      el("queue-label").textContent = s.queueSize + " pending";
+
+      if (s.lastTrack) {
+        el("last-track-box").style.display = "";
+        el("track-title").textContent = s.lastTrack.title;
+        el("track-artist").textContent = s.lastTrack.artist || "";
+        el("track-time").textContent = s.lastTrack.playedAt || "";
+      } else {
+        el("last-track-box").style.display = "none";
+      }
+
+      if (s.lastResult) {
+        el("match-box").style.display = "";
+        if (s.lastResult.matched) {
+          el("match-label").textContent = "Matched! Score: " + (s.lastResult.confidenceScore ?? 0);
+        } else {
+          el("match-label").textContent = "No match: " + (s.lastResult.reason || "");
+        }
+        el("match-box").style.color = s.lastResult.matched ? "#86efac" : "#fcd34d";
+      } else {
+        el("match-box").style.display = "none";
+      }
+
+      if (s.error) {
+        el("error-box").style.display = "";
+        el("error-box").textContent = s.error;
+      } else {
+        el("error-box").style.display = "none";
+      }
+    }
+
+    bridge.onStatusUpdate(updateUI);
+
+    async function loadConfig() {
+      const c = await bridge.getConfig();
+      el("cfg-api-url").value = c.apiBaseUrl || "";
+      el("cfg-event-id").value = c.eventId || "";
+      el("cfg-push-token").value = c.pushToken || "";
+      el("cfg-sqlcipher-key").value = c.sqlcipherKey || "";
+      el("cfg-interval").value = c.pollingIntervalMs || 10000;
+      el("cfg-mode").value = c.mode || "auto";
+    }
+
+    async function loadStatus() {
+      const s = await bridge.getStatus();
+      updateUI(s);
+    }
+
+    el("btn-save-config").addEventListener("click", async () => {
+      await bridge.setConfig({
+        apiBaseUrl: el("cfg-api-url").value.trim(),
+        eventId: el("cfg-event-id").value.trim(),
+        pushToken: el("cfg-push-token").value.trim(),
+        sqlcipherKey: el("cfg-sqlcipher-key").value.trim(),
+        pollingIntervalMs: parseInt(el("cfg-interval").value, 10) || 10000,
+        mode: el("cfg-mode").value,
+      });
+    });
+
+    el("btn-find-db").addEventListener("click", async () => {
+      const dbPath = await bridge.resolveDbPath();
+      el("db-label").textContent = dbPath || "not found";
+    });
+
+    el("btn-poll").addEventListener("click", async () => {
+      el("btn-poll").disabled = true;
+      try { await bridge.pollNow(); } finally { el("btn-poll").disabled = false; }
+    });
+
+    el("btn-manual-push").addEventListener("click", async () => {
+      const title = el("manual-title").value.trim();
+      const artist = el("manual-artist").value.trim();
+      if (!title) return;
+      el("btn-manual-push").disabled = true;
+      el("manual-error").style.display = "none";
+      try {
+        await bridge.manualPush(title, artist);
+        el("manual-title").value = "";
+        el("manual-artist").value = "";
+      } catch (err) {
+        el("manual-error").style.display = "";
+        el("manual-error").textContent = err.message || "Push failed";
+      } finally {
+        el("btn-manual-push").disabled = false;
+      }
+    });
+
+    loadConfig();
+    loadStatus();
+  </script>
+</body>
+</html>

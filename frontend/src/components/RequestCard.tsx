@@ -1,4 +1,5 @@
 import type { RequestRecord } from "../types";
+import { toDisplayTitleCase } from "../utils/formatting";
 
 export function RequestCard({
   request,
@@ -28,7 +29,7 @@ export function RequestCard({
   return (
     <article className="rounded-xl border border-white/20 bg-slate-900/70 p-4">
       <h3 className="text-lg font-semibold text-white">
-        {request.songTitle} <span className="text-slate-400">-</span> {request.artistName}
+        {toDisplayTitleCase(request.songTitle)} <span className="text-slate-400">-</span> {toDisplayTitleCase(request.artistName)}
       </h3>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${paymentClass}`}>

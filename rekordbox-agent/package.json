@@ -1,0 +1,54 @@
+{
+  "name": "rekordbox-bridge",
+  "version": "1.0.0",
+  "description": "Menubar Mac app that reads Rekordbox now-playing tracks and pushes them to the Casper Requests cloud API",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "tsc && electron .",
+    "build": "tsc",
+    "package": "tsc && electron-builder --mac",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "electron-store": "^8.2.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "electron": "^31.0.0",
+    "electron-builder": "^25.0.0",
+    "electron-rebuild": "^3.2.9",
+    "typescript": "^5.5.0"
+  },
+  "build": {
+    "appId": "com.casperrequests.rekordbox-bridge",
+    "productName": "Rekordbox Bridge",
+    "mac": {
+      "category": "public.app-category.music",
+      "target": [
+        {
+          "target": "pkg",
+          "arch": ["universal"]
+        },
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        }
+      ],
+      "icon": null
+    },
+    "pkg": {
+      "installLocation": "/Applications",
+      "allowCurrentUserHome": true,
+      "allowAnywhere": true,
+      "overwriteAction": "upgrade"
+    },
+    "directories": {
+      "output": "out"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ]
+  }
+}

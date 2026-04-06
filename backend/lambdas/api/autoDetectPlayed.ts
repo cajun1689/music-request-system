@@ -269,25 +269,33 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   }
 
   const now = new Date().toISOString();
-  await docClient.send(
-    new UpdateCommand({
-      TableName: env.eventsTableName,
-      Key: { eventId },
-      UpdateExpression:
-        "SET #autoMatchState.#sourceId.#lastMatchedTrackNorm = :trackNorm, #autoMatchState.#sourceId.#lastMatchedAt = :lastMatchedAt, updatedAt = :updatedAt",
-      ExpressionAttributeNames: {
-        "#autoMatchState": "autoMatchState",
-        "#sourceId": best.sourceId,
-        "#lastMatchedTrackNorm": "lastMatchedTrackNorm",
-        "#lastMatchedAt": "lastMatchedAt",
-      },
-      ExpressionAttributeValues: {
-        ":trackNorm": best.currentTrackNorm || normalize(best.request.songTitle),
-        ":lastMatchedAt": now,
-        ":updatedAt": now,
-      },
-    }),
-  );
+  try {
+    await docClient.send(
+      new UpdateCommand({
+        TableName: env.eventsTableName,
+        Key: { eventId },
+        UpdateExpression:
+          "SET #autoMatchState.#sourceId.#lastMatchedTrackNorm = :trackNorm, #autoMatchState.#sourceId.#lastMatchedAt = :lastMatchedAt, #fireSaleActive = :fireSaleOff, #fireSaleMessage = :fireSaleMessage, updatedAt = :updatedAt",
+        ExpressionAttributeNames: {
+          "#autoMatchState": "autoMatchState",
+          "#sourceId": best.sourceId,
+          "#lastMatchedTrackNorm": "lastMatchedTrackNorm",
+          "#lastMatchedAt": "lastMatchedAt",
+          "#fireSaleActive": "fireSaleActive",
+          "#fireSaleMessage": "fireSaleMessage",
+        },
+        ExpressionAttributeValues: {
+          ":trackNorm": best.currentTrackNorm || normalize(best.request.songTitle),
+          ":lastMatchedAt": now,
+          ":fireSaleOff": false,
+          ":fireSaleMessage": "",
+          ":updatedAt": now,
+        },
+      }),
+    );
+  } catch {
+    // Keep auto-match functional even if event-state writes fail.
+  }
 
   const updated = await docClient.send(
     new UpdateCommand({

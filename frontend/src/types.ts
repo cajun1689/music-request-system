@@ -1,5 +1,12 @@
 export type RequestStatus = "pending" | "approved" | "vetoed" | "played";
 export type PaymentStatus = "unpaid" | "pending_verification" | "verified" | "rejected";
+export type GenreName = "hip_hop" | "country" | "edm";
+
+export interface GenreVotes {
+  hip_hop: number;
+  country: number;
+  edm: number;
+}
 
 export interface NowPlayingSlot {
   id: string;
@@ -37,7 +44,13 @@ export interface EventRecord {
   rekordboxLiveUrl?: string;
   livePlaylistSources?: LivePlaylistSource[];
   autoMatchState?: Record<string, AutoMatchSourceState>;
+  tickerPromotions?: string[];
+  fireSaleActive?: boolean;
+  fireSaleMessage?: string;
   venmoHandle?: string;
+  pushToken?: string;
+  genreVotes?: GenreVotes;
+  genreVotesTotal?: number;
   nowPlayingSlots?: NowPlayingSlot[];
   primaryColor: string;
   secondaryColor: string;

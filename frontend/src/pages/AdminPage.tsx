@@ -282,6 +282,13 @@ export function AdminPage() {
           date: eventDetails.date,
           venueName: eventDetails.venueName,
           djBrandName: eventDetails.djBrandName,
+          seratoLiveUrl: seratoLiveUrlEdit || undefined,
+          rekordboxLiveUrl: rekordboxLiveUrlEdit || undefined,
+          livePlaylistSources: [
+            { id: "serato-a", name: "Serato A", type: "serato", url: seratoLiveUrlEdit, active: Boolean(seratoLiveUrlEdit) },
+            { id: "serato-b", name: "Serato B", type: "serato", url: seratoLiveUrl2Edit, active: Boolean(seratoLiveUrl2Edit) },
+            { id: "rekordbox", name: "Rekordbox", type: "rekordbox", url: rekordboxLiveUrlEdit, active: Boolean(rekordboxLiveUrlEdit) },
+          ],
           venmoHandle: eventDetails.venmoHandle.replace("@", "").trim(),
           primaryColor: eventDetails.primaryColor,
           secondaryColor: eventDetails.secondaryColor,
@@ -470,6 +477,70 @@ export function AdminPage() {
                   <p className="break-all text-xs text-slate-200">{source.url || "not set"}</p>
                 </div>
               ))}
+            </div>
+            <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
+              <h3 className="text-sm font-semibold">Rekordbox Bridge Token</h3>
+              <p className="text-xs text-slate-400">
+                Paste this token into the Rekordbox Bridge Mac app to auto-push now-playing tracks.
+              </p>
+              {eventData.pushToken ? (
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 break-all rounded border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-emerald-300">
+                    {eventData.pushToken}
+                  </code>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded bg-slate-700 px-3 py-1.5 text-xs font-semibold"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(eventData.pushToken ?? "");
+                      setMessage("Push token copied to clipboard.");
+                    }}
+                  >
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded bg-amber-400 px-3 py-1.5 text-xs font-semibold text-amber-950 disabled:opacity-60"
+                    disabled={saving}
+                    onClick={() => {
+                      if (!session) return;
+                      setSaving(true);
+                      const newToken = crypto.randomUUID();
+                      api
+                        .updateEvent(eventData.eventId, { pushToken: newToken } as Partial<EventRecord>, session.idToken)
+                        .then((updated) => {
+                          setEventData(updated);
+                          setMessage("Push token rotated. Update the bridge app with the new token.");
+                        })
+                        .catch((err) => setMessage(`Failed: ${(err as Error).message}`))
+                        .finally(() => setSaving(false));
+                    }}
+                  >
+                    Rotate
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="rounded bg-emerald-400 px-3 py-1.5 text-xs font-semibold text-emerald-950 disabled:opacity-60"
+                  disabled={saving}
+                  onClick={() => {
+                    if (!session) return;
+                    setSaving(true);
+                    const newToken = crypto.randomUUID();
+                    api
+                      .updateEvent(eventData.eventId, { pushToken: newToken } as Partial<EventRecord>, session.idToken)
+                      .then((updated) => {
+                        setEventData(updated);
+                        setMessage("Push token generated.");
+                      })
+                      .catch((err) => setMessage(`Failed: ${(err as Error).message}`))
+                      .finally(() => setSaving(false));
+                  }}
+                >
+                  Generate Token
+                </button>
+              )}
             </div>
             <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
               <h3 className="text-sm font-semibold">Update Weekly Event Details</h3>

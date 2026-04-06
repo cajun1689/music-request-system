@@ -224,6 +224,30 @@ export class InfrastructureStack extends Stack {
       "AutoDetectPlayedFn",
       "../../backend/lambdas/api/autoDetectPlayed.ts",
     );
+    const submitGenreVoteFn = makeLambda(
+      "SubmitGenreVoteFn",
+      "../../backend/lambdas/api/submitGenreVote.ts",
+    );
+    const resetGenreVotesFn = makeLambda(
+      "ResetGenreVotesFn",
+      "../../backend/lambdas/api/resetGenreVotes.ts",
+    );
+    const createPaypalOrderFn = makeLambda(
+      "CreatePaypalOrderFn",
+      "../../backend/lambdas/api/createPaypalOrder.ts",
+    );
+    const capturePaypalOrderFn = makeLambda(
+      "CapturePaypalOrderFn",
+      "../../backend/lambdas/api/capturePaypalOrder.ts",
+    );
+    const pushTrackFn = makeLambda(
+      "PushTrackFn",
+      "../../backend/lambdas/api/pushTrack.ts",
+    );
+    const paypalWebhookFn = makeLambda(
+      "PaypalWebhookFn",
+      "../../backend/lambdas/api/paypalWebhook.ts",
+    );
     const wsConnectFn = makeLambda("WsConnectFn", "../../backend/lambdas/websocket/connect.ts");
     const wsDisconnectFn = makeLambda(
       "WsDisconnectFn",
@@ -238,7 +262,7 @@ export class InfrastructureStack extends Stack {
       "../../backend/lambdas/streams/requestStream.ts",
     );
 
-    eventsTable.grantReadData(getEventFn);
+    eventsTable.grantReadWriteData(getEventFn);
     eventsTable.grantReadData(getEventBySlugFn);
     eventsTable.grantReadWriteData(createEventFn);
     eventsTable.grantReadWriteData(updateEventFn);
@@ -248,7 +272,14 @@ export class InfrastructureStack extends Stack {
     requestsTable.grantReadWriteData(resetRequestsFn);
     requestsTable.grantReadWriteData(detectPlayedFn);
     requestsTable.grantReadWriteData(autoDetectPlayedFn);
-    eventsTable.grantReadData(autoDetectPlayedFn);
+    requestsTable.grantReadWriteData(createPaypalOrderFn);
+    requestsTable.grantReadWriteData(capturePaypalOrderFn);
+    requestsTable.grantReadWriteData(paypalWebhookFn);
+    eventsTable.grantReadWriteData(autoDetectPlayedFn);
+    eventsTable.grantReadWriteData(pushTrackFn);
+    requestsTable.grantReadWriteData(pushTrackFn);
+    eventsTable.grantReadWriteData(submitGenreVoteFn);
+    eventsTable.grantReadWriteData(resetGenreVotesFn);
     requestsTable.grantStreamRead(requestStreamFn);
     connectionsTable.grantReadWriteData(wsConnectFn);
     connectionsTable.grantReadWriteData(wsDisconnectFn);
@@ -338,13 +369,13 @@ export class InfrastructureStack extends Stack {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: ["GET", "POST", "PATCH", "OPTIONS"],
-        allowHeaders: ["Authorization", "Content-Type"],
+        allowHeaders: ["Authorization", "Content-Type", "x-push-token"],
       },
     });
 
     const gatewayCorsHeaders = {
       "Access-Control-Allow-Origin": "'*'",
-      "Access-Control-Allow-Headers": "'Content-Type,Authorization'",
+      "Access-Control-Allow-Headers": "'Content-Type,Authorization,x-push-token'",
       "Access-Control-Allow-Methods": "'GET,POST,PATCH,OPTIONS'",
     };
     restApi.addGatewayResponse("Default4xxCors", {
@@ -378,6 +409,14 @@ export class InfrastructureStack extends Stack {
     const resetRequestsResource = eventByIdResource.addResource("reset-requests");
     const detectPlayedResource = eventByIdResource.addResource("detect-played");
     const autoDetectPlayedResource = eventByIdResource.addResource("auto-detect-played");
+    const pushTrackResource = eventByIdResource.addResource("push-track");
+    const genreVotesResource = eventByIdResource.addResource("genre-votes");
+    const resetGenreVotesResource = genreVotesResource.addResource("reset");
+    const paymentsResource = requestByIdResource.addResource("payments");
+    const paypalOrderResource = paymentsResource.addResource("paypal-order");
+    const paypalCaptureResource = paymentsResource.addResource("paypal-capture");
+    const rootPaymentsResource = restApi.root.addResource("payments");
+    const paypalWebhookResource = rootPaymentsResource.addResource("paypal-webhook");
 
     eventsResource.addMethod("POST", new apigateway.LambdaIntegration(createEventFn), {
       authorizer,
@@ -414,6 +453,30 @@ export class InfrastructureStack extends Stack {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
+    pushTrackResource.addMethod("POST", new apigateway.LambdaIntegration(pushTrackFn));
+    genreVotesResource.addMethod("POST", new apigateway.LambdaIntegration(submitGenreVoteFn));
+    resetGenreVotesResource.addMethod("POST", new apigateway.LambdaIntegration(resetGenreVotesFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    paypalOrderResource.addMethod("POST", new apigateway.LambdaIntegration(createPaypalOrderFn));
+    paypalCaptureResource.addMethod("POST", new apigateway.LambdaIntegration(capturePaypalOrderFn));
+    paypalWebhookResource.addMethod("POST", new apigateway.LambdaIntegration(paypalWebhookFn));
+
+    const paypalClientId = process.env.PAYPAL_CLIENT_ID ?? "";
+    const paypalClientSecret = process.env.PAYPAL_CLIENT_SECRET ?? "";
+    const paypalEnvironment = process.env.PAYPAL_ENVIRONMENT ?? "sandbox";
+    const paypalWebhookId = process.env.PAYPAL_WEBHOOK_ID ?? "";
+    createPaypalOrderFn.addEnvironment("PAYPAL_CLIENT_ID", paypalClientId);
+    createPaypalOrderFn.addEnvironment("PAYPAL_CLIENT_SECRET", paypalClientSecret);
+    createPaypalOrderFn.addEnvironment("PAYPAL_ENVIRONMENT", paypalEnvironment);
+    capturePaypalOrderFn.addEnvironment("PAYPAL_CLIENT_ID", paypalClientId);
+    capturePaypalOrderFn.addEnvironment("PAYPAL_CLIENT_SECRET", paypalClientSecret);
+    capturePaypalOrderFn.addEnvironment("PAYPAL_ENVIRONMENT", paypalEnvironment);
+    paypalWebhookFn.addEnvironment("PAYPAL_CLIENT_ID", paypalClientId);
+    paypalWebhookFn.addEnvironment("PAYPAL_CLIENT_SECRET", paypalClientSecret);
+    paypalWebhookFn.addEnvironment("PAYPAL_ENVIRONMENT", paypalEnvironment);
+    paypalWebhookFn.addEnvironment("PAYPAL_WEBHOOK_ID", paypalWebhookId);
 
     new CfnOutput(this, "RestApiUrl", { value: restApi.url });
     new CfnOutput(this, "WebSocketUrl", {

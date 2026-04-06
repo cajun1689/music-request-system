@@ -41,7 +41,12 @@ interface CreateEventInput {
   seratoLiveUrl?: string;
   rekordboxLiveUrl?: string;
   livePlaylistSources?: EventRecord["livePlaylistSources"];
+  tickerPromotions?: string[];
+  fireSaleActive?: boolean;
+  fireSaleMessage?: string;
   venmoHandle?: string;
+  genreVotes?: EventRecord["genreVotes"];
+  genreVotesTotal?: number;
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;
@@ -67,7 +72,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     seratoLiveUrl: input.seratoLiveUrl,
     rekordboxLiveUrl: input.rekordboxLiveUrl,
     livePlaylistSources: input.livePlaylistSources ?? defaultLiveSources(input.seratoLiveUrl, input.rekordboxLiveUrl),
+    tickerPromotions: input.tickerPromotions ?? [],
+    fireSaleActive: input.fireSaleActive ?? false,
+    fireSaleMessage: input.fireSaleMessage ?? "",
     venmoHandle: input.venmoHandle?.replace("@", ""),
+    pushToken: randomUUID(),
+    genreVotes: input.genreVotes ?? { hip_hop: 0, country: 0, edm: 0 },
+    genreVotesTotal: input.genreVotesTotal ?? 0,
     primaryColor: input.primaryColor ?? "#0f172a",
     secondaryColor: input.secondaryColor ?? "#1e293b",
     accentColor: input.accentColor ?? "#f97316",

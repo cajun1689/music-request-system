@@ -10,3 +10,10 @@ dist/
 .env.local
 .env.production
 *.log
+
+# Electron build artifacts
+rekordbox-agent/out/
+*.dmg
+*.pkg
+*.app
+*.zip

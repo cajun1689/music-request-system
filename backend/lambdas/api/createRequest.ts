@@ -15,6 +15,15 @@ interface CreateRequestInput {
   paymentStatus?: "unpaid" | "pending_verification";
 }
 
+function normalizeSpacing(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function toTitleCase(value: string): string {
+  const lower = normalizeSpacing(value).toLowerCase();
+  return lower.replace(/(^|[\s\-\/('"])([a-z])/g, (_match, prefix: string, char: string) => `${prefix}${char.toUpperCase()}`);
+}
+
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   const input = parseBody<CreateRequestInput>(event.body);
@@ -25,8 +34,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const requestRecord: RequestRecord = {
     eventId,
     requestId: randomUUID(),
-    songTitle: input.songTitle,
-    artistName: input.artistName,
+    songTitle: toTitleCase(input.songTitle),
+    artistName: toTitleCase(input.artistName),
     requesterName: input.requesterName,
     message: input.message,
     status: "pending",

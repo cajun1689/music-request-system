@@ -24,6 +24,11 @@ npm install
 ## 2) Deploy AWS Infrastructure
 ```bash
 cd infrastructure
+# Optional but required for auto-paid verification:
+# export PAYPAL_CLIENT_ID="<paypal client id>"
+# export PAYPAL_CLIENT_SECRET="<paypal client secret>"
+# export PAYPAL_ENVIRONMENT="sandbox"   # or "live"
+# export PAYPAL_WEBHOOK_ID="<paypal webhook id>"
 npx cdk bootstrap
 npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
 ```

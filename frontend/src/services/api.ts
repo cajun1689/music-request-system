@@ -1,14 +1,17 @@
 import { config } from "../config";
-import type { EventRecord, PaymentStatus, RequestRecord, RequestStatus } from "../types";
+import { auth } from "./auth";
+import type { EventRecord, GenreName, PaymentStatus, RequestRecord, RequestStatus } from "../types";
 
 async function request<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
+  const refreshed = token ? await auth.getValidSession().catch(() => null) : null;
+  const authToken = refreshed?.idToken ?? token;
   let response: Response;
   try {
     response = await fetch(`${config.apiBaseUrl}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         ...init?.headers,
       },
     });
@@ -17,7 +20,21 @@ async function request<T>(path: string, init?: RequestInit, token?: string): Pro
   }
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
+    if ((response.status === 401 || response.status === 403) && token) {
+      const retrySession = await auth.getValidSession().catch(() => null);
+      if (retrySession?.idToken && retrySession.idToken !== authToken) {
+        const retry = await fetch(`${config.apiBaseUrl}${path}`, {
+          ...init,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${retrySession.idToken}`,
+            ...init?.headers,
+          },
+        });
+        if (retry.ok) {
+          return (await retry.json()) as T;
+        }
+      }
       throw new Error("Session expired or unauthorized. Please sign in again.");
     }
     const text = await response.text();
@@ -71,6 +88,23 @@ export const api = {
     return request<EventRecord>(`/events/${eventId}`);
   },
 
+  submitGenreVote(eventId: string, genre: GenreName) {
+    return request<EventRecord>(`/events/${eventId}/genre-votes`, {
+      method: "POST",
+      body: JSON.stringify({ genre }),
+    });
+  },
+
+  resetGenreVotes(eventId: string, token: string) {
+    return request<EventRecord>(
+      `/events/${eventId}/genre-votes/reset`,
+      {
+        method: "POST",
+      },
+      token,
+    );
+  },
+
   getEventBySlug(slug: string, token: string) {
     return request<EventRecord>(`/events/by-slug/${encodeURIComponent(slug)}`, undefined, token);
   },
@@ -79,6 +113,31 @@ export const api = {
     return request<RequestRecord>(`/events/${eventId}/requests`, {
       method: "POST",
       body: JSON.stringify(payload),
+    });
+  },
+
+  createPaypalOrder(eventId: string, requestId: string, tipAmount: number) {
+    return request<{
+      orderId?: string;
+      approveUrl?: string;
+      environment?: string;
+      alreadyPaid?: boolean;
+    }>(`/events/${eventId}/requests/${requestId}/payments/paypal-order`, {
+      method: "POST",
+      body: JSON.stringify({ tipAmount }),
+    });
+  },
+
+  capturePaypalOrder(eventId: string, requestId: string, orderId: string) {
+    return request<{
+      verified: boolean;
+      alreadyPaid?: boolean;
+      captureId?: string;
+      request?: RequestRecord;
+      error?: string;
+    }>(`/events/${eventId}/requests/${requestId}/payments/paypal-capture`, {
+      method: "POST",
+      body: JSON.stringify({ orderId }),
     });
   },
 

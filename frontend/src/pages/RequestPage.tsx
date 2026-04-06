@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { BrandedLayout } from "../components/BrandedLayout";
 import { api } from "../services/api";
-import type { EventRecord, RequestRecord } from "../types";
+import type { EventRecord, GenreName, RequestRecord } from "../types";
+import { GENRE_LABELS, GENRE_VOTE_THRESHOLD, normalizeGenreVotes } from "../utils/genreVotes";
 
 export function RequestPage() {
   const { eventId } = useParams();
@@ -16,8 +17,12 @@ export function RequestPage() {
   const [paymentReference, setPaymentReference] = useState("");
   const [confirmPaid, setConfirmPaid] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [voteBusy, setVoteBusy] = useState(false);
   const [trackedRequest, setTrackedRequest] = useState<RequestRecord | null>(null);
   const [songsAway, setSongsAway] = useState<number | null>(null);
+  const [votedGenre, setVotedGenre] = useState<GenreName | null>(null);
+  const handlingPaypalReturnRef = useRef(false);
 
   function buildVenmoParams() {
     if (!eventData?.venmoHandle) {
@@ -37,10 +42,57 @@ export function RequestPage() {
     return params;
   }
 
-  function openVenmo() {
+  async function createGuestRequest(preferPendingVerification: boolean) {
+    if (!eventId || !eventData) {
+      throw new Error("Event is still loading. Please try again.");
+    }
+    const created = await api.createRequest(eventId, {
+      songTitle,
+      artistName,
+      requesterName,
+      message,
+      tipAmount: tipAmount ? Number(tipAmount) : undefined,
+      venmoHandle: eventData.venmoHandle,
+      paymentReference: paymentReference || undefined,
+      paymentStatus:
+        tipAmount && (preferPendingVerification || confirmPaid) ? "pending_verification" : "unpaid",
+    });
+
+    localStorage.setItem(trackedRequestKey, created.requestId);
+    setTrackedRequest(created);
+    setSongsAway(null);
+    localStorage.setItem(lockKey, String(Date.now() + 2 * 60 * 1000));
+    return created;
+  }
+
+  async function openVenmo() {
     const params = buildVenmoParams();
     if (!params) {
       return;
+    }
+
+    if (!eventId || !eventData) {
+      setFeedback("Event is still loading. Please try again.");
+      return;
+    }
+    if (!songTitle.trim() || !artistName.trim()) {
+      setFeedback("Enter song title and artist before opening Venmo.");
+      return;
+    }
+
+    const lockedUntil = Number(localStorage.getItem(lockKey) ?? "0");
+    if (Date.now() >= lockedUntil) {
+      setSubmitting(true);
+      try {
+        await createGuestRequest(true);
+        setFeedback("Request saved. Complete Venmo payment, then return to this page.");
+      } catch (err) {
+        setFeedback(`Could not save request before opening Venmo: ${(err as Error).message}`);
+        setSubmitting(false);
+        return;
+      } finally {
+        setSubmitting(false);
+      }
     }
 
     const appUrl = `venmo://paycharge?${params.toString()}`;
@@ -64,11 +116,33 @@ export function RequestPage() {
     if (!eventId) {
       return;
     }
-    void api.getEvent(eventId).then(setEventData);
+    const loadEvent = async () => {
+      const event = await api.getEvent(eventId);
+      setEventData(event);
+    };
+    void loadEvent();
+    const interval = window.setInterval(() => {
+      void loadEvent();
+    }, 10000);
+    return () => window.clearInterval(interval);
   }, [eventId]);
 
   const lockKey = useMemo(() => `request-lock-${eventId}`, [eventId]);
   const trackedRequestKey = useMemo(() => `guest-request-${eventId}`, [eventId]);
+  const voteKey = useMemo(() => `genre-vote-${eventId}`, [eventId]);
+
+  useEffect(() => {
+    const existingVote = localStorage.getItem(voteKey);
+    if (!existingVote) {
+      setVotedGenre(null);
+      return;
+    }
+    if (existingVote === "hip_hop" || existingVote === "country" || existingVote === "edm") {
+      setVotedGenre(existingVote);
+      return;
+    }
+    setVotedGenre(null);
+  }, [voteKey]);
 
   useEffect(() => {
     if (!eventId) {
@@ -99,6 +173,50 @@ export function RequestPage() {
     return () => window.clearInterval(interval);
   }, [eventId, trackedRequestKey]);
 
+  useEffect(() => {
+    if (!eventId || handlingPaypalReturnRef.current) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const paypalState = params.get("paypal");
+    const orderId = params.get("token");
+    const requestId = params.get("requestId");
+    if (!paypalState) {
+      return;
+    }
+
+    handlingPaypalReturnRef.current = true;
+    const clearQuery = () => {
+      const cleanUrl = `${window.location.origin}/event/${eventId}`;
+      window.history.replaceState(null, "", cleanUrl);
+    };
+
+    if (paypalState === "cancel") {
+      setFeedback("Payment canceled. Your request is still in queue and can be paid later.");
+      clearQuery();
+      return;
+    }
+    if (paypalState !== "return" || !orderId || !requestId) {
+      setFeedback("Could not verify payment return details. Please try again.");
+      clearQuery();
+      return;
+    }
+
+    void (async () => {
+      try {
+        const result = await api.capturePaypalOrder(eventId, requestId, orderId);
+        if (result.request) {
+          setTrackedRequest(result.request);
+        }
+        setFeedback("Payment received and auto-verified. DJs will see this as paid.");
+      } catch (err) {
+        setFeedback(`Payment return detected, but verification failed: ${(err as Error).message}`);
+      } finally {
+        clearQuery();
+      }
+    })();
+  }, [eventId]);
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (!eventId || !eventData) {
@@ -106,40 +224,92 @@ export function RequestPage() {
     }
     const lockedUntil = Number(localStorage.getItem(lockKey) ?? "0");
     if (Date.now() < lockedUntil) {
-      setFeedback("Please wait before sending another request.");
+      if (
+        trackedRequest &&
+        trackedRequest.songTitle.trim().toLowerCase() === songTitle.trim().toLowerCase() &&
+        trackedRequest.artistName.trim().toLowerCase() === artistName.trim().toLowerCase()
+      ) {
+        setFeedback("This request is already submitted and waiting for DJ review.");
+      } else {
+        setFeedback("Please wait before sending another request.");
+      }
       return;
     }
 
-    const created = await api.createRequest(eventId, {
-      songTitle,
-      artistName,
-      requesterName,
-      message,
-      tipAmount: tipAmount ? Number(tipAmount) : undefined,
-      venmoHandle: eventData.venmoHandle,
-      paymentReference: paymentReference || undefined,
-      paymentStatus: tipAmount ? (confirmPaid ? "pending_verification" : "unpaid") : "unpaid",
-    });
-    localStorage.setItem(trackedRequestKey, created.requestId);
-    setTrackedRequest(created);
-    setSongsAway(null);
-    localStorage.setItem(lockKey, String(Date.now() + 2 * 60 * 1000));
-    setSongTitle("");
-    setArtistName("");
-    setRequesterName("");
-    setMessage("");
-    setTipAmount("");
-    setPaymentReference("");
-    setConfirmPaid(false);
-    setFeedback("Request submitted. The DJs will review it shortly.");
+    setSubmitting(true);
+    try {
+      await createGuestRequest(false);
+      setSongTitle("");
+      setArtistName("");
+      setRequesterName("");
+      setMessage("");
+      setTipAmount("");
+      setPaymentReference("");
+      setConfirmPaid(false);
+      setFeedback("Request submitted. The DJs will review it shortly.");
+    } catch (err) {
+      setFeedback(`Request failed: ${(err as Error).message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function onVoteGenre(genre: GenreName) {
+    if (!eventId || voteBusy || votedGenre) {
+      return;
+    }
+    setVoteBusy(true);
+    try {
+      const updatedEvent = await api.submitGenreVote(eventId, genre);
+      setEventData(updatedEvent);
+      setVotedGenre(genre);
+      localStorage.setItem(voteKey, genre);
+    } catch (err) {
+      setFeedback(`Vote failed: ${(err as Error).message}`);
+    } finally {
+      setVoteBusy(false);
+    }
   }
 
   if (!eventData) {
     return <div className="p-6 text-slate-200">Loading event...</div>;
   }
 
+  const { votes: genreVotes, total: genreVoteTotal } = normalizeGenreVotes(eventData);
+
   return (
     <BrandedLayout event={eventData} title="Request a Song" subtitle="Your request goes to the DJ team for approval">
+      <section className="mt-3 rounded-2xl border border-white/20 bg-black/30 p-5">
+        <h2 className="text-lg font-semibold">Vote on Tonight&apos;s Style</h2>
+        <p className="mt-1 text-sm text-slate-300">
+          Help guide the vibe. Results appear on the ticker after {GENRE_VOTE_THRESHOLD} votes.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(["hip_hop", "country", "edm"] as GenreName[]).map((genre) => (
+            <button
+              key={genre}
+              type="button"
+              disabled={voteBusy || Boolean(votedGenre)}
+              onClick={() => void onVoteGenre(genre)}
+              className={`rounded-md px-3 py-1.5 text-sm font-semibold ${
+                votedGenre === genre
+                  ? "bg-emerald-400 text-emerald-950"
+                  : "bg-slate-800 text-slate-100 disabled:opacity-60"
+              }`}
+            >
+              {GENRE_LABELS[genre]}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-slate-300">
+          {votedGenre ? `Thanks for voting: ${GENRE_LABELS[votedGenre]}.` : "You can vote once per device for this event."}
+        </p>
+        <p className="mt-2 text-xs text-slate-300">
+          Votes: {genreVoteTotal} | Hip Hop {genreVoteTotal ? Math.round((genreVotes.hip_hop / genreVoteTotal) * 100) : 0}% |
+          Country {genreVoteTotal ? Math.round((genreVotes.country / genreVoteTotal) * 100) : 0}% | EDM{" "}
+          {genreVoteTotal ? Math.round((genreVotes.edm / genreVoteTotal) * 100) : 0}%
+        </p>
+      </section>
       <form onSubmit={onSubmit} className="space-y-3 rounded-2xl border border-white/20 bg-black/30 p-5">
         <label className="block text-sm">
           Song Title
@@ -198,9 +368,62 @@ export function RequestPage() {
               <button
                 type="button"
                 className="inline-flex rounded-md bg-emerald-400 px-3 py-1.5 text-xs font-semibold text-emerald-950"
-                onClick={openVenmo}
+                onClick={() => void openVenmo()}
+                disabled={submitting}
               >
-                Open Venmo App
+                Open Venmo App (saves request first)
+              </button>
+            </div>
+            <div className="mt-2">
+              <button
+                type="button"
+                className="inline-flex rounded-md bg-indigo-400 px-3 py-1.5 text-xs font-semibold text-indigo-950 disabled:opacity-60"
+                disabled={submitting || !tipAmount || Number(tipAmount) <= 0}
+                onClick={() => {
+                  void (async () => {
+                    if (!eventId || !eventData) {
+                      setFeedback("Event is still loading. Please try again.");
+                      return;
+                    }
+                    if (!songTitle.trim() || !artistName.trim()) {
+                      setFeedback("Enter song title and artist before checkout.");
+                      return;
+                    }
+                    if (!tipAmount || Number(tipAmount) <= 0) {
+                      setFeedback("Enter a tip amount before checkout.");
+                      return;
+                    }
+                    const lockedUntil = Number(localStorage.getItem(lockKey) ?? "0");
+                    if (Date.now() < lockedUntil) {
+                      setFeedback("Please wait before sending another request.");
+                      return;
+                    }
+
+                    setSubmitting(true);
+                    try {
+                      const created = await createGuestRequest(true);
+                      const order = await api.createPaypalOrder(
+                        eventId,
+                        created.requestId,
+                        Number(tipAmount),
+                      );
+                      if (order.alreadyPaid) {
+                        setFeedback("This request is already marked paid.");
+                        setSubmitting(false);
+                        return;
+                      }
+                      if (!order.approveUrl) {
+                        throw new Error("Could not start checkout session.");
+                      }
+                      window.location.href = order.approveUrl;
+                    } catch (err) {
+                      setFeedback(`Checkout failed: ${(err as Error).message}`);
+                      setSubmitting(false);
+                    }
+                  })();
+                }}
+              >
+                Pay with Venmo (auto-verify)
               </button>
             </div>
             <label className="mt-3 block text-sm">
@@ -225,10 +448,11 @@ export function RequestPage() {
         ) : null}
         <button
           type="submit"
+          disabled={submitting}
           className="w-full rounded-lg px-4 py-2 font-semibold text-slate-900"
           style={{ backgroundColor: eventData.accentColor }}
         >
-          Send Request
+          {submitting ? "Sending..." : "Send Request"}
         </button>
         {feedback ? <p className="text-sm text-slate-200">{feedback}</p> : null}
       </form>

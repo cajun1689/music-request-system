@@ -70,4 +70,35 @@ export const auth = {
       return null;
     }
   },
+
+  async getValidSession(): Promise<Session | null> {
+    const { CognitoUserPool } = await getCognitoSdk();
+    const userPool = new CognitoUserPool({
+      UserPoolId: config.userPoolId,
+      ClientId: config.userPoolClientId,
+    });
+    const currentUser = userPool.getCurrentUser();
+    if (!currentUser) {
+      return this.getSession();
+    }
+
+    return new Promise((resolve) => {
+      currentUser.getSession((err: unknown, cognitoSession: any) => {
+        if (err || !cognitoSession?.isValid?.()) {
+          resolve(this.getSession());
+          return;
+        }
+        const payload: Session = {
+          email: currentUser.getUsername(),
+          idToken: cognitoSession.getIdToken().getJwtToken(),
+        };
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        } catch {
+          // Ignore storage persistence errors.
+        }
+        resolve(payload);
+      });
+    });
+  },
 };

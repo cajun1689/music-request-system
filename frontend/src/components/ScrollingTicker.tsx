@@ -1,15 +1,13 @@
-import type { RequestRecord } from "../types";
-
 export function ScrollingTicker({
-  requests,
+  items,
   accentColor,
+  emptyMessage = "Scan The QR Code To Request A Song",
 }: {
-  requests: RequestRecord[];
+  items: string[];
   accentColor: string;
+  emptyMessage?: string;
 }) {
-  const text = requests.length
-    ? requests.map((req) => `${req.songTitle} - ${req.artistName}`).join("      •      ")
-    : "No approved requests yet";
+  const text = items.length ? items.join("      •      ") : emptyMessage;
 
   return (
     <div className="pointer-events-none fixed bottom-0 left-0 w-full overflow-hidden bg-black/80 py-3">
@@ -17,6 +15,7 @@ export function ScrollingTicker({
         className="whitespace-nowrap text-2xl font-bold tracking-wide text-white"
         style={{
           color: accentColor,
+          textShadow: "0 0 8px rgba(0,0,0,0.9)",
           animation: "ticker 28s linear infinite",
           display: "inline-block",
           paddingLeft: "100%",
