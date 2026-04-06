@@ -18,6 +18,7 @@ import {
 import {
   drainQueue,
   enqueueTrack,
+  fetchEvents,
   pushTrack,
   queueSize,
   type PushResult,
@@ -418,6 +419,18 @@ ipcMain.handle("poll-now", async () => {
 ipcMain.handle("toggle-launch-at-login", () => {
   toggleLaunchAtLogin();
   return status.launchAtLogin;
+});
+
+ipcMain.handle("fetch-events", async () => {
+  try {
+    const events = await fetchEvents();
+    log.info("Fetched events:", events.length);
+    return events;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error("Failed to fetch events:", message);
+    return [];
+  }
 });
 
 ipcMain.handle("open-logs", () => {

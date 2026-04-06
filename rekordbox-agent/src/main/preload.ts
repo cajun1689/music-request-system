@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("bridge", {
     ipcRenderer.invoke("manual-push", title, artist),
   resolveDbPath: () => ipcRenderer.invoke("resolve-db-path"),
   pollNow: () => ipcRenderer.invoke("poll-now"),
+  fetchEvents: () => ipcRenderer.invoke("fetch-events"),
   toggleLaunchAtLogin: () => ipcRenderer.invoke("toggle-launch-at-login"),
   openLogs: () => ipcRenderer.invoke("open-logs"),
   onStatusUpdate: (callback: (status: unknown) => void) => {

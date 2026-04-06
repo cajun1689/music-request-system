@@ -15,6 +15,24 @@ export interface PushResult {
   }>;
 }
 
+export interface EventSummary {
+  eventId: string;
+  name: string;
+  venueName?: string;
+  date?: string;
+  djBrandName?: string;
+}
+
+export async function fetchEvents(): Promise<EventSummary[]> {
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(`${baseUrl}/events`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch events (${response.status})`);
+  }
+  const data = (await response.json()) as { events: EventSummary[] };
+  return data.events ?? [];
+}
+
 const pendingQueue: Array<{ track: TrackInfo; retries: number }> = [];
 const MAX_RETRIES = 5;
 

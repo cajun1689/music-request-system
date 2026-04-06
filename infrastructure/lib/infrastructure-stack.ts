@@ -192,6 +192,7 @@ export class InfrastructureStack extends Stack {
         },
       });
 
+    const listEventsFn = makeLambda("ListEventsFn", "../../backend/lambdas/api/listEvents.ts");
     const createEventFn = makeLambda("CreateEventFn", "../../backend/lambdas/api/createEvent.ts");
     const getEventFn = makeLambda("GetEventFn", "../../backend/lambdas/api/getEvent.ts");
     const getEventBySlugFn = makeLambda(
@@ -262,6 +263,7 @@ export class InfrastructureStack extends Stack {
       "../../backend/lambdas/streams/requestStream.ts",
     );
 
+    eventsTable.grantReadData(listEventsFn);
     eventsTable.grantReadWriteData(getEventFn);
     eventsTable.grantReadData(getEventBySlugFn);
     eventsTable.grantReadWriteData(createEventFn);
@@ -418,6 +420,7 @@ export class InfrastructureStack extends Stack {
     const rootPaymentsResource = restApi.root.addResource("payments");
     const paypalWebhookResource = rootPaymentsResource.addResource("paypal-webhook");
 
+    eventsResource.addMethod("GET", new apigateway.LambdaIntegration(listEventsFn));
     eventsResource.addMethod("POST", new apigateway.LambdaIntegration(createEventFn), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,

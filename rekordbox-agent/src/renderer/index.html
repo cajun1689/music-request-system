@@ -340,8 +340,13 @@
       <label>API Base URL</label>
       <input type="text" id="cfg-api-url" placeholder="https://casperrequests.com/prod" />
 
-      <label>Event ID</label>
-      <input type="text" id="cfg-event-id" placeholder="gaslight-residency" />
+      <label>Event</label>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <select id="cfg-event-id" style="flex:1;">
+          <option value="">— Select an event —</option>
+        </select>
+        <button class="btn secondary" id="btn-refresh-events" style="margin:0; padding:5px 10px; font-size:11px; white-space:nowrap;">Refresh</button>
+      </div>
 
       <label>Push Token</label>
       <input type="password" id="cfg-push-token" placeholder="Paste from Admin panel" />
@@ -469,14 +474,50 @@
 
     bridge.onStatusUpdate(updateUI);
 
+    let cachedEvents = [];
+
+    async function loadEvents(savedEventId) {
+      const select = el("cfg-event-id");
+      const btn = el("btn-refresh-events");
+      btn.disabled = true;
+      btn.textContent = "…";
+      try {
+        const events = await bridge.fetchEvents();
+        cachedEvents = events;
+        select.innerHTML = '<option value="">— Select an event —</option>';
+        events.forEach((ev) => {
+          const opt = document.createElement("option");
+          opt.value = ev.eventId;
+          const label = ev.name + (ev.venueName ? " @ " + ev.venueName : "");
+          opt.textContent = label;
+          select.appendChild(opt);
+        });
+        if (savedEventId) {
+          select.value = savedEventId;
+          if (!select.value) {
+            const opt = document.createElement("option");
+            opt.value = savedEventId;
+            opt.textContent = savedEventId + " (not found)";
+            select.appendChild(opt);
+            select.value = savedEventId;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load events:", e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Refresh";
+      }
+    }
+
     async function loadConfig() {
       const c = await bridge.getConfig();
       el("cfg-api-url").value = c.apiBaseUrl || "";
-      el("cfg-event-id").value = c.eventId || "";
       el("cfg-push-token").value = c.pushToken || "";
       el("cfg-sqlcipher-key").value = c.sqlcipherKey || "";
       el("cfg-interval").value = c.pollingIntervalMs || 10000;
       el("cfg-mode").value = c.mode || "auto";
+      await loadEvents(c.eventId || "");
     }
 
     async function loadStatus() {
@@ -490,7 +531,7 @@
       try {
         await bridge.setConfig({
           apiBaseUrl: el("cfg-api-url").value.trim(),
-          eventId: el("cfg-event-id").value.trim(),
+          eventId: el("cfg-event-id").value,
           pushToken: el("cfg-push-token").value.trim(),
           sqlcipherKey: el("cfg-sqlcipher-key").value.trim(),
           pollingIntervalMs: parseInt(el("cfg-interval").value, 10) || 10000,
@@ -500,6 +541,10 @@
         el("btn-save-config").disabled = false;
         el("btn-save-config").textContent = "Save Configuration";
       }
+    });
+
+    el("btn-refresh-events").addEventListener("click", () => {
+      loadEvents(el("cfg-event-id").value);
     });
 
     el("btn-find-db").addEventListener("click", async () => {
