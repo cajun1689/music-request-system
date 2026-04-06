@@ -139,12 +139,10 @@ function createWindow(): void {
 function toggleWindow(): void {
   if (!mainWindow) {
     createWindow();
-    mainWindow?.show();
-    return;
   }
-  if (mainWindow.isVisible()) {
+  if (mainWindow && mainWindow.isVisible()) {
     mainWindow.hide();
-  } else {
+  } else if (mainWindow) {
     mainWindow.show();
     mainWindow.focus();
   }
@@ -173,8 +171,8 @@ app.on("ready", () => {
   }
 });
 
-app.on("window-all-closed", (e: Event) => {
-  e.preventDefault();
+app.on("window-all-closed", () => {
+  // Keep app running in tray when all windows are closed
 });
 
 ipcMain.handle("get-config", () => getConfig());
