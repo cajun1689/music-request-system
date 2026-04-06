@@ -1,8 +1,29 @@
-import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  Tray,
+  nativeImage,
+  Notification,
+} from "electron";
 import * as path from "path";
+import log from "./logger";
 import { getConfig, setConfig } from "./config-store";
-import { readCurrentTrack, resolveDbPath, type TrackInfo } from "./rekordbox-reader";
-import { drainQueue, enqueueTrack, pushTrack, queueSize, type PushResult } from "./api-client";
+import {
+  readCurrentTrack,
+  resolveDbPath,
+  type TrackInfo,
+} from "./rekordbox-reader";
+import {
+  drainQueue,
+  enqueueTrack,
+  pushTrack,
+  queueSize,
+  type PushResult,
+} from "./api-client";
+
+log.info("Rekordbox Bridge starting", { version: app.getVersion() });
 
 let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -17,6 +38,9 @@ interface StatusPayload {
   lastResult: PushResult | null;
   error: string | null;
   queueSize: number;
+  version: string;
+  logsPath: string;
+  launchAtLogin: boolean;
 }
 
 let status: StatusPayload = {
@@ -27,14 +51,114 @@ let status: StatusPayload = {
   lastResult: null,
   error: null,
   queueSize: 0,
+  version: "",
+  logsPath: "",
+  launchAtLogin: false,
 };
 
 function sendStatus(): void {
   mainWindow?.webContents.send("status-update", status);
+  updateTrayMenu();
 }
 
 function trackKey(t: TrackInfo): string {
   return `${t.artist}::${t.title}::${t.playedAt}`;
+}
+
+function showNotification(title: string, body: string): void {
+  if (Notification.isSupported()) {
+    new Notification({ title, body, silent: true }).show();
+  }
+}
+
+function trayIconPath(): string {
+  const resourceDir = process.resourcesPath;
+  return path.join(resourceDir, "trayTemplate.png");
+}
+
+function updateTrayTooltip(): void {
+  if (!tray) return;
+  const parts = ["Rekordbox Bridge"];
+  if (status.lastTrack) {
+    parts.push(`${status.lastTrack.artist} – ${status.lastTrack.title}`);
+  }
+  if (status.error) {
+    parts.push(`⚠ ${status.error}`);
+  }
+  tray.setToolTip(parts.join("\n"));
+}
+
+function updateTrayMenu(): void {
+  if (!tray) return;
+  updateTrayTooltip();
+
+  const trackLabel = status.lastTrack
+    ? `♫ ${status.lastTrack.artist} – ${status.lastTrack.title}`
+    : "No track detected";
+
+  const statusLabel = status.connected
+    ? "● Connected"
+    : status.error
+      ? "● Error"
+      : "○ Idle";
+
+  const contextMenu = Menu.buildFromTemplate([
+    { label: statusLabel, enabled: false },
+    { label: trackLabel, enabled: false },
+    { type: "separator" },
+    { label: "Show Window", click: showWindow },
+    { type: "separator" },
+    {
+      label: "Mode",
+      submenu: [
+        {
+          label: "Auto (poll Rekordbox)",
+          type: "radio",
+          checked: status.mode === "auto",
+          click: () => switchMode("auto"),
+        },
+        {
+          label: "Manual",
+          type: "radio",
+          checked: status.mode === "manual",
+          click: () => switchMode("manual"),
+        },
+      ],
+    },
+    {
+      label: "Launch at Login",
+      type: "checkbox",
+      checked: status.launchAtLogin,
+      click: () => toggleLaunchAtLogin(),
+    },
+    { type: "separator" },
+    {
+      label: "Quit Rekordbox Bridge",
+      click: () => {
+        app.exit(0);
+      },
+    },
+  ]);
+  tray.setContextMenu(contextMenu);
+}
+
+function switchMode(mode: "auto" | "manual"): void {
+  setConfig({ mode });
+  status.mode = mode;
+  if (mode === "auto") {
+    startPolling();
+  } else {
+    stopPolling();
+  }
+  sendStatus();
+}
+
+function toggleLaunchAtLogin(): void {
+  const current = app.getLoginItemSettings().openAtLogin;
+  app.setLoginItemSettings({ openAtLogin: !current });
+  status.launchAtLogin = !current;
+  log.info("Launch at login:", !current);
+  sendStatus();
 }
 
 async function pollOnce(): Promise<void> {
@@ -50,14 +174,18 @@ async function pollOnce(): Promise<void> {
   try {
     const dbPath = status.dbPath || resolveDbPath();
     if (!dbPath) {
-      status.error = "Rekordbox database not found. Check that Rekordbox is installed.";
+      status.error =
+        "Rekordbox database not found. Check that Rekordbox is installed.";
       status.connected = false;
       sendStatus();
       return;
     }
     status.dbPath = dbPath;
 
-    const track = await readCurrentTrack(dbPath, config.sqlcipherKey || undefined);
+    const track = await readCurrentTrack(
+      dbPath,
+      config.sqlcipherKey || undefined,
+    );
     if (!track) {
       status.error = null;
       sendStatus();
@@ -77,14 +205,26 @@ async function pollOnce(): Promise<void> {
     lastTrackKey = key;
     status.lastTrack = track;
     status.error = null;
+    log.info("New track detected:", track.artist, "–", track.title);
 
     try {
       const result = await pushTrack(track);
       status.lastResult = result;
       status.connected = true;
       status.queueSize = queueSize();
+
+      if (result.matched) {
+        log.info("Track matched request!", {
+          score: result.confidenceScore,
+        });
+        showNotification(
+          "Request Matched!",
+          `"${track.title}" by ${track.artist} matched a request.`,
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      log.error("Push failed:", message);
       status.error = `Push failed: ${message}`;
       status.connected = false;
       enqueueTrack(track);
@@ -92,6 +232,7 @@ async function pollOnce(): Promise<void> {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    log.error("DB read error:", message);
     status.error = `DB read error: ${message}`;
     status.connected = false;
   }
@@ -103,6 +244,7 @@ function startPolling(): void {
   stopPolling();
   const config = getConfig();
   const interval = config.pollingIntervalMs || 10_000;
+  log.info("Starting auto-poll, interval:", interval, "ms");
   void pollOnce();
   pollTimer = setInterval(() => void pollOnce(), interval);
 }
@@ -111,16 +253,21 @@ function stopPolling(): void {
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
+    log.info("Polling stopped");
   }
 }
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 480,
-    height: 640,
+    width: 520,
+    height: 720,
+    minWidth: 420,
+    minHeight: 500,
     show: false,
     resizable: true,
     title: "Rekordbox Bridge",
+    titleBarStyle: "hiddenInset",
+    vibrancy: "sidebar",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -136,30 +283,50 @@ function createWindow(): void {
   });
 }
 
-function toggleWindow(): void {
+function showWindow(): void {
   if (!mainWindow) {
     createWindow();
   }
-  if (mainWindow && mainWindow.isVisible()) {
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}
+
+function toggleWindow(): void {
+  if (!mainWindow) {
+    createWindow();
+    mainWindow?.show();
+    mainWindow?.focus();
+    return;
+  }
+  if (mainWindow.isVisible()) {
     mainWindow.hide();
-  } else if (mainWindow) {
+  } else {
     mainWindow.show();
     mainWindow.focus();
   }
 }
 
 app.on("ready", () => {
-  const icon = nativeImage.createEmpty();
+  status.version = app.getVersion();
+  status.logsPath = app.getPath("logs");
+  status.launchAtLogin = app.getLoginItemSettings().openAtLogin;
+
+  const iconPath = trayIconPath();
+  let icon: Electron.NativeImage;
+  try {
+    icon = nativeImage.createFromPath(iconPath);
+    icon.setTemplateImage(true);
+  } catch {
+    log.warn("Tray icon not found at", iconPath, "— using empty icon");
+    icon = nativeImage.createEmpty();
+  }
+
   tray = new Tray(icon);
   tray.setToolTip("Rekordbox Bridge");
-
-  const contextMenu = Menu.buildFromTemplate([
-    { label: "Show / Hide", click: toggleWindow },
-    { type: "separator" },
-    { label: "Quit", click: () => { app.exit(0); } },
-  ]);
-  tray.setContextMenu(contextMenu);
   tray.on("click", toggleWindow);
+  updateTrayMenu();
 
   createWindow();
   mainWindow?.show();
@@ -169,52 +336,79 @@ app.on("ready", () => {
   if (config.mode === "auto") {
     startPolling();
   }
+
+  log.info("App ready. Mode:", config.mode);
 });
 
 app.on("window-all-closed", () => {
-  // Keep app running in tray when all windows are closed
+  // Keep running in tray
 });
+
+app.on("activate", () => {
+  showWindow();
+});
+
+// ─── IPC Handlers ────────────────────────────────────────────
 
 ipcMain.handle("get-config", () => getConfig());
 
-ipcMain.handle("set-config", (_event, partial: Record<string, unknown>) => {
-  setConfig(partial as Parameters<typeof setConfig>[0]);
-  const config = getConfig();
-  status.mode = config.mode;
+ipcMain.handle(
+  "set-config",
+  (_event, partial: Record<string, unknown>) => {
+    setConfig(partial as Parameters<typeof setConfig>[0]);
+    const config = getConfig();
+    status.mode = config.mode;
 
-  if (config.mode === "auto") {
-    startPolling();
-  } else {
-    stopPolling();
-  }
-  sendStatus();
-  return config;
-});
+    if (config.mode === "auto") {
+      startPolling();
+    } else {
+      stopPolling();
+    }
+    sendStatus();
+    return config;
+  },
+);
 
 ipcMain.handle("get-status", () => status);
 
-ipcMain.handle("manual-push", async (_event, title: string, artist: string) => {
-  const track: TrackInfo = { title, artist, playedAt: new Date().toISOString() };
-  try {
-    const result = await pushTrack(track);
-    status.lastTrack = track;
-    status.lastResult = result;
-    status.connected = true;
-    status.error = null;
-    sendStatus();
-    return result;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    status.error = `Manual push failed: ${message}`;
-    status.connected = false;
-    sendStatus();
-    throw err;
-  }
-});
+ipcMain.handle(
+  "manual-push",
+  async (_event, title: string, artist: string) => {
+    const track: TrackInfo = {
+      title,
+      artist,
+      playedAt: new Date().toISOString(),
+    };
+    log.info("Manual push:", artist, "–", title);
+    try {
+      const result = await pushTrack(track);
+      status.lastTrack = track;
+      status.lastResult = result;
+      status.connected = true;
+      status.error = null;
+      if (result.matched) {
+        showNotification(
+          "Request Matched!",
+          `"${title}" by ${artist} matched a request.`,
+        );
+      }
+      sendStatus();
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.error("Manual push failed:", message);
+      status.error = `Manual push failed: ${message}`;
+      status.connected = false;
+      sendStatus();
+      throw err;
+    }
+  },
+);
 
 ipcMain.handle("resolve-db-path", () => {
   const dbPath = resolveDbPath();
   status.dbPath = dbPath;
+  log.info("Resolved DB path:", dbPath);
   sendStatus();
   return dbPath;
 });
@@ -222,4 +416,14 @@ ipcMain.handle("resolve-db-path", () => {
 ipcMain.handle("poll-now", async () => {
   await pollOnce();
   return status;
+});
+
+ipcMain.handle("toggle-launch-at-login", () => {
+  toggleLaunchAtLogin();
+  return status.launchAtLogin;
+});
+
+ipcMain.handle("open-logs", () => {
+  const { shell } = require("electron");
+  shell.openPath(app.getPath("logs"));
 });

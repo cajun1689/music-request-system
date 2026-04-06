@@ -12,53 +12,46 @@ A lightweight macOS menubar app that reads the currently playing track from Reko
 ## Download & Install
 
 1. Go to the [Releases page](https://github.com/cajun1689/music-request-system/releases) on GitHub.
-2. Download the latest **Rekordbox Bridge .dmg** (or .zip) for your Mac:
-   - **arm64** for Apple Silicon (M1/M2/M3/M4)
-   - **x64** for Intel Macs
-3. Open the `.dmg` and drag **Rekordbox Bridge** to your Applications folder. Or unzip the `.zip` and move the app to Applications.
-4. If macOS warns the app is from an unidentified developer, right-click the app and select **Open**, or go to **System Settings > Privacy & Security** and click **Open Anyway**.
+2. Download the latest **Rekordbox Bridge** installer:
+   - **`.pkg`** (Recommended) — double-click to install to `/Applications`
+   - **`.dmg`** — drag to Applications
+   - **`.zip`** — extract and move to Applications
+3. Open **Rekordbox Bridge** from your Applications folder.
+4. Click the vinyl icon (♫) in your menu bar to open the configuration window.
 
 ## Requirements
 
-- macOS 11+ (Apple Silicon or Intel -- universal binary)
+- macOS 11+ (Apple Silicon or Intel — universal binary)
 - Rekordbox 6 or 7 installed and running in Performance mode
 - An active event on Casper Requests with a Push Token (get from the Admin panel)
 
-## Building from Source (developers only)
-
-```bash
-cd rekordbox-agent
-npm install
-npm run dev          # run in dev mode
-npm run package      # build .pkg and .dmg to out/ folder
-```
-
 ## Configuration
 
-On first launch, click the tray icon and configure:
+On first launch, click the menu bar icon and configure:
 
 | Field | Description |
 |-------|-------------|
-| **API Base URL** | Your API Gateway base URL (e.g. `https://abc123.execute-api.us-east-1.amazonaws.com/prod`) |
-| **Event ID** | The event ID from the Admin panel (e.g. `gaslight-residency`) |
+| **API Base URL** | `https://casperrequests.com/prod` (pre-filled) |
+| **Event ID** | The event ID from the Admin panel |
 | **Push Token** | Copy from Admin panel > Rekordbox Bridge Token section |
-| **SQLCipher Key** | Leave blank for unencrypted DBs. For Rekordbox 6/7, the community-known key may be needed. |
-| **Polling Interval** | Default 10000ms (10s). Lower = faster detection, higher CPU usage. |
+| **SQLCipher Key** | Leave blank for most setups. Only needed if Rekordbox encrypts the DB. |
+| **Polling Interval** | Default 10,000ms (10s). Lower = faster detection. |
 | **Mode** | `Auto` reads from the DB. `Manual` lets you type tracks to push. |
+
+## Features
+
+- **Auto-detect Rekordbox database** — finds the DB path automatically
+- **Launch at Login** — toggle in the app or from the menu bar
+- **macOS notifications** — get notified when a track matches a request
+- **Offline resilience** — failed pushes queue up and retry automatically
+- **Manual fallback** — type tracks to push if DB polling fails
+- **File logging** — logs stored in `~/Library/Logs/rekordbox-bridge/` for troubleshooting
+- **Menu bar status** — see the current track and connection status from the tray
 
 ## macOS Permissions
 
 - The app reads files under `~/Library/Pioneer/` and `~/Library/Application Support/Pioneer/`.
 - On some macOS versions, you may need to grant **Full Disk Access** in System Settings > Privacy & Security.
-- If the app is unsigned, right-click the .app and select "Open" to bypass Gatekeeper on first launch.
-
-## Manual Fallback
-
-If the database read fails (Rekordbox update changed the schema, encryption key changed, etc.), switch to **Manual** mode and type the song title + artist to push directly.
-
-## Offline Resilience
-
-If Wi-Fi drops during a set, failed pushes are queued (up to 50 tracks) and retried automatically when the connection returns.
 
 ## Troubleshooting
 
@@ -66,6 +59,30 @@ If Wi-Fi drops during a set, failed pushes are queued (up to 50 tracks) and retr
 - **"Push failed (403)"**: Check that the Push Token matches the one in the Admin panel. Tokens can be rotated.
 - **"DB read error: SQLITE_BUSY"**: The app retries automatically. If persistent, try increasing the polling interval.
 - **No matches found**: The matching algorithm requires a confidence threshold. Ensure the request uses a similar title/artist to what Rekordbox shows.
+- **Open Logs**: Click "Open Logs" at the bottom of the app window to view log files.
+
+## Building from Source
+
+```bash
+cd rekordbox-agent
+npm install
+npm run dev          # run in dev mode
+npm run package      # build .pkg, .dmg, and .zip to out/
+```
+
+## Code Signing & Notarization
+
+To produce a signed + notarized build, set these environment variables before running `npm run package`:
+
+```bash
+export CSC_LINK="base64-encoded-.p12-certificate"
+export CSC_KEY_PASSWORD="certificate-password"
+export APPLE_ID="your@apple-id.com"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+export APPLE_TEAM_ID="XXXXXXXXXX"
+```
+
+In GitHub Actions, these are configured as repository secrets.
 
 ## Architecture
 
@@ -76,7 +93,7 @@ Rekordbox App
 SQLCipher DB (djmdSongHistory table)
     |
     v  (poll every 10s)
-Rekordbox Bridge App
+Rekordbox Bridge (menubar app)
     |
     v  (POST /events/{eventId}/push-track)
 Cloud API (AWS Lambda)

@@ -2,6 +2,7 @@
   "name": "rekordbox-bridge",
   "version": "1.0.0",
   "description": "Menubar Mac app that reads Rekordbox now-playing tracks and pushes them to the Casper Requests cloud API",
+  "author": "Casper Requests <admin@casperrequests.com>",
   "repository": "https://github.com/cajun1689/music-request-system",
   "main": "dist/main/index.js",
   "scripts": {
@@ -12,9 +13,12 @@
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0",
-    "electron-store": "^8.2.0"
+    "electron-log": "^5.2.0",
+    "electron-store": "^8.2.0",
+    "electron-updater": "^6.3.0"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.5.0",
     "@types/better-sqlite3": "^7.6.11",
     "electron": "^31.0.0",
     "electron-builder": "^25.0.0",
@@ -24,27 +28,61 @@
   "build": {
     "appId": "com.casperrequests.rekordbox-bridge",
     "productName": "Rekordbox Bridge",
-    "publish": null,
+    "publish": {
+      "provider": "github",
+      "owner": "cajun1689",
+      "repo": "music-request-system"
+    },
     "mac": {
       "category": "public.app-category.music",
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.inherit.plist",
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": ["universal"]
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": ["universal"]
+        },
+        {
+          "target": "pkg",
+          "arch": ["universal"]
         }
-      ],
-      "identity": null
+      ]
     },
+    "dmg": {
+      "title": "Rekordbox Bridge ${version}",
+      "artifactName": "Rekordbox-Bridge-${version}-mac.${ext}"
+    },
+    "pkg": {
+      "installLocation": "/Applications",
+      "allowCurrentUserHome": true,
+      "allowAnywhere": false
+    },
+    "afterSign": "scripts/notarize.js",
     "directories": {
       "output": "out"
     },
     "files": [
       "dist/**/*",
+      "assets/trayTemplate.png",
+      "assets/trayTemplate@2x.png",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/trayTemplate.png",
+        "to": "trayTemplate.png"
+      },
+      {
+        "from": "assets/trayTemplate@2x.png",
+        "to": "trayTemplate@2x.png"
+      }
     ]
   }
 }

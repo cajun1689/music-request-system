@@ -5,156 +5,448 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Rekordbox Bridge</title>
   <style>
+    :root {
+      --bg: #0c111b;
+      --card: #151d2e;
+      --card-border: #1e293b;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --text: #e2e8f0;
+      --text-dim: #94a3b8;
+      --text-muted: #64748b;
+      --input-bg: #0f172a;
+      --input-border: #334155;
+      --input-focus: #3b82f6;
+      --radius: 10px;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
-      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
       font-size: 13px;
       line-height: 1.5;
+      -webkit-app-region: drag;
+      user-select: none;
+      overflow-y: auto;
+      height: 100vh;
     }
-    h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-    h2 { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: #94a3b8; }
-    .section {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 10px;
-      padding: 12px;
+
+    .titlebar {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dim);
+      letter-spacing: 0.3px;
+      -webkit-app-region: drag;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--bg);
+    }
+
+    .content {
+      -webkit-app-region: no-drag;
+      padding: 0 16px 20px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 14px;
       margin-bottom: 12px;
     }
-    label { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 3px; margin-top: 8px; }
-    label:first-child { margin-top: 0; }
-    input[type="text"], input[type="number"], select {
-      width: 100%;
-      background: #0f172a;
-      border: 1px solid #475569;
-      border-radius: 6px;
-      padding: 6px 10px;
-      color: #e2e8f0;
-      font-size: 12px;
-      outline: none;
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
     }
-    input:focus, select:focus { border-color: #60a5fa; }
-    button {
-      background: #3b82f6;
+
+    .card-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-dim);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .status-badge.connected { background: rgba(34,197,94,0.15); color: var(--green); }
+    .status-badge.error { background: rgba(239,68,68,0.15); color: var(--red); }
+    .status-badge.idle { background: rgba(234,179,8,0.15); color: var(--yellow); }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+    .dot.red { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+    .now-playing {
+      background: var(--input-bg);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 8px;
+    }
+    .now-playing .track-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    .now-playing .track-artist {
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+    .now-playing .track-time {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .match-result {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .match-result.matched {
+      background: rgba(34,197,94,0.1);
+      border: 1px solid rgba(34,197,94,0.3);
+      color: var(--green);
+    }
+    .match-result.no-match {
+      background: rgba(234,179,8,0.1);
+      border: 1px solid rgba(234,179,8,0.3);
+      color: var(--yellow);
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 12px;
+      font-size: 12px;
+    }
+    .info-grid .label { color: var(--text-muted); }
+    .info-grid .value { color: var(--text); font-weight: 500; }
+
+    .error-banner {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.25);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-top: 8px;
+      font-size: 11px;
+      color: #fca5a5;
+    }
+
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+      margin-top: 10px;
+    }
+    label:first-child { margin-top: 0; }
+
+    input[type="text"], input[type="number"], input[type="password"], select {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      padding: 7px 10px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus { border-color: var(--input-focus); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      background: var(--accent);
       color: #fff;
       border: none;
       border-radius: 6px;
       padding: 7px 14px;
       font-size: 12px;
       font-weight: 600;
+      font-family: inherit;
       cursor: pointer;
+      transition: background 0.15s;
+      margin-top: 10px;
+      margin-right: 6px;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn.secondary {
+      background: var(--card-border);
+      color: var(--text-dim);
+    }
+    .btn.secondary:hover { background: var(--input-border); }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .btn-row .btn { margin: 0; }
+
+    .manual-fields {
+      display: flex;
+      gap: 6px;
       margin-top: 8px;
-      margin-right: 6px;
     }
-    button:hover { background: #2563eb; }
-    button.secondary { background: #475569; }
-    button.secondary:hover { background: #64748b; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .dot {
-      display: inline-block;
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      margin-right: 6px;
-      vertical-align: middle;
-    }
-    .dot.green { background: #4ade80; }
-    .dot.yellow { background: #facc15; }
-    .dot.red { background: #f87171; }
-    .status-line { font-size: 12px; margin-bottom: 4px; }
-    .track-info { background: #0f172a; border-radius: 6px; padding: 8px 10px; margin-top: 8px; }
-    .track-info p { font-size: 11px; }
-    .track-info .title { font-weight: 600; font-size: 13px; color: #f1f5f9; }
-    .error { color: #fca5a5; font-size: 11px; margin-top: 6px; }
-    .match-info { color: #86efac; font-size: 11px; margin-top: 4px; }
-    .manual-fields { display: flex; gap: 6px; margin-top: 8px; }
     .manual-fields input { flex: 1; }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-size: 12px;
+    }
+    .toggle-row .label-text { color: var(--text); font-weight: 500; }
+    .toggle-row .sub-text { color: var(--text-muted); font-size: 11px; }
+
+    .toggle {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      cursor: pointer;
+    }
+    .toggle input { display: none; }
+    .toggle .slider {
+      position: absolute;
+      inset: 0;
+      background: var(--input-border);
+      border-radius: 10px;
+      transition: background 0.2s;
+    }
+    .toggle .slider::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .toggle input:checked + .slider {
+      background: var(--accent);
+    }
+    .toggle input:checked + .slider::after {
+      transform: translateX(16px);
+    }
+
+    .footer {
+      text-align: center;
+      padding: 4px 0 8px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .footer a {
+      color: var(--text-muted);
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .footer a:hover { color: var(--text-dim); }
+
+    .section-divider {
+      border: none;
+      border-top: 1px solid var(--card-border);
+      margin: 10px 0;
+    }
   </style>
 </head>
 <body>
-  <h1>Rekordbox Bridge</h1>
-  <p style="font-size: 11px; color: #64748b; margin-bottom: 12px;">Pushes now-playing tracks from Rekordbox to the cloud.</p>
+  <div class="titlebar">Rekordbox Bridge</div>
 
-  <div class="section" id="status-section">
-    <h2>Status</h2>
-    <div class="status-line"><span class="dot red" id="dot"></span> <span id="conn-label">Disconnected</span></div>
-    <div class="status-line">Mode: <strong id="mode-label">auto</strong></div>
-    <div class="status-line">DB: <span id="db-label">not found</span></div>
-    <div class="status-line">Queue: <span id="queue-label">0 pending</span></div>
-    <div id="last-track-box" class="track-info" style="display:none;">
-      <p class="title" id="track-title"></p>
-      <p id="track-artist"></p>
-      <p id="track-time" style="color:#64748b;"></p>
-    </div>
-    <div id="match-box" class="match-info" style="display:none;">
-      <span id="match-label"></span>
-    </div>
-    <div id="error-box" class="error" style="display:none;"></div>
-    <button id="btn-poll" class="secondary">Poll Now</button>
-  </div>
+  <div class="content">
+    <!-- Status Card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Status</span>
+        <span class="status-badge idle" id="status-badge">
+          <span class="dot yellow" id="dot"></span>
+          <span id="conn-label">Idle</span>
+        </span>
+      </div>
 
-  <div class="section">
-    <h2>Configuration</h2>
-    <label>API Base URL</label>
-    <input type="text" id="cfg-api-url" placeholder="https://your-api.com/prod" />
-    <label>Event ID</label>
-    <input type="text" id="cfg-event-id" placeholder="gaslight-residency" />
-    <label>Push Token</label>
-    <input type="text" id="cfg-push-token" placeholder="paste from Admin panel" />
-    <label>SQLCipher Key (leave blank for unencrypted)</label>
-    <input type="text" id="cfg-sqlcipher-key" placeholder="optional" />
-    <label>Polling Interval (ms)</label>
-    <input type="number" id="cfg-interval" value="10000" min="3000" max="60000" />
-    <label>Mode</label>
-    <select id="cfg-mode">
-      <option value="auto">Auto (poll Rekordbox DB)</option>
-      <option value="manual">Manual (type tracks)</option>
-    </select>
-    <button id="btn-save-config">Save Config</button>
-    <button id="btn-find-db" class="secondary">Detect DB Path</button>
-  </div>
+      <div class="info-grid">
+        <span class="label">Mode</span>
+        <span class="value" id="mode-label">Auto</span>
+        <span class="label">Database</span>
+        <span class="value" id="db-label" style="word-break:break-all; font-size:11px;">Not found</span>
+        <span class="label">Queue</span>
+        <span class="value" id="queue-label">0 pending</span>
+      </div>
 
-  <div class="section">
-    <h2>Manual Push</h2>
-    <div class="manual-fields">
-      <input type="text" id="manual-title" placeholder="Song title" />
-      <input type="text" id="manual-artist" placeholder="Artist" />
+      <div id="now-playing" class="now-playing" style="display:none;">
+        <div class="track-title" id="track-title"></div>
+        <div class="track-artist" id="track-artist"></div>
+        <div class="track-time" id="track-time"></div>
+      </div>
+
+      <div id="match-box" class="match-result matched" style="display:none;">
+        <span id="match-label"></span>
+      </div>
+
+      <div id="error-box" class="error-banner" style="display:none;"></div>
+
+      <div class="btn-row">
+        <button class="btn secondary" id="btn-poll">Poll Now</button>
+        <button class="btn secondary" id="btn-find-db">Detect DB</button>
+      </div>
     </div>
-    <button id="btn-manual-push">Push Now</button>
-    <div id="manual-error" class="error" style="display:none;"></div>
+
+    <!-- Configuration Card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Configuration</span>
+      </div>
+
+      <label>API Base URL</label>
+      <input type="text" id="cfg-api-url" placeholder="https://casperrequests.com/prod" />
+
+      <label>Event ID</label>
+      <input type="text" id="cfg-event-id" placeholder="gaslight-residency" />
+
+      <label>Push Token</label>
+      <input type="password" id="cfg-push-token" placeholder="Paste from Admin panel" />
+
+      <label>SQLCipher Key <span style="font-weight:400; color:var(--text-muted);">(leave blank for unencrypted)</span></label>
+      <input type="password" id="cfg-sqlcipher-key" placeholder="Optional" />
+
+      <label>Polling Interval (ms)</label>
+      <input type="number" id="cfg-interval" value="10000" min="3000" max="60000" step="1000" />
+
+      <label>Mode</label>
+      <select id="cfg-mode">
+        <option value="auto">Auto — poll Rekordbox database</option>
+        <option value="manual">Manual — type tracks to push</option>
+      </select>
+
+      <div class="btn-row">
+        <button class="btn" id="btn-save-config">Save Configuration</button>
+      </div>
+
+      <hr class="section-divider" />
+
+      <div class="toggle-row">
+        <div>
+          <div class="label-text">Launch at Login</div>
+          <div class="sub-text">Start Rekordbox Bridge when you log in</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="chk-launch-login" />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Manual Push Card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Manual Push</span>
+      </div>
+      <p style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">
+        Use when auto-polling isn't available. Type a track to push directly.
+      </p>
+      <div class="manual-fields">
+        <input type="text" id="manual-title" placeholder="Song title" />
+        <input type="text" id="manual-artist" placeholder="Artist" />
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="btn-manual-push">Push Track</button>
+      </div>
+      <div id="manual-error" class="error-banner" style="display:none;"></div>
+    </div>
+
+    <div class="footer">
+      <span id="version-label">v1.0.0</span> &middot;
+      <a id="link-logs">Open Logs</a>
+    </div>
   </div>
 
   <script>
     const bridge = window.bridge;
-
     const el = (id) => document.getElementById(id);
 
     function updateUI(s) {
       const dot = el("dot");
-      dot.className = "dot " + (s.connected ? "green" : s.error ? "red" : "yellow");
-      el("conn-label").textContent = s.connected ? "Connected" : s.error ? "Error" : "Idle";
-      el("mode-label").textContent = s.mode;
-      el("db-label").textContent = s.dbPath || "not found";
+      const badge = el("status-badge");
+      if (s.connected) {
+        dot.className = "dot green";
+        badge.className = "status-badge connected";
+        el("conn-label").textContent = "Connected";
+      } else if (s.error) {
+        dot.className = "dot red";
+        badge.className = "status-badge error";
+        el("conn-label").textContent = "Error";
+      } else {
+        dot.className = "dot yellow";
+        badge.className = "status-badge idle";
+        el("conn-label").textContent = "Idle";
+      }
+
+      el("mode-label").textContent = s.mode === "auto" ? "Auto" : "Manual";
+      el("db-label").textContent = s.dbPath || "Not found";
       el("queue-label").textContent = s.queueSize + " pending";
 
       if (s.lastTrack) {
-        el("last-track-box").style.display = "";
+        el("now-playing").style.display = "";
         el("track-title").textContent = s.lastTrack.title;
-        el("track-artist").textContent = s.lastTrack.artist || "";
-        el("track-time").textContent = s.lastTrack.playedAt || "";
+        el("track-artist").textContent = s.lastTrack.artist || "Unknown Artist";
+        el("track-time").textContent = s.lastTrack.playedAt
+          ? new Date(s.lastTrack.playedAt).toLocaleTimeString()
+          : "";
       } else {
-        el("last-track-box").style.display = "none";
+        el("now-playing").style.display = "none";
       }
 
       if (s.lastResult) {
         el("match-box").style.display = "";
         if (s.lastResult.matched) {
-          el("match-label").textContent = "Matched! Score: " + (s.lastResult.confidenceScore ?? 0);
+          el("match-box").className = "match-result matched";
+          el("match-label").textContent =
+            "✓ Matched request! Score: " + (s.lastResult.confidenceScore ?? 0);
         } else {
-          el("match-label").textContent = "No match: " + (s.lastResult.reason || "");
+          el("match-box").className = "match-result no-match";
+          el("match-label").textContent =
+            "No match — " + (s.lastResult.reason || "no approved requests");
         }
-        el("match-box").style.color = s.lastResult.matched ? "#86efac" : "#fcd34d";
       } else {
         el("match-box").style.display = "none";
       }
@@ -164,6 +456,14 @@
         el("error-box").textContent = s.error;
       } else {
         el("error-box").style.display = "none";
+      }
+
+      if (s.version) {
+        el("version-label").textContent = "v" + s.version;
+      }
+
+      if (s.launchAtLogin !== undefined) {
+        el("chk-launch-login").checked = s.launchAtLogin;
       }
     }
 
@@ -185,24 +485,40 @@
     }
 
     el("btn-save-config").addEventListener("click", async () => {
-      await bridge.setConfig({
-        apiBaseUrl: el("cfg-api-url").value.trim(),
-        eventId: el("cfg-event-id").value.trim(),
-        pushToken: el("cfg-push-token").value.trim(),
-        sqlcipherKey: el("cfg-sqlcipher-key").value.trim(),
-        pollingIntervalMs: parseInt(el("cfg-interval").value, 10) || 10000,
-        mode: el("cfg-mode").value,
-      });
+      el("btn-save-config").disabled = true;
+      el("btn-save-config").textContent = "Saving…";
+      try {
+        await bridge.setConfig({
+          apiBaseUrl: el("cfg-api-url").value.trim(),
+          eventId: el("cfg-event-id").value.trim(),
+          pushToken: el("cfg-push-token").value.trim(),
+          sqlcipherKey: el("cfg-sqlcipher-key").value.trim(),
+          pollingIntervalMs: parseInt(el("cfg-interval").value, 10) || 10000,
+          mode: el("cfg-mode").value,
+        });
+      } finally {
+        el("btn-save-config").disabled = false;
+        el("btn-save-config").textContent = "Save Configuration";
+      }
     });
 
     el("btn-find-db").addEventListener("click", async () => {
-      const dbPath = await bridge.resolveDbPath();
-      el("db-label").textContent = dbPath || "not found";
+      el("btn-find-db").disabled = true;
+      try {
+        const dbPath = await bridge.resolveDbPath();
+        el("db-label").textContent = dbPath || "Not found";
+      } finally {
+        el("btn-find-db").disabled = false;
+      }
     });
 
     el("btn-poll").addEventListener("click", async () => {
       el("btn-poll").disabled = true;
-      try { await bridge.pollNow(); } finally { el("btn-poll").disabled = false; }
+      try {
+        await bridge.pollNow();
+      } finally {
+        el("btn-poll").disabled = false;
+      }
     });
 
     el("btn-manual-push").addEventListener("click", async () => {
@@ -221,6 +537,15 @@
       } finally {
         el("btn-manual-push").disabled = false;
       }
+    });
+
+    el("chk-launch-login").addEventListener("change", async () => {
+      await bridge.toggleLaunchAtLogin();
+    });
+
+    el("link-logs").addEventListener("click", async (e) => {
+      e.preventDefault();
+      await bridge.openLogs();
     });
 
     loadConfig();

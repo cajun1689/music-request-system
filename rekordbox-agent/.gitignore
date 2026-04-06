@@ -5,3 +5,4 @@ out/
 *.pkg
 *.app
 *.zip
+*.blockmap
