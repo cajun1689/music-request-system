@@ -296,13 +296,10 @@ function showWindow(): void {
 function toggleWindow(): void {
   if (!mainWindow) {
     createWindow();
-    mainWindow?.show();
-    mainWindow?.focus();
-    return;
   }
-  if (mainWindow.isVisible()) {
+  if (mainWindow && mainWindow.isVisible()) {
     mainWindow.hide();
-  } else {
+  } else if (mainWindow) {
     mainWindow.show();
     mainWindow.focus();
   }
