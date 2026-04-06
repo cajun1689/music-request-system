@@ -19,11 +19,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: rekordbox-agent/package-lock.json
 
       - name: Install dependencies
-        run: npm ci || npm install
+        run: npm install
 
       - name: Build TypeScript
         run: npm run build
