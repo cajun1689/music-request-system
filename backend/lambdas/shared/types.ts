@@ -20,6 +20,7 @@ export interface NowPlayingSlot {
 export interface LivePlaylistSource {
   id: string;
   name: string;
+  djName?: string;
   type: "serato" | "rekordbox";
   url: string;
   active: boolean;
@@ -52,6 +53,8 @@ export interface EventRecord {
   genreVotes?: GenreVotes;
   genreVotesTotal?: number;
   nowPlayingSlots?: NowPlayingSlot[];
+  nowPlayingAutoEnabled?: boolean;
+  nowPlayingOnTicker?: boolean;
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;

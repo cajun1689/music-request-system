@@ -1,5 +1,5 @@
 import { getApiBaseUrl, getConfig } from "./config-store";
-import type { TrackInfo } from "./rekordbox-reader";
+import type { LibraryTrack, TrackInfo } from "./rekordbox-reader";
 
 export interface PushResult {
   matched: boolean;
@@ -54,6 +54,7 @@ export async function pushTrack(track: TrackInfo): Promise<PushResult> {
     body: JSON.stringify({
       title: track.title,
       artist: track.artist,
+      sourceId: config.sourceId || undefined,
     }),
   });
 
@@ -95,4 +96,38 @@ export async function drainQueue(): Promise<PushResult[]> {
 
 export function queueSize(): number {
   return pendingQueue.length;
+}
+
+export interface LibrarySyncResult {
+  trackCount: number;
+  message: string;
+}
+
+export async function syncLibrary(tracks: LibraryTrack[]): Promise<LibrarySyncResult> {
+  const config = getConfig();
+  if (!config.eventId || !config.pushToken) {
+    throw new Error("Event ID and Push Token must be configured.");
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/events/${encodeURIComponent(config.eventId)}/library`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-push-token": config.pushToken,
+    },
+    body: JSON.stringify({
+      tracks,
+      sourceId: config.sourceId || undefined,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Library sync failed (${response.status}): ${text}`);
+  }
+
+  return (await response.json()) as LibrarySyncResult;
 }

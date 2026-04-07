@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Rekordbox Bridge</title>
+  <title>DJ Bridge</title>
   <style>
     :root {
       --bg: #0c111b;
@@ -291,7 +291,7 @@
   </style>
 </head>
 <body>
-  <div class="titlebar">Rekordbox Bridge</div>
+  <div class="titlebar">DJ Bridge</div>
 
   <div class="content">
     <!-- Status Card -->
@@ -307,7 +307,9 @@
       <div class="info-grid">
         <span class="label">Mode</span>
         <span class="value" id="mode-label">Auto</span>
-        <span class="label">Database</span>
+        <span class="label">Software</span>
+        <span class="value" id="software-label">Auto-detect</span>
+        <span class="label">Source</span>
         <span class="value" id="db-label" style="word-break:break-all; font-size:11px;">Not found</span>
         <span class="label">Queue</span>
         <span class="value" id="queue-label">0 pending</span>
@@ -327,7 +329,7 @@
 
       <div class="btn-row">
         <button class="btn secondary" id="btn-poll">Poll Now</button>
-        <button class="btn secondary" id="btn-find-db">Detect DB</button>
+        <button class="btn secondary" id="btn-find-db">Detect Source</button>
       </div>
     </div>
 
@@ -351,15 +353,27 @@
       <label>Push Token</label>
       <input type="password" id="cfg-push-token" placeholder="Paste from Admin panel" />
 
-      <label>SQLCipher Key <span style="font-weight:400; color:var(--text-muted);">(leave blank for unencrypted)</span></label>
-      <input type="password" id="cfg-sqlcipher-key" placeholder="Optional" />
+      <label>DJ Software</label>
+      <select id="cfg-software-type">
+        <option value="auto">Auto-detect</option>
+        <option value="rekordbox">Rekordbox</option>
+        <option value="serato">Serato DJ</option>
+      </select>
+
+      <label>Source ID <span style="font-weight:400; color:var(--text-muted);">(e.g. dj-slim, deck-a — identifies this DJ in the system)</span></label>
+      <input type="text" id="cfg-source-id" placeholder="e.g. dj-slim-rekordbox" />
+
+      <div id="sqlcipher-row">
+        <label>SQLCipher Key <span style="font-weight:400; color:var(--text-muted);">(Rekordbox only, leave blank for unencrypted)</span></label>
+        <input type="password" id="cfg-sqlcipher-key" placeholder="Optional" />
+      </div>
 
       <label>Polling Interval (ms)</label>
       <input type="number" id="cfg-interval" value="10000" min="3000" max="60000" step="1000" />
 
       <label>Mode</label>
       <select id="cfg-mode">
-        <option value="auto">Auto — poll Rekordbox database</option>
+        <option value="auto">Auto — poll DJ software</option>
         <option value="manual">Manual — type tracks to push</option>
       </select>
 
@@ -372,7 +386,7 @@
       <div class="toggle-row">
         <div>
           <div class="label-text">Launch at Login</div>
-          <div class="sub-text">Start Rekordbox Bridge when you log in</div>
+          <div class="sub-text">Start DJ Bridge when you log in</div>
         </div>
         <label class="toggle">
           <input type="checkbox" id="chk-launch-login" />
@@ -399,6 +413,43 @@
       <div id="manual-error" class="error-banner" style="display:none;"></div>
     </div>
 
+    <!-- Library Sync Card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Library Sync</span>
+      </div>
+      <p style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">
+        Upload your Rekordbox &amp; Serato music library so the system can show which audience requests you actually have.
+      </p>
+      <div class="btn-row">
+        <button class="btn" id="btn-sync-library">Sync Library</button>
+      </div>
+      <div id="lib-sync-status" style="margin-top:8px; font-size:11px; color:var(--text-dim); display:none;"></div>
+      <div id="lib-sync-error" class="error-banner" style="display:none;"></div>
+    </div>
+
+    <!-- Update Banner -->
+    <div class="card" id="update-card" style="display:none; border-color: var(--accent);">
+      <div class="card-header">
+        <span class="card-title">Update</span>
+        <span class="status-badge connected" id="update-badge" style="display:none;">
+          <span class="dot green"></span>
+          <span id="update-badge-label">Ready</span>
+        </span>
+      </div>
+      <p style="font-size:12px; color:var(--text);" id="update-message"></p>
+      <div id="update-progress-row" style="display:none; margin-top:8px;">
+        <div style="background:var(--input-bg); border-radius:4px; height:6px; overflow:hidden;">
+          <div id="update-progress-bar" style="background:var(--accent); height:100%; width:0%; transition: width 0.3s;"></div>
+        </div>
+        <div style="font-size:10px; color:var(--text-muted); margin-top:3px;" id="update-progress-label">0%</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="btn-install-update" style="display:none;">Restart &amp; Update</button>
+        <button class="btn secondary" id="btn-check-update">Check for Updates</button>
+      </div>
+    </div>
+
     <div class="footer">
       <span id="version-label">v1.0.0</span> &middot;
       <a id="link-logs">Open Logs</a>
@@ -408,6 +459,13 @@
   <script>
     const bridge = window.bridge;
     const el = (id) => document.getElementById(id);
+
+    function updateSqlcipherVisibility() {
+      const sw = el("cfg-software-type").value;
+      el("sqlcipher-row").style.display = sw === "serato" ? "none" : "";
+    }
+
+    el("cfg-software-type").addEventListener("change", updateSqlcipherVisibility);
 
     function updateUI(s) {
       const dot = el("dot");
@@ -427,7 +485,13 @@
       }
 
       el("mode-label").textContent = s.mode === "auto" ? "Auto" : "Manual";
-      el("db-label").textContent = s.dbPath || "Not found";
+
+      const swLabel = s.activeSoftware
+        ? s.activeSoftware.charAt(0).toUpperCase() + s.activeSoftware.slice(1)
+        : (s.softwareType === "auto" ? "Auto-detect" : s.softwareType);
+      el("software-label").textContent = swLabel;
+
+      el("db-label").textContent = s.dbPath || "Detecting…";
       el("queue-label").textContent = s.queueSize + " pending";
 
       if (s.lastTrack) {
@@ -517,6 +581,9 @@
       el("cfg-sqlcipher-key").value = c.sqlcipherKey || "";
       el("cfg-interval").value = c.pollingIntervalMs || 10000;
       el("cfg-mode").value = c.mode || "auto";
+      el("cfg-software-type").value = c.softwareType || "auto";
+      el("cfg-source-id").value = c.sourceId || "";
+      updateSqlcipherVisibility();
       await loadEvents(c.eventId || "");
     }
 
@@ -536,6 +603,8 @@
           sqlcipherKey: el("cfg-sqlcipher-key").value.trim(),
           pollingIntervalMs: parseInt(el("cfg-interval").value, 10) || 10000,
           mode: el("cfg-mode").value,
+          softwareType: el("cfg-software-type").value,
+          sourceId: el("cfg-source-id").value.trim(),
         });
       } finally {
         el("btn-save-config").disabled = false;
@@ -550,8 +619,19 @@
     el("btn-find-db").addEventListener("click", async () => {
       el("btn-find-db").disabled = true;
       try {
-        const dbPath = await bridge.resolveDbPath();
-        el("db-label").textContent = dbPath || "Not found";
+        const sw = await bridge.detectSoftware();
+        if (sw === "rekordbox") {
+          const dbPath = await bridge.resolveDbPath();
+          el("db-label").textContent = dbPath || "Rekordbox DB not found";
+        } else if (sw === "serato") {
+          const sessDir = await bridge.resolveSeratoPath();
+          el("db-label").textContent = sessDir || "Serato sessions not found";
+        } else {
+          el("db-label").textContent = "No DJ software detected";
+        }
+        el("software-label").textContent = sw
+          ? sw.charAt(0).toUpperCase() + sw.slice(1)
+          : "Not detected";
       } finally {
         el("btn-find-db").disabled = false;
       }
@@ -584,6 +664,30 @@
       }
     });
 
+    el("btn-sync-library").addEventListener("click", async () => {
+      el("btn-sync-library").disabled = true;
+      el("btn-sync-library").textContent = "Scanning…";
+      el("lib-sync-status").style.display = "none";
+      el("lib-sync-error").style.display = "none";
+      try {
+        const result = await bridge.syncLibrary();
+        if (result.error) {
+          el("lib-sync-error").style.display = "";
+          el("lib-sync-error").textContent = result.error;
+        } else {
+          el("lib-sync-status").style.display = "";
+          el("lib-sync-status").textContent = "✓ " + result.trackCount + " tracks synced.";
+          el("lib-sync-status").style.color = "var(--green)";
+        }
+      } catch (err) {
+        el("lib-sync-error").style.display = "";
+        el("lib-sync-error").textContent = err.message || "Library sync failed";
+      } finally {
+        el("btn-sync-library").disabled = false;
+        el("btn-sync-library").textContent = "Sync Library";
+      }
+    });
+
     el("chk-launch-login").addEventListener("change", async () => {
       await bridge.toggleLaunchAtLogin();
     });
@@ -591,6 +695,67 @@
     el("link-logs").addEventListener("click", async (e) => {
       e.preventDefault();
       await bridge.openLogs();
+    });
+
+    function updateUpdateUI(us) {
+      const card = el("update-card");
+      const msg = el("update-message");
+      const progressRow = el("update-progress-row");
+      const progressBar = el("update-progress-bar");
+      const progressLabel = el("update-progress-label");
+      const btnInstall = el("btn-install-update");
+      const badge = el("update-badge");
+
+      if (us.downloaded) {
+        card.style.display = "";
+        badge.style.display = "";
+        el("update-badge-label").textContent = "Ready";
+        msg.textContent = "Version " + us.version + " is ready to install.";
+        progressRow.style.display = "none";
+        btnInstall.style.display = "";
+      } else if (us.downloading) {
+        card.style.display = "";
+        badge.style.display = "none";
+        msg.textContent = "Downloading version " + us.version + "…";
+        progressRow.style.display = "";
+        progressBar.style.width = us.progress + "%";
+        progressLabel.textContent = us.progress + "%";
+        btnInstall.style.display = "none";
+      } else if (us.available) {
+        card.style.display = "";
+        badge.style.display = "none";
+        msg.textContent = "Version " + us.version + " is available. Downloading…";
+        progressRow.style.display = "none";
+        btnInstall.style.display = "none";
+      } else if (us.checking) {
+        card.style.display = "";
+        badge.style.display = "none";
+        msg.textContent = "Checking for updates…";
+        progressRow.style.display = "none";
+        btnInstall.style.display = "none";
+      } else if (us.error) {
+        card.style.display = "";
+        badge.style.display = "none";
+        msg.textContent = "Update check failed: " + us.error;
+        progressRow.style.display = "none";
+        btnInstall.style.display = "none";
+      }
+    }
+
+    bridge.onUpdateStatus(updateUpdateUI);
+
+    el("btn-check-update").addEventListener("click", () => {
+      bridge.checkForUpdates();
+    });
+
+    el("btn-install-update").addEventListener("click", () => {
+      bridge.quitAndInstall();
+    });
+
+    bridge.getUpdateStatus().then((us) => {
+      if (us && (us.available || us.downloaded || us.downloading || us.checking || us.error)) {
+        updateUpdateUI(us);
+      }
     });
 
     loadConfig();

@@ -59,6 +59,8 @@ export function DashboardPage() {
   const [fireSaleActive, setFireSaleActive] = useState(false);
   const [fireSaleMessage, setFireSaleMessage] = useState("");
   const [tickerMessage, setTickerMessage] = useState("");
+  const [nowPlayingAutoEnabled, setNowPlayingAutoEnabled] = useState(false);
+  const [nowPlayingOnTicker, setNowPlayingOnTicker] = useState(false);
   const [sourceHealth, setSourceHealth] = useState<
     Array<{
       sourceId: string;
@@ -68,10 +70,58 @@ export function DashboardPage() {
       currentTrack?: string;
     }>
   >([]);
+  interface LibraryEntry {
+    title: string;
+    artist: string;
+    titleNorm: string;
+    artistNorm: string;
+    playCount: number;
+  }
+  const [libraryTracks, setLibraryTracks] = useState<LibraryEntry[] | null>(null);
   const [tab, setTab] = useState<Tab>("pending");
   const { grouped, loading, applyLocalStatus, refresh } = useRequests(eventId || undefined, "dj");
 
   const visible = useMemo(() => grouped[tab], [grouped, tab]);
+
+  function normalizeForLibrary(s: string): string {
+    return s.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
+  }
+
+  interface LibraryMatch {
+    found: boolean;
+    bestTrack?: LibraryEntry;
+  }
+
+  function findLibraryMatch(songTitle: string, artistName: string): LibraryMatch | undefined {
+    if (!libraryTracks) return undefined;
+    const titleNorm = normalizeForLibrary(songTitle);
+    const artistNorm = normalizeForLibrary(artistName);
+
+    const candidates: LibraryEntry[] = [];
+
+    for (const t of libraryTracks) {
+      // Exact title+artist
+      if (t.titleNorm === titleNorm && t.artistNorm === artistNorm) {
+        candidates.push(t);
+        continue;
+      }
+      // Exact title only
+      if (t.titleNorm === titleNorm) {
+        candidates.push(t);
+        continue;
+      }
+      // Partial title match (both directions, min 4 chars)
+      if (titleNorm.length > 3 && (t.titleNorm.includes(titleNorm) || titleNorm.includes(t.titleNorm))) {
+        candidates.push(t);
+      }
+    }
+
+    if (candidates.length === 0) return { found: false };
+
+    // Pick the one with the highest play count
+    candidates.sort((a, b) => b.playCount - a.playCount);
+    return { found: true, bestTrack: candidates[0] };
+  }
 
   useEffect(() => {
     if (!eventId) {
@@ -86,6 +136,8 @@ export function DashboardPage() {
         setTickerPromotions(evt.tickerPromotions ?? []);
         setFireSaleActive(Boolean(evt.fireSaleActive));
         setFireSaleMessage(evt.fireSaleMessage ?? "");
+        setNowPlayingAutoEnabled(Boolean(evt.nowPlayingAutoEnabled));
+        setNowPlayingOnTicker(Boolean(evt.nowPlayingOnTicker));
       })
       .catch(() => {
         setEventData(null);
@@ -93,6 +145,17 @@ export function DashboardPage() {
         setTickerPromotions([]);
         setFireSaleActive(false);
         setFireSaleMessage("");
+        setNowPlayingAutoEnabled(false);
+        setNowPlayingOnTicker(false);
+      });
+
+    void api
+      .getLibrary(eventId)
+      .then((lib) => {
+        setLibraryTracks(lib.tracks);
+      })
+      .catch(() => {
+        setLibraryTracks(null);
       });
   }, [eventId]);
 
@@ -198,6 +261,28 @@ export function DashboardPage() {
     await saveNowPlayingSlots(next);
   }
 
+  async function toggleNowPlayingAuto() {
+    if (!session || !eventId) return;
+    const next = !nowPlayingAutoEnabled;
+    setNowPlayingAutoEnabled(next);
+    try {
+      await api.updateEvent(eventId, { nowPlayingAutoEnabled: next } as Partial<EventRecord>, session.idToken);
+    } catch {
+      setNowPlayingAutoEnabled(!next);
+    }
+  }
+
+  async function toggleNowPlayingOnTicker() {
+    if (!session || !eventId) return;
+    const next = !nowPlayingOnTicker;
+    setNowPlayingOnTicker(next);
+    try {
+      await api.updateEvent(eventId, { nowPlayingOnTicker: next } as Partial<EventRecord>, session.idToken);
+    } catch {
+      setNowPlayingOnTicker(!next);
+    }
+  }
+
   async function detectPlayedTrack() {
     if (!session || !eventId || !playedTitle.trim()) {
       return;
@@ -243,6 +328,9 @@ export function DashboardPage() {
       setTickerPromotions(latestEvent.tickerPromotions ?? []);
       setFireSaleActive(Boolean(latestEvent.fireSaleActive));
       setFireSaleMessage(latestEvent.fireSaleMessage ?? "");
+      if (latestEvent.nowPlayingAutoEnabled && latestEvent.nowPlayingSlots?.length) {
+        setNowPlayingSlots(latestEvent.nowPlayingSlots);
+      }
       if (result.matched) {
         if (fireSaleActive) {
           await saveTickerSettings(tickerPromotions, false, "");
@@ -270,7 +358,7 @@ export function DashboardPage() {
     void runAutoDetectPlayed();
     const interval = window.setInterval(() => {
       void runAutoDetectPlayed();
-    }, 30000);
+    }, 15000);
     return () => window.clearInterval(interval);
   }, [autoMatchingEnabled, session, eventId]);
 
@@ -403,7 +491,25 @@ export function DashboardPage() {
 
         <section className="mb-5 rounded-xl border border-slate-800 bg-slate-900 p-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Now Playing (Multi-DJ)</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold">Now Playing</h2>
+              <button
+                className={`rounded px-3 py-1 text-xs font-semibold ${
+                  nowPlayingAutoEnabled ? "bg-emerald-400 text-emerald-950" : "bg-slate-700 text-slate-100"
+                }`}
+                onClick={() => void toggleNowPlayingAuto()}
+              >
+                {nowPlayingAutoEnabled ? "Auto: ON" : "Auto: OFF"}
+              </button>
+              <button
+                className={`rounded px-3 py-1 text-xs font-semibold ${
+                  nowPlayingOnTicker ? "bg-violet-400 text-violet-950" : "bg-slate-700 text-slate-100"
+                }`}
+                onClick={() => void toggleNowPlayingOnTicker()}
+              >
+                {nowPlayingOnTicker ? "On Ticker: YES" : "On Ticker: NO"}
+              </button>
+            </div>
             <button
               className="rounded bg-slate-700 px-3 py-1 text-xs font-semibold text-slate-100"
               onClick={() => setShowNowPlaying((prev) => !prev)}
@@ -412,62 +518,83 @@ export function DashboardPage() {
             </button>
           </div>
           {showNowPlaying ? (
-            <>
-              <div className="mb-3 mt-3 flex items-center justify-end">
-                <button
-                  className="rounded bg-sky-400 px-3 py-1 text-xs font-semibold text-sky-950 disabled:opacity-60"
-                  disabled={savingNowPlaying}
-                  onClick={() => void saveNowPlayingSlots(nowPlayingSlots)}
-                >
-                  {savingNowPlaying ? "Saving..." : "Save All"}
-                </button>
+            nowPlayingAutoEnabled ? (
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                {nowPlayingSlots.filter((s) => s.active && s.songTitle).length ? (
+                  nowPlayingSlots
+                    .filter((s) => s.active && s.songTitle)
+                    .map((slot) => (
+                      <div key={slot.id} className="rounded-lg border border-emerald-500/30 bg-slate-950 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">{slot.djName}</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-100">{slot.songTitle}</p>
+                        {slot.artistName ? <p className="text-xs text-slate-400">{slot.artistName}</p> : null}
+                        <span className="mt-2 inline-block rounded bg-emerald-400/20 px-2 py-0.5 text-xs text-emerald-300">Live</span>
+                      </div>
+                    ))
+                ) : (
+                  <p className="col-span-3 text-sm text-slate-400">
+                    Auto is on — waiting for live sources to report tracks. Turn on Auto-Match below to start polling.
+                  </p>
+                )}
               </div>
-              <div className="grid gap-3 md:grid-cols-3">
-                {nowPlayingSlots.map((slot) => (
-                  <div key={slot.id} className="rounded-lg border border-slate-700 bg-slate-950 p-3">
-                    <input
-                      className="mb-2 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm font-semibold"
-                      value={slot.djName}
-                      onChange={(e) => updateSlotField(slot.id, { djName: e.target.value })}
-                      placeholder="DJ name"
-                    />
-                    <input
-                      className="mb-2 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
-                      value={slot.songTitle}
-                      onChange={(e) => updateSlotField(slot.id, { songTitle: e.target.value })}
-                      placeholder="Song title"
-                    />
-                    <input
-                      className="mb-2 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
-                      value={slot.artistName ?? ""}
-                      onChange={(e) => updateSlotField(slot.id, { artistName: e.target.value })}
-                      placeholder="Artist"
-                    />
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="rounded bg-emerald-400 px-2 py-1 text-xs font-semibold text-emerald-950"
-                        onClick={() => void markSlotActive(slot.id)}
-                      >
-                        Set Playing
-                      </button>
-                      <button
-                        className="rounded bg-slate-500 px-2 py-1 text-xs font-semibold text-slate-950"
-                        onClick={() => void clearSlot(slot.id)}
-                      >
-                        Clear
-                      </button>
-                      <span
-                        className={`ml-auto rounded px-2 py-0.5 text-xs ${
-                          slot.active ? "bg-emerald-400/20 text-emerald-300" : "bg-slate-700 text-slate-300"
-                        }`}
-                      >
-                        {slot.active ? "Live" : "Idle"}
-                      </span>
+            ) : (
+              <>
+                <div className="mb-3 mt-3 flex items-center justify-end">
+                  <button
+                    className="rounded bg-sky-400 px-3 py-1 text-xs font-semibold text-sky-950 disabled:opacity-60"
+                    disabled={savingNowPlaying}
+                    onClick={() => void saveNowPlayingSlots(nowPlayingSlots)}
+                  >
+                    {savingNowPlaying ? "Saving..." : "Save All"}
+                  </button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  {nowPlayingSlots.map((slot) => (
+                    <div key={slot.id} className="rounded-lg border border-slate-700 bg-slate-950 p-3">
+                      <input
+                        className="mb-2 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm font-semibold"
+                        value={slot.djName}
+                        onChange={(e) => updateSlotField(slot.id, { djName: e.target.value })}
+                        placeholder="DJ name"
+                      />
+                      <input
+                        className="mb-2 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
+                        value={slot.songTitle}
+                        onChange={(e) => updateSlotField(slot.id, { songTitle: e.target.value })}
+                        placeholder="Song title"
+                      />
+                      <input
+                        className="mb-2 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm"
+                        value={slot.artistName ?? ""}
+                        onChange={(e) => updateSlotField(slot.id, { artistName: e.target.value })}
+                        placeholder="Artist"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="rounded bg-emerald-400 px-2 py-1 text-xs font-semibold text-emerald-950"
+                          onClick={() => void markSlotActive(slot.id)}
+                        >
+                          Set Playing
+                        </button>
+                        <button
+                          className="rounded bg-slate-500 px-2 py-1 text-xs font-semibold text-slate-950"
+                          onClick={() => void clearSlot(slot.id)}
+                        >
+                          Clear
+                        </button>
+                        <span
+                          className={`ml-auto rounded px-2 py-0.5 text-xs ${
+                            slot.active ? "bg-emerald-400/20 text-emerald-300" : "bg-slate-700 text-slate-300"
+                          }`}
+                        >
+                          {slot.active ? "Live" : "Idle"}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </>
+                  ))}
+                </div>
+              </>
+            )
           ) : null}
         </section>
 
@@ -629,7 +756,7 @@ export function DashboardPage() {
                 }`}
                 onClick={() => setAutoMatchingEnabled((prev) => !prev)}
               >
-                {autoMatchingEnabled ? "Auto-Match: ON (30s)" : "Auto-Match: OFF"}
+                {autoMatchingEnabled ? "Auto-Match: ON (15s)" : "Auto-Match: OFF"}
               </button>
               {autoMatchingMessage ? <p className="text-sm text-slate-300">{autoMatchingMessage}</p> : null}
             </div>
@@ -695,6 +822,7 @@ export function DashboardPage() {
             <div key={request.requestId} className="space-y-2">
               <RequestCard
                 request={request}
+                libraryMatch={findLibraryMatch(request.songTitle, request.artistName)}
                 onApprove={tab === "pending" ? (id) => void updateStatus(id, "approved") : undefined}
                 onVeto={tab === "pending" ? (id) => void updateStatus(id, "vetoed") : undefined}
                 onPlayed={tab === "approved" ? (id) => void updateStatus(id, "played") : undefined}

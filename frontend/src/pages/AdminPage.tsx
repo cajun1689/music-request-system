@@ -53,6 +53,9 @@ export function AdminPage() {
   const [seratoLiveUrlEdit, setSeratoLiveUrlEdit] = useState<string>("");
   const [seratoLiveUrl2Edit, setSeratoLiveUrl2Edit] = useState<string>("");
   const [rekordboxLiveUrlEdit, setRekordboxLiveUrlEdit] = useState<string>("");
+  const [seratoDjName, setSeratoDjName] = useState<string>("");
+  const [serato2DjName, setSerato2DjName] = useState<string>("");
+  const [rekordboxDjName, setRekordboxDjName] = useState<string>("");
 
   const requestUrl = useMemo(() => {
     if (!eventData) {
@@ -84,6 +87,9 @@ export function AdminPage() {
     setSeratoLiveUrlEdit(sources.find((source) => source.id === "serato-a")?.url ?? "");
     setSeratoLiveUrl2Edit(sources.find((source) => source.id === "serato-b")?.url ?? "");
     setRekordboxLiveUrlEdit(sources.find((source) => source.id === "rekordbox")?.url ?? "");
+    setSeratoDjName(sources.find((source) => source.id === "serato-a")?.djName ?? "");
+    setSerato2DjName(sources.find((source) => source.id === "serato-b")?.djName ?? "");
+    setRekordboxDjName(sources.find((source) => source.id === "rekordbox")?.djName ?? "");
   }, [eventData]);
 
   async function onCreate(event: FormEvent) {
@@ -307,16 +313,16 @@ export function AdminPage() {
         {
           seratoLiveUrl: seratoLiveUrlEdit || undefined,
           livePlaylistSources: [
-            { id: "serato-a", name: "Serato A", type: "serato", url: seratoLiveUrlEdit, active: Boolean(seratoLiveUrlEdit) },
-            { id: "serato-b", name: "Serato B", type: "serato", url: seratoLiveUrl2Edit, active: Boolean(seratoLiveUrl2Edit) },
-            { id: "rekordbox", name: "Rekordbox", type: "rekordbox", url: rekordboxLiveUrlEdit, active: Boolean(rekordboxLiveUrlEdit) },
+            { id: "serato-a", name: "Serato A", djName: seratoDjName || undefined, type: "serato", url: seratoLiveUrlEdit, active: Boolean(seratoLiveUrlEdit) },
+            { id: "serato-b", name: "Serato B", djName: serato2DjName || undefined, type: "serato", url: seratoLiveUrl2Edit, active: Boolean(seratoLiveUrl2Edit) },
+            { id: "rekordbox", name: "Rekordbox", djName: rekordboxDjName || undefined, type: "rekordbox", url: rekordboxLiveUrlEdit, active: Boolean(rekordboxLiveUrlEdit || rekordboxDjName) },
           ],
           rekordboxLiveUrl: rekordboxLiveUrlEdit || undefined,
         },
         session.idToken,
       );
       setEventData(updated);
-      setMessage("Live playlist links updated.");
+      setMessage("Live playlist links & DJ names updated.");
     } catch (err) {
       setMessage(`Failed to update live links: ${(err as Error).message}`);
     } finally {
@@ -341,9 +347,9 @@ export function AdminPage() {
           seratoLiveUrl: seratoLiveUrlEdit || undefined,
           rekordboxLiveUrl: rekordboxLiveUrlEdit || undefined,
           livePlaylistSources: [
-            { id: "serato-a", name: "Serato A", type: "serato", url: seratoLiveUrlEdit, active: Boolean(seratoLiveUrlEdit) },
-            { id: "serato-b", name: "Serato B", type: "serato", url: seratoLiveUrl2Edit, active: Boolean(seratoLiveUrl2Edit) },
-            { id: "rekordbox", name: "Rekordbox", type: "rekordbox", url: rekordboxLiveUrlEdit, active: Boolean(rekordboxLiveUrlEdit) },
+            { id: "serato-a", name: "Serato A", djName: seratoDjName || undefined, type: "serato", url: seratoLiveUrlEdit, active: Boolean(seratoLiveUrlEdit) },
+            { id: "serato-b", name: "Serato B", djName: serato2DjName || undefined, type: "serato", url: seratoLiveUrl2Edit, active: Boolean(seratoLiveUrl2Edit) },
+            { id: "rekordbox", name: "Rekordbox", djName: rekordboxDjName || undefined, type: "rekordbox", url: rekordboxLiveUrlEdit, active: Boolean(rekordboxLiveUrlEdit || rekordboxDjName) },
           ],
           venmoHandle: eventDetails.venmoHandle.replace("@", "").trim(),
           primaryColor: eventDetails.primaryColor,
@@ -681,33 +687,67 @@ export function AdminPage() {
                 Save Event Details
               </button>
             </div>
-            <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
-              <h3 className="text-sm font-semibold">Update Live Playlist Links (post-creation)</h3>
-              <input
-                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-                placeholder="Serato Live URL"
-                value={seratoLiveUrlEdit}
-                onChange={(e) => setSeratoLiveUrlEdit(e.target.value)}
-              />
-              <input
-                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-                placeholder="Rekordbox playlist URL"
-                value={rekordboxLiveUrlEdit}
-                onChange={(e) => setRekordboxLiveUrlEdit(e.target.value)}
-              />
-              <input
-                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-                placeholder="Serato Live URL #2"
-                value={seratoLiveUrl2Edit}
-                onChange={(e) => setSeratoLiveUrl2Edit(e.target.value)}
-              />
+            <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
+              <h3 className="text-sm font-semibold">DJ Sources & Live Links</h3>
+              <p className="text-xs text-slate-400">Name each source so you know which DJ/machine auto-matched a request.</p>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-400">Serato A</label>
+                <div className="flex gap-2">
+                  <input
+                    className="w-1/3 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                    placeholder="DJ name (e.g. Slim Timmy)"
+                    value={seratoDjName}
+                    onChange={(e) => setSeratoDjName(e.target.value)}
+                  />
+                  <input
+                    className="flex-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                    placeholder="Serato Live URL"
+                    value={seratoLiveUrlEdit}
+                    onChange={(e) => setSeratoLiveUrlEdit(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-400">Serato B</label>
+                <div className="flex gap-2">
+                  <input
+                    className="w-1/3 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                    placeholder="DJ name (e.g. Turner02)"
+                    value={serato2DjName}
+                    onChange={(e) => setSerato2DjName(e.target.value)}
+                  />
+                  <input
+                    className="flex-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                    placeholder="Serato Live URL #2"
+                    value={seratoLiveUrl2Edit}
+                    onChange={(e) => setSeratoLiveUrl2Edit(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-400">Rekordbox (Bridge App)</label>
+                <div className="flex gap-2">
+                  <input
+                    className="w-1/3 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                    placeholder="DJ name"
+                    value={rekordboxDjName}
+                    onChange={(e) => setRekordboxDjName(e.target.value)}
+                  />
+                  <input
+                    className="flex-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                    placeholder="Rekordbox playlist URL (leave blank for Bridge)"
+                    value={rekordboxLiveUrlEdit}
+                    onChange={(e) => setRekordboxLiveUrlEdit(e.target.value)}
+                  />
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => void onSaveLivePlaylistLinks()}
                 disabled={saving}
                 className="rounded-md bg-sky-400 px-3 py-1.5 text-sm font-semibold text-sky-950 disabled:opacity-60"
               >
-                Save Live Links
+                Save Sources & Links
               </button>
             </div>
             <button

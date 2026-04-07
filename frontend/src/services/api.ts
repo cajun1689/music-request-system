@@ -296,4 +296,20 @@ export const api = {
       token,
     );
   },
+
+  getLibrary(eventId: string) {
+    return request<{
+      eventId: string;
+      sourceId: string;
+      syncedAt: string;
+      trackCount: number;
+      tracks: Array<{
+        title: string;
+        artist: string;
+        titleNorm: string;
+        artistNorm: string;
+        playCount: number;
+      }>;
+    }>(`/events/${eventId}/library`);
+  },
 };

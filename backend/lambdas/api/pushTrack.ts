@@ -1,11 +1,13 @@
 import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import type { EventRecord, RequestRecord } from "../shared/types";
+import { cleanTrackName } from "../shared/cleanTrackName";
+import type { EventRecord, NowPlayingSlot, RequestRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
 
 interface PushTrackInput {
   title: string;
   artist?: string;
+  sourceId?: string;
 }
 
 const REMIX_WORDS = ["remix", "mix", "edit", "version", "vip", "bootleg", "rework"];
@@ -75,7 +77,7 @@ function scoreMatch(request: RequestRecord, playedTitle: string, playedArtist?: 
   return score;
 }
 
-const PUSH_SOURCE_ID = "rekordbox-push";
+const DEFAULT_PUSH_SOURCE_ID = "rekordbox-push";
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
@@ -97,6 +99,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   if (!eventRecord.pushToken || eventRecord.pushToken !== pushToken) {
     return json(403, { error: "Invalid push token" });
   }
+
+  const PUSH_SOURCE_ID = input.sourceId?.trim() || DEFAULT_PUSH_SOURCE_ID;
+
+  const matchingSource = (eventRecord.livePlaylistSources ?? []).find(
+    (s) => s.id === PUSH_SOURCE_ID || s.id === "rekordbox",
+  );
+  const sourceDjName = matchingSource?.djName || matchingSource?.name || PUSH_SOURCE_ID;
 
   const trackNorm = normalize(`${input.artist ?? ""} ${input.title}`);
   const lastMatched = eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.lastMatchedTrackNorm;
@@ -159,6 +168,35 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // Non-fatal
   }
 
+  if (eventRecord.nowPlayingAutoEnabled) {
+    try {
+      const djBrand = eventRecord.djBrandName || "DJ";
+      const rawDisplay = [input.title, input.artist].filter(Boolean).join(" - ");
+      const cleaned = await cleanTrackName(rawDisplay, djBrand);
+      const existingSlots: NowPlayingSlot[] = eventRecord.nowPlayingSlots ?? [];
+      const slotId = `src-${PUSH_SOURCE_ID}`;
+      const updatedSlots = existingSlots.filter((s) => s.id !== slotId);
+      updatedSlots.push({
+        id: slotId,
+        djName: sourceDjName,
+        songTitle: cleaned,
+        active: true,
+        updatedAt: now,
+      });
+      await docClient.send(
+        new UpdateCommand({
+          TableName: env.eventsTableName,
+          Key: { eventId },
+          UpdateExpression: "SET #nps = :slots, updatedAt = :now",
+          ExpressionAttributeNames: { "#nps": "nowPlayingSlots" },
+          ExpressionAttributeValues: { ":slots": updatedSlots, ":now": now },
+        }),
+      );
+    } catch {
+      // Non-fatal: now-playing update shouldn't break push flow
+    }
+  }
+
   if (!candidates.length) {
     return json(200, {
       matched: false,
@@ -215,7 +253,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       ExpressionAttributeValues: {
         ":status": "played",
         ":reviewedAt": now,
-        ":reviewedBy": `auto:${PUSH_SOURCE_ID}`,
+        ":reviewedBy": `auto:${PUSH_SOURCE_ID}:${sourceDjName}`,
         ":playedAt": now,
       },
       ReturnValues: "ALL_NEW",
@@ -225,6 +263,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   return json(200, {
     matched: true,
     sourceId: PUSH_SOURCE_ID,
+    sourceName: sourceDjName,
     confidenceScore: Number(best.score.toFixed(2)),
     pushedTrack: { title: input.title, artist: input.artist },
     request: updated.Attributes,

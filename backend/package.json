@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1026.0",
+    "@aws-sdk/client-ssm": "^3.1026.0",
+    "openai": "^6.33.0"
+  }
+}

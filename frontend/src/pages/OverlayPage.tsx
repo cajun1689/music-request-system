@@ -23,7 +23,7 @@ export function OverlayPage() {
     void loadEvent();
     const interval = window.setInterval(() => {
       void loadEvent();
-    }, 10000);
+    }, 5000);
     return () => window.clearInterval(interval);
   }, [eventId]);
 
@@ -43,12 +43,23 @@ export function OverlayPage() {
   const requestItems = grouped.approved.map(
     (req) => `${toDisplayTitleCase(req.songTitle)} - ${toDisplayTitleCase(req.artistName)}`,
   );
+
+  const nowPlayingItems: string[] = [];
+  if (eventData.nowPlayingOnTicker && eventData.nowPlayingSlots?.length) {
+    for (const slot of eventData.nowPlayingSlots) {
+      if (slot.active && slot.songTitle) {
+        nowPlayingItems.push(`NOW PLAYING: ${slot.djName} - ${slot.songTitle}`);
+      }
+    }
+  }
+
   const tickerItems =
     eventData.fireSaleActive && eventData.fireSaleMessage
       ? [eventData.fireSaleMessage]
-      : requestItems.length
-        ? ["COMING UP", ...promoItems, ...requestItems]
-        : promoItems;
+      : [
+          ...nowPlayingItems,
+          ...(requestItems.length ? ["COMING UP", ...promoItems, ...requestItems] : promoItems),
+        ];
 
   return <ScrollingTicker items={tickerItems} accentColor={eventData.accentColor} />;
 }

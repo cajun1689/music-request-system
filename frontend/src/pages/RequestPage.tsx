@@ -123,7 +123,7 @@ export function RequestPage() {
     void loadEvent();
     const interval = window.setInterval(() => {
       void loadEvent();
-    }, 10000);
+    }, 5000);
     return () => window.clearInterval(interval);
   }, [eventId]);
 

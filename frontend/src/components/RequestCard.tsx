@@ -1,8 +1,18 @@
 import type { RequestRecord } from "../types";
 import { toDisplayTitleCase } from "../utils/formatting";
 
+export interface LibraryMatchInfo {
+  found: boolean;
+  bestTrack?: {
+    title: string;
+    artist: string;
+    playCount: number;
+  };
+}
+
 export function RequestCard({
   request,
+  libraryMatch,
   onApprove,
   onVeto,
   onPlayed,
@@ -10,12 +20,18 @@ export function RequestCard({
   onRejectTip,
 }: {
   request: RequestRecord;
+  libraryMatch?: LibraryMatchInfo;
   onApprove?: (id: string) => void;
   onVeto?: (id: string) => void;
   onPlayed?: (id: string) => void;
   onVerifyTip?: (id: string) => void;
   onRejectTip?: (id: string) => void;
 }) {
+  const isAutoMatched = request.reviewedBy?.startsWith("auto:");
+  const autoSourceLabel = isAutoMatched
+    ? request.reviewedBy!.split(":").slice(2).join(":") || request.reviewedBy!.split(":")[1] || "Auto"
+    : null;
+
   const paymentStatus = request.paymentStatus ?? "unpaid";
   const paymentClass =
     paymentStatus === "verified"
@@ -25,6 +41,9 @@ export function RequestCard({
         : paymentStatus === "rejected"
           ? "bg-rose-400/20 text-rose-300 border-rose-300/40"
           : "bg-slate-500/20 text-slate-300 border-slate-300/40";
+
+  const inLibrary = libraryMatch?.found;
+  const bestTrack = libraryMatch?.bestTrack;
 
   return (
     <article className="rounded-xl border border-white/20 bg-slate-900/70 p-4">
@@ -40,7 +59,31 @@ export function RequestCard({
             Tip ${request.tipAmount.toFixed(2)}
           </span>
         ) : null}
+        {inLibrary === true ? (
+          <span className="rounded-full bg-blue-400/20 border border-blue-400/40 px-2 py-0.5 text-xs font-semibold text-blue-300">
+            ✓ In Library
+          </span>
+        ) : inLibrary === false ? (
+          <span className="rounded-full bg-orange-400/20 border border-orange-400/40 px-2 py-0.5 text-xs font-semibold text-orange-300">
+            Not in Library
+          </span>
+        ) : null}
       </div>
+      {bestTrack ? (
+        <div className="mt-2 rounded-lg bg-blue-950/40 border border-blue-400/20 px-3 py-2">
+          <p className="text-xs font-semibold text-blue-300">
+            Best match: {bestTrack.title} — {bestTrack.artist}
+          </p>
+          <p className="text-xs text-blue-400/70 mt-0.5">
+            {bestTrack.playCount > 0 ? `Played ${bestTrack.playCount} time${bestTrack.playCount !== 1 ? "s" : ""}` : "Never played"}
+          </p>
+        </div>
+      ) : null}
+      {autoSourceLabel ? (
+        <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-violet-400/20 border border-violet-400/40 px-2 py-0.5 text-xs font-semibold text-violet-300">
+          Matched by {autoSourceLabel}
+        </span>
+      ) : null}
       <p className="mt-1 text-sm text-slate-300">
         Requested by {request.requesterName?.trim() ? request.requesterName : "Guest"}
       </p>

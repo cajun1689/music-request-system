@@ -18,6 +18,7 @@ import {
   aws_lambda_nodejs as lambdaNodejs,
   aws_s3 as s3,
   aws_s3_deployment as s3deploy,
+  aws_ssm as ssm,
 } from "aws-cdk-lib";
 import { Construct } from "constructs";
 
@@ -245,6 +246,26 @@ export class InfrastructureStack extends Stack {
       "PushTrackFn",
       "../../backend/lambdas/api/pushTrack.ts",
     );
+
+    const syncLibraryFn = makeLambda(
+      "SyncLibraryFn",
+      "../../backend/lambdas/api/syncLibrary.ts",
+    );
+    const getLibraryFn = makeLambda(
+      "GetLibraryFn",
+      "../../backend/lambdas/api/getLibrary.ts",
+    );
+
+    const openaiApiKeyParam = ssm.StringParameter.fromSecureStringParameterAttributes(
+      this,
+      "OpenAIApiKeyParam",
+      { parameterName: "/music-request/openai-api-key" },
+    );
+    openaiApiKeyParam.grantRead(autoDetectPlayedFn);
+    openaiApiKeyParam.grantRead(pushTrackFn);
+    autoDetectPlayedFn.addEnvironment("OPENAI_API_KEY_SSM_PARAM", "/music-request/openai-api-key");
+    pushTrackFn.addEnvironment("OPENAI_API_KEY_SSM_PARAM", "/music-request/openai-api-key");
+
     const paypalWebhookFn = makeLambda(
       "PaypalWebhookFn",
       "../../backend/lambdas/api/paypalWebhook.ts",
@@ -288,6 +309,9 @@ export class InfrastructureStack extends Stack {
     connectionsTable.grantReadWriteData(wsSubscribeFn);
     connectionsTable.grantReadWriteData(requestStreamFn);
     brandAssetsBucket.grantPut(uploadBrandAssetFn);
+    brandAssetsBucket.grantPut(syncLibraryFn);
+    brandAssetsBucket.grantRead(getLibraryFn);
+    eventsTable.grantReadData(syncLibraryFn);
 
     requestStreamFn.addEventSource(
       new eventSources.DynamoEventSource(requestsTable, {
@@ -412,6 +436,7 @@ export class InfrastructureStack extends Stack {
     const detectPlayedResource = eventByIdResource.addResource("detect-played");
     const autoDetectPlayedResource = eventByIdResource.addResource("auto-detect-played");
     const pushTrackResource = eventByIdResource.addResource("push-track");
+    const libraryResource = eventByIdResource.addResource("library");
     const genreVotesResource = eventByIdResource.addResource("genre-votes");
     const resetGenreVotesResource = genreVotesResource.addResource("reset");
     const paymentsResource = requestByIdResource.addResource("payments");
@@ -457,6 +482,8 @@ export class InfrastructureStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
     pushTrackResource.addMethod("POST", new apigateway.LambdaIntegration(pushTrackFn));
+    libraryResource.addMethod("POST", new apigateway.LambdaIntegration(syncLibraryFn));
+    libraryResource.addMethod("GET", new apigateway.LambdaIntegration(getLibraryFn));
     genreVotesResource.addMethod("POST", new apigateway.LambdaIntegration(submitGenreVoteFn));
     resetGenreVotesResource.addMethod("POST", new apigateway.LambdaIntegration(resetGenreVotesFn), {
       authorizer,

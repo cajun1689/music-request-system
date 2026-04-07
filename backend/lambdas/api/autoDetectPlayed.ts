@@ -1,6 +1,7 @@
 import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import type { EventRecord, LivePlaylistSource, RequestRecord } from "../shared/types";
+import { cleanTrackName } from "../shared/cleanTrackName";
+import type { EventRecord, LivePlaylistSource, NowPlayingSlot, RequestRecord } from "../shared/types";
 import { docClient, env, json } from "../shared/utils";
 
 const REMIX_WORDS = ["remix", "mix", "edit", "version", "vip", "bootleg", "rework"];
@@ -205,10 +206,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   }> = [];
 
   for (const source of sources) {
+    const displayName = source.djName || source.name;
     const fetched = await fetchPlaylist(source.url);
     sourceStatuses.push({
       sourceId: source.id,
-      sourceName: source.name,
+      sourceName: displayName,
       health: fetched.health,
       detail: fetched.detail,
       currentTrack: fetched.currentTrack || undefined,
@@ -232,13 +234,73 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       if (score > 0) {
         checks.push({
           sourceId: source.id,
-          sourceName: source.name,
+          sourceName: displayName,
           request,
           score,
           currentTrackNorm,
           currentTrack: fetched.currentTrack,
         });
       }
+    }
+  }
+
+  if (eventRecord.nowPlayingAutoEnabled) {
+    try {
+      const djBrand = eventRecord.djBrandName || "DJ";
+      const sourceMap: Record<string, string> = {};
+      for (const status of sourceStatuses) {
+        sourceMap[status.sourceId] = status.sourceName;
+      }
+
+      const existingSlots = eventRecord.nowPlayingSlots ?? [];
+      const slotUpdates: NowPlayingSlot[] = [];
+
+      for (const status of sourceStatuses) {
+        const existing = existingSlots.find((s) => s.id === `src-${status.sourceId}`);
+        if (status.currentTrack) {
+          const alreadyShowing = existing?.songTitle;
+          const rawChanged = !alreadyShowing || normalize(status.currentTrack) !== normalize(alreadyShowing);
+          const cleaned = rawChanged
+            ? await cleanTrackName(status.currentTrack, djBrand)
+            : existing?.songTitle ?? status.currentTrack;
+          slotUpdates.push({
+            id: `src-${status.sourceId}`,
+            djName: status.sourceName,
+            songTitle: cleaned,
+            active: true,
+            updatedAt: new Date().toISOString(),
+          });
+        } else if (existing) {
+          slotUpdates.push({ ...existing, active: status.health === "live" });
+        }
+      }
+
+      const rekordboxPush = eventRecord.autoMatchState?.["rekordbox-push"];
+      const rekordboxSource = (eventRecord.livePlaylistSources ?? []).find((s) => s.id === "rekordbox");
+      const rkbSlot = existingSlots.find((s) => s.id === "src-rekordbox-push");
+      if (rekordboxPush?.lastMatchedTrackNorm && !slotUpdates.some((s) => s.id === "src-rekordbox-push")) {
+        slotUpdates.push({
+          id: "src-rekordbox-push",
+          djName: rekordboxSource?.djName || rekordboxSource?.name || "Rekordbox",
+          songTitle: rkbSlot?.songTitle || rekordboxPush.lastMatchedTrackNorm,
+          active: Boolean(rekordboxPush.lastMatchedAt),
+          updatedAt: rekordboxPush.lastMatchedAt || new Date().toISOString(),
+        });
+      }
+
+      if (slotUpdates.length) {
+        await docClient.send(
+          new UpdateCommand({
+            TableName: env.eventsTableName,
+            Key: { eventId },
+            UpdateExpression: "SET #nps = :slots, updatedAt = :now",
+            ExpressionAttributeNames: { "#nps": "nowPlayingSlots" },
+            ExpressionAttributeValues: { ":slots": slotUpdates, ":now": new Date().toISOString() },
+          }),
+        );
+      }
+    } catch {
+      // Non-fatal: now-playing update failure shouldn't break auto-match
     }
   }
 
@@ -309,7 +371,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       ExpressionAttributeValues: {
         ":status": "played",
         ":reviewedAt": now,
-        ":reviewedBy": `auto:${best.sourceId}`,
+        ":reviewedBy": `auto:${best.sourceId}:${best.sourceName}`,
         ":playedAt": now,
       },
       ReturnValues: "ALL_NEW",

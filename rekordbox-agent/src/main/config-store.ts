@@ -7,6 +7,8 @@ interface ConfigSchema {
   pollingIntervalMs: number;
   sqlcipherKey: string;
   mode: "auto" | "manual";
+  softwareType: "rekordbox" | "serato" | "auto";
+  sourceId: string;
 }
 
 const store = new Store<ConfigSchema>({
@@ -17,6 +19,8 @@ const store = new Store<ConfigSchema>({
     pollingIntervalMs: 10_000,
     sqlcipherKey: "",
     mode: "auto",
+    softwareType: "auto",
+    sourceId: "",
   },
 });
 
@@ -28,6 +32,8 @@ export function getConfig(): ConfigSchema {
     pollingIntervalMs: store.get("pollingIntervalMs"),
     sqlcipherKey: store.get("sqlcipherKey"),
     mode: store.get("mode"),
+    softwareType: store.get("softwareType"),
+    sourceId: store.get("sourceId"),
   };
 }
 

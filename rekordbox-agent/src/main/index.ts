@@ -12,19 +12,33 @@ import log from "./logger";
 import { getConfig, setConfig } from "./config-store";
 import {
   readCurrentTrack,
+  readRekordboxLibrary,
   resolveDbPath,
   type TrackInfo,
 } from "./rekordbox-reader";
+import {
+  readCurrentSeratoTrack,
+  readSeratoLibrary,
+  resolveSeratoSessionDir,
+} from "./serato-reader";
 import {
   drainQueue,
   enqueueTrack,
   fetchEvents,
   pushTrack,
+  syncLibrary,
   queueSize,
   type PushResult,
 } from "./api-client";
+import {
+  initAutoUpdater,
+  checkForUpdates,
+  quitAndInstall,
+  getUpdateStatus,
+  onUpdateStatus,
+} from "./updater";
 
-log.info("Rekordbox Bridge starting", { version: app.getVersion() });
+log.info("DJ Bridge starting", { version: app.getVersion() });
 
 let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -34,6 +48,8 @@ let lastTrackKey = "";
 interface StatusPayload {
   connected: boolean;
   mode: "auto" | "manual";
+  softwareType: "rekordbox" | "serato" | "auto";
+  activeSoftware: "rekordbox" | "serato" | null;
   dbPath: string | null;
   lastTrack: TrackInfo | null;
   lastResult: PushResult | null;
@@ -47,6 +63,8 @@ interface StatusPayload {
 let status: StatusPayload = {
   connected: false,
   mode: "auto",
+  softwareType: "auto",
+  activeSoftware: null,
   dbPath: null,
   lastTrack: null,
   lastResult: null,
@@ -79,7 +97,10 @@ function trayIconPath(): string {
 
 function updateTrayTooltip(): void {
   if (!tray) return;
-  const parts = ["Rekordbox Bridge"];
+  const parts = ["DJ Bridge"];
+  if (status.activeSoftware) {
+    parts[0] += ` (${status.activeSoftware})`;
+  }
   if (status.lastTrack) {
     parts.push(`${status.lastTrack.artist} – ${status.lastTrack.title}`);
   }
@@ -110,10 +131,14 @@ function updateTrayMenu(): void {
     { label: "Show Window", click: showWindow },
     { type: "separator" },
     {
+      label: `Software: ${status.activeSoftware ?? status.softwareType}`,
+      enabled: false,
+    },
+    {
       label: "Mode",
       submenu: [
         {
-          label: "Auto (poll Rekordbox)",
+          label: "Auto (poll DJ software)",
           type: "radio",
           checked: status.mode === "auto",
           click: () => switchMode("auto"),
@@ -134,7 +159,7 @@ function updateTrayMenu(): void {
     },
     { type: "separator" },
     {
-      label: "Quit Rekordbox Bridge",
+      label: "Quit DJ Bridge",
       click: () => {
         app.exit(0);
       },
@@ -162,9 +187,34 @@ function toggleLaunchAtLogin(): void {
   sendStatus();
 }
 
+function detectSoftware(): "rekordbox" | "serato" | null {
+  if (resolveDbPath()) return "rekordbox";
+  if (resolveSeratoSessionDir()) return "serato";
+  return null;
+}
+
+async function readTrackForSoftware(
+  sw: "rekordbox" | "serato",
+  config: ReturnType<typeof getConfig>,
+): Promise<TrackInfo | null> {
+  if (sw === "rekordbox") {
+    const dbPath = status.dbPath || resolveDbPath();
+    if (!dbPath) {
+      status.error = "Rekordbox database not found.";
+      status.connected = false;
+      return null;
+    }
+    status.dbPath = dbPath;
+    return readCurrentTrack(dbPath, config.sqlcipherKey || undefined);
+  }
+
+  return readCurrentSeratoTrack();
+}
+
 async function pollOnce(): Promise<void> {
   const config = getConfig();
   if (config.mode !== "auto") return;
+  status.softwareType = config.softwareType;
 
   if (!config.eventId || !config.pushToken) {
     status.error = "Event ID and Push Token must be configured.";
@@ -172,21 +222,23 @@ async function pollOnce(): Promise<void> {
     return;
   }
 
-  try {
-    const dbPath = status.dbPath || resolveDbPath();
-    if (!dbPath) {
-      status.error =
-        "Rekordbox database not found. Check that Rekordbox is installed.";
+  let sw: "rekordbox" | "serato" | null = null;
+  if (config.softwareType === "auto") {
+    sw = detectSoftware();
+    if (!sw) {
+      status.error = "No DJ software detected (Rekordbox or Serato).";
+      status.activeSoftware = null;
       status.connected = false;
       sendStatus();
       return;
     }
-    status.dbPath = dbPath;
+  } else {
+    sw = config.softwareType;
+  }
+  status.activeSoftware = sw;
 
-    const track = await readCurrentTrack(
-      dbPath,
-      config.sqlcipherKey || undefined,
-    );
+  try {
+    const track = await readTrackForSoftware(sw, config);
     if (!track) {
       status.error = null;
       sendStatus();
@@ -206,7 +258,7 @@ async function pollOnce(): Promise<void> {
     lastTrackKey = key;
     status.lastTrack = track;
     status.error = null;
-    log.info("New track detected:", track.artist, "–", track.title);
+    log.info(`New track from ${sw}:`, track.artist, "–", track.title);
 
     try {
       const result = await pushTrack(track);
@@ -215,9 +267,7 @@ async function pollOnce(): Promise<void> {
       status.queueSize = queueSize();
 
       if (result.matched) {
-        log.info("Track matched request!", {
-          score: result.confidenceScore,
-        });
+        log.info("Track matched request!", { score: result.confidenceScore });
         showNotification(
           "Request Matched!",
           `"${track.title}" by ${track.artist} matched a request.`,
@@ -233,8 +283,8 @@ async function pollOnce(): Promise<void> {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    log.error("DB read error:", message);
-    status.error = `DB read error: ${message}`;
+    log.error("Read error:", message);
+    status.error = `Read error: ${message}`;
     status.connected = false;
   }
 
@@ -266,7 +316,7 @@ function createWindow(): void {
     minHeight: 500,
     show: false,
     resizable: true,
-    title: "Rekordbox Bridge",
+    title: "DJ Bridge",
     titleBarStyle: "hiddenInset",
     vibrancy: "sidebar",
     webPreferences: {
@@ -331,11 +381,17 @@ app.on("ready", () => {
 
   const config = getConfig();
   status.mode = config.mode;
+  status.softwareType = config.softwareType;
   if (config.mode === "auto") {
     startPolling();
   }
 
-  log.info("App ready. Mode:", config.mode);
+  log.info("App ready. Mode:", config.mode, "Software:", config.softwareType);
+
+  initAutoUpdater();
+  onUpdateStatus((us) => {
+    mainWindow?.webContents.send("update-status", us);
+  });
 });
 
 app.on("window-all-closed", () => {
@@ -411,6 +467,18 @@ ipcMain.handle("resolve-db-path", () => {
   return dbPath;
 });
 
+ipcMain.handle("resolve-serato-path", () => {
+  const sessDir = resolveSeratoSessionDir();
+  log.info("Resolved Serato session dir:", sessDir);
+  return sessDir;
+});
+
+ipcMain.handle("detect-software", () => {
+  const sw = detectSoftware();
+  log.info("Detected software:", sw);
+  return sw;
+});
+
 ipcMain.handle("poll-now", async () => {
   await pollOnce();
   return status;
@@ -436,4 +504,75 @@ ipcMain.handle("fetch-events", async () => {
 ipcMain.handle("open-logs", () => {
   const { shell } = require("electron");
   shell.openPath(app.getPath("logs"));
+});
+
+ipcMain.handle("sync-library", async () => {
+  const config = getConfig();
+  const scanBoth = config.softwareType === "auto";
+  const sw = scanBoth ? detectSoftware() : config.softwareType;
+
+  log.info("Library sync starting, software:", sw, "scanBoth:", scanBoth);
+
+  const allTracks: Array<{ title: string; artist: string; playCount: number }> = [];
+
+  if (sw === "rekordbox" || scanBoth) {
+    try {
+      const dbPath = resolveDbPath();
+      if (dbPath) {
+        const rbTracks = await readRekordboxLibrary(dbPath, config.sqlcipherKey || undefined);
+        log.info("Rekordbox library:", rbTracks.length, "tracks");
+        allTracks.push(...rbTracks);
+      }
+    } catch (err) {
+      log.error("Rekordbox library scan error:", err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  if (sw === "serato" || scanBoth) {
+    try {
+      const seratoTracks = await readSeratoLibrary();
+      log.info("Serato library:", seratoTracks.length, "tracks");
+      allTracks.push(...seratoTracks);
+    } catch (err) {
+      log.error("Serato library scan error:", err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  if (allTracks.length === 0) {
+    return { error: "No tracks found in any DJ library." };
+  }
+
+  // Deduplicate by normalized title+artist, keeping highest play count
+  const bestByKey = new Map<string, typeof allTracks[0]>();
+  for (const t of allTracks) {
+    const key = `${t.title.toLowerCase().trim()}::${t.artist.toLowerCase().trim()}`;
+    const existing = bestByKey.get(key);
+    if (!existing || t.playCount > existing.playCount) {
+      bestByKey.set(key, t);
+    }
+  }
+  const unique = [...bestByKey.values()];
+
+  log.info("Syncing", unique.length, "unique tracks (from", allTracks.length, "total)");
+
+  try {
+    const result = await syncLibrary(unique);
+    log.info("Library sync complete:", result);
+    showNotification("Library Synced", `${result.trackCount} tracks uploaded.`);
+    return result;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error("Library sync failed:", message);
+    return { error: message };
+  }
+});
+
+ipcMain.handle("get-update-status", () => getUpdateStatus());
+
+ipcMain.handle("check-for-updates", () => {
+  checkForUpdates();
+});
+
+ipcMain.handle("quit-and-install", () => {
+  quitAndInstall();
 });

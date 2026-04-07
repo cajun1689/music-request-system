@@ -79,6 +79,48 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export interface LibraryTrack {
+  title: string;
+  artist: string;
+  playCount: number;
+}
+
+const LIBRARY_QUERY = `
+  SELECT
+    c.Title       AS title,
+    a.Name        AS artist,
+    COUNT(h.ID)   AS playCount
+  FROM djmdContent c
+  LEFT JOIN djmdArtist a ON a.ID = c.ArtistID
+  LEFT JOIN djmdSongHistory h ON h.ContentID = c.ID
+  WHERE c.Title IS NOT NULL AND c.Title != ''
+  GROUP BY c.ID
+  ORDER BY playCount DESC
+`;
+
+export async function readRekordboxLibrary(dbPath: string, sqlcipherKey?: string): Promise<LibraryTrack[]> {
+  let db: Database.Database | null = null;
+  try {
+    db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    db.pragma("journal_mode = WAL");
+    if (sqlcipherKey) {
+      db.pragma(`key = '${sqlcipherKey.replace(/'/g, "''")}'`);
+    }
+    const rows = db.prepare(LIBRARY_QUERY).all() as Array<{
+      title: string;
+      artist: string | null;
+      playCount: number;
+    }>;
+    return rows.map((r) => ({
+      title: r.title ?? "",
+      artist: r.artist ?? "",
+      playCount: r.playCount ?? 0,
+    }));
+  } finally {
+    try { db?.close(); } catch { /* ignore */ }
+  }
+}
+
 export async function readCurrentTrack(dbPath: string, sqlcipherKey?: string): Promise<TrackInfo | null> {
   let lastError: unknown;
 
