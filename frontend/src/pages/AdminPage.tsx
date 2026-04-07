@@ -7,6 +7,7 @@ import { api } from "../services/api";
 import type { EventRecord, LivePlaylistSource } from "../types";
 
 const GASLIGHT_SLUG = "gaslight-residency";
+const BDL_SLUG = "bdl-residency";
 const defaultLiveSources = (seratoUrl = "", rekordboxUrl = ""): LivePlaylistSource[] => [
   { id: "serato-a", name: "Serato A", type: "serato", url: seratoUrl, active: Boolean(seratoUrl) },
   { id: "serato-b", name: "Serato B", type: "serato", url: "", active: false },
@@ -208,6 +209,61 @@ export function AdminPage() {
     }
   }
 
+  async function onLoadBdlResidency() {
+    if (!session) {
+      return;
+    }
+    setSaving(true);
+    setMessage("");
+    try {
+      const existing = await api.getEventBySlug(BDL_SLUG, session.idToken);
+      setEventData(existing);
+      localStorage.setItem("activeEventId", existing.eventId);
+      setMessage("Loaded BDL residency event.");
+    } catch {
+      const created = await api.createEvent(
+        {
+          eventId: "bdl-residency",
+          slug: BDL_SLUG,
+          isRecurring: true,
+          name: "BDL Residency",
+          date: new Date().toISOString().slice(0, 10),
+          venueName: "BDL",
+          djBrandName: form.djBrandName || "Slim Timmy & Friends",
+          seratoLiveUrl: form.seratoLiveUrl,
+          rekordboxLiveUrl: form.rekordboxLiveUrl,
+          livePlaylistSources: [
+            {
+              id: "serato-a",
+              name: "Serato A",
+              type: "serato",
+              url: form.seratoLiveUrl || "",
+              active: Boolean(form.seratoLiveUrl),
+            },
+            { id: "serato-b", name: "Serato B", type: "serato", url: form.seratoLiveUrl2, active: Boolean(form.seratoLiveUrl2) },
+            {
+              id: "rekordbox",
+              name: "Rekordbox",
+              type: "rekordbox",
+              url: form.rekordboxLiveUrl,
+              active: Boolean(form.rekordboxLiveUrl),
+            },
+          ],
+          venmoHandle: form.venmoHandle,
+          primaryColor: form.primaryColor,
+          secondaryColor: form.secondaryColor,
+          accentColor: form.accentColor,
+        },
+        session.idToken,
+      );
+      setEventData(created);
+      localStorage.setItem("activeEventId", created.eventId);
+      setMessage("Created BDL residency event. Reuse this QR every week.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function onResetWeeklyQueue() {
     if (!session || !eventData) {
       return;
@@ -353,6 +409,14 @@ export function AdminPage() {
             className="rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-950 disabled:opacity-70"
           >
             Use Gaslight Residency (sticky weekly event)
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void onLoadBdlResidency()}
+            className="rounded-lg bg-sky-400 px-4 py-2 text-sm font-semibold text-sky-950 disabled:opacity-70"
+          >
+            Use BDL Residency (sticky weekly event)
           </button>
           <input
             className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
