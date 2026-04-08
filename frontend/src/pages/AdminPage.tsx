@@ -798,57 +798,42 @@ export function AdminPage() {
             <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
               <h3 className="text-sm font-semibold">DJ Sources & Live Links</h3>
               <p className="text-xs text-slate-400">Name each source so you know which DJ/machine auto-matched a request.</p>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400">Serato A</label>
-                <div className="flex gap-2">
-                  <input
-                    className="w-1/3 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-                    placeholder="DJ name (e.g. Slim Timmy)"
-                    value={seratoDjName}
-                    onChange={(e) => setSeratoDjName(e.target.value)}
-                  />
-                  <input
-                    className="flex-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-                    placeholder="Serato Live URL"
-                    value={seratoLiveUrlEdit}
-                    onChange={(e) => setSeratoLiveUrlEdit(e.target.value)}
-                  />
+              {[
+                { label: "Serato A", sourceId: "serato-a", nameSt: seratoDjName, setName: setSeratoDjName, urlSt: seratoLiveUrlEdit, setUrl: setSeratoLiveUrlEdit, namePh: "DJ name (e.g. Slim Timmy)", urlPh: "Serato Live URL" },
+                { label: "Serato B", sourceId: "serato-b", nameSt: serato2DjName, setName: setSerato2DjName, urlSt: seratoLiveUrl2Edit, setUrl: setSeratoLiveUrl2Edit, namePh: "DJ name (e.g. Turner02)", urlPh: "Serato Live URL #2" },
+                { label: "DJ Bridge (Rekordbox / Serato)", sourceId: "rekordbox", nameSt: rekordboxDjName, setName: setRekordboxDjName, urlSt: rekordboxLiveUrlEdit, setUrl: setRekordboxLiveUrlEdit, namePh: "DJ name", urlPh: "Playlist URL (leave blank for Bridge)" },
+              ].map((src) => (
+                <div key={src.sourceId} className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-slate-400">{src.label}</label>
+                    <button
+                      type="button"
+                      className="rounded bg-slate-700/60 px-1.5 py-0.5 font-mono text-[10px] text-slate-400 hover:bg-slate-600/60 hover:text-slate-200"
+                      title="Click to copy Source ID"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(src.sourceId);
+                        setMessage(`Copied source ID "${src.sourceId}" to clipboard.`);
+                      }}
+                    >
+                      id: {src.sourceId}
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      className="w-1/3 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                      placeholder={src.namePh}
+                      value={src.nameSt}
+                      onChange={(e) => src.setName(e.target.value)}
+                    />
+                    <input
+                      className="flex-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                      placeholder={src.urlPh}
+                      value={src.urlSt}
+                      onChange={(e) => src.setUrl(e.target.value)}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400">Serato B</label>
-                <div className="flex gap-2">
-                  <input
-                    className="w-1/3 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-                    placeholder="DJ name (e.g. Turner02)"
-                    value={serato2DjName}
-                    onChange={(e) => setSerato2DjName(e.target.value)}
-                  />
-                  <input
-                    className="flex-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-                    placeholder="Serato Live URL #2"
-                    value={seratoLiveUrl2Edit}
-                    onChange={(e) => setSeratoLiveUrl2Edit(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400">DJ Bridge (Rekordbox / Serato)</label>
-                <div className="flex gap-2">
-                  <input
-                    className="w-1/3 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-                    placeholder="DJ name"
-                    value={rekordboxDjName}
-                    onChange={(e) => setRekordboxDjName(e.target.value)}
-                  />
-                  <input
-                    className="flex-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-                    placeholder="Rekordbox playlist URL (leave blank for Bridge)"
-                    value={rekordboxLiveUrlEdit}
-                    onChange={(e) => setRekordboxLiveUrlEdit(e.target.value)}
-                  />
-                </div>
-              </div>
+              ))}
               <button
                 type="button"
                 onClick={() => void onSaveLivePlaylistLinks()}
