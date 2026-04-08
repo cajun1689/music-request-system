@@ -8,7 +8,7 @@ import {
   Notification,
 } from "electron";
 import * as path from "path";
-import log from "./logger";
+import log, { setLogWindow } from "./logger";
 import { getConfig, setConfig } from "./config-store";
 import {
   readCurrentTrack,
@@ -328,6 +328,8 @@ function createWindow(): void {
       sandbox: false,
     },
   });
+
+  setLogWindow(mainWindow);
 
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
 

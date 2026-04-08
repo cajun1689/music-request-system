@@ -31,4 +31,10 @@ contextBridge.exposeInMainWorld("bridge", {
     ipcRenderer.on("update-status", handler);
     return () => ipcRenderer.removeListener("update-status", handler);
   },
+  onMainLog: (callback: (entry: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: unknown) =>
+      callback(data);
+    ipcRenderer.on("main-log", handler);
+    return () => ipcRenderer.removeListener("main-log", handler);
+  },
 });

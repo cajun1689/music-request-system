@@ -504,9 +504,14 @@
     <div class="card">
       <div class="card-header">
         <span class="card-title">Activity Log</span>
-        <span style="font-size:10px; color:var(--text-muted);" id="log-count"></span>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <span style="font-size:10px; color:var(--text-muted);" id="log-count"></span>
+          <button class="btn secondary" id="btn-copy-log" style="margin:0; padding:3px 8px; font-size:10px;">Copy</button>
+          <button class="btn secondary" id="btn-clear-log" style="margin:0; padding:3px 8px; font-size:10px;">Clear</button>
+          <button class="btn secondary" id="btn-open-logs" style="margin:0; padding:3px 8px; font-size:10px;">Open File</button>
+        </div>
       </div>
-      <div id="activity-log" style="max-height:120px; overflow-y:auto; font-size:11px; font-family:monospace; background:var(--input-bg); border-radius:6px; padding:8px; color:var(--text-dim);">
+      <div id="activity-log" style="max-height:200px; overflow-y:auto; font-size:11px; font-family:'SF Mono',Menlo,monospace; background:var(--input-bg); border-radius:6px; padding:8px; color:var(--text-dim); line-height:1.6;">
         <div style="color:var(--text-muted);">Initializing…</div>
       </div>
     </div>
@@ -935,7 +940,41 @@
       });
     }
 
+    el("btn-copy-log").addEventListener("click", () => {
+      const logEl = el("activity-log");
+      const text = Array.from(logEl.children).map(c => c.textContent).join("\n");
+      navigator.clipboard.writeText(text).then(() => {
+        showToast("Log copied to clipboard", "success");
+      }).catch(() => {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        showToast("Log copied to clipboard", "success");
+      });
+    });
+
+    el("btn-clear-log").addEventListener("click", () => {
+      el("activity-log").innerHTML = "";
+      logEntries = 0;
+      el("log-count").textContent = "";
+      logActivity("Log cleared", "info");
+    });
+
+    el("btn-open-logs").addEventListener("click", async () => {
+      if (bridge) await bridge.openLogs();
+    });
+
     if (bridge) {
+      bridge.onMainLog((entry) => {
+        const levelColors = { error: "error", warn: "warn", info: "info", verbose: "info", debug: "info", silly: "info" };
+        const type = levelColors[entry.level] || "info";
+        const prefix = entry.level === "error" ? "ERR " : entry.level === "warn" ? "WARN " : "";
+        logActivity(prefix + entry.text, type);
+      });
+
       logActivity("Bridge connected ✓", "success");
       bridge.getAppVersion().then((v) => {
         const ver = "v" + v;
