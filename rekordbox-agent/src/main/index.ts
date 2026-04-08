@@ -323,10 +323,19 @@ function createWindow(): void {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false,
     },
   });
 
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    log.info("Renderer loaded successfully");
+  });
+
+  mainWindow.webContents.on("did-fail-load", (_e, code, desc) => {
+    log.error("Renderer failed to load:", code, desc);
+  });
 
   mainWindow.on("close", (e) => {
     e.preventDefault();
