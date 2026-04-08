@@ -1,4 +1,6 @@
+import { net } from "electron";
 import { getApiBaseUrl, getConfig } from "./config-store";
+import log from "./logger";
 import type { LibraryTrack, TrackInfo } from "./rekordbox-reader";
 
 export interface PushResult {
@@ -23,13 +25,28 @@ export interface EventSummary {
   djBrandName?: string;
 }
 
+async function electronFetch(
+  url: string,
+  options?: RequestInit,
+): Promise<Response> {
+  try {
+    return await net.fetch(url, options);
+  } catch (err) {
+    log.warn("net.fetch failed, falling back to global fetch:", String(err));
+    return await globalThis.fetch(url, options);
+  }
+}
+
 export async function fetchEvents(): Promise<EventSummary[]> {
   const baseUrl = getApiBaseUrl();
-  const response = await fetch(`${baseUrl}/events`);
+  const url = `${baseUrl}/events`;
+  log.info("Fetching events from:", url);
+  const response = await electronFetch(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch events (${response.status})`);
   }
   const data = (await response.json()) as { events: EventSummary[] };
+  log.info("Fetched", data.events?.length ?? 0, "events");
   return data.events ?? [];
 }
 
@@ -45,7 +62,7 @@ export async function pushTrack(track: TrackInfo): Promise<PushResult> {
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}/events/${encodeURIComponent(config.eventId)}/push-track`;
 
-  const response = await fetch(url, {
+  const response = await electronFetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -112,7 +129,7 @@ export async function syncLibrary(tracks: LibraryTrack[]): Promise<LibrarySyncRe
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}/events/${encodeURIComponent(config.eventId)}/library`;
 
-  const response = await fetch(url, {
+  const response = await electronFetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

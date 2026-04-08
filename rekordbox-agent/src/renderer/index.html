@@ -294,15 +294,17 @@
       bottom: 16px;
       left: 16px;
       right: 16px;
-      padding: 10px 14px;
+      padding: 12px 16px;
       border-radius: 8px;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
-      z-index: 100;
+      z-index: 9999;
       opacity: 0;
       transform: translateY(10px);
-      transition: opacity 0.2s, transform 0.2s;
+      transition: opacity 0.25s ease, transform 0.25s ease;
       pointer-events: none;
+      -webkit-app-region: no-drag;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     }
     .toast.visible {
       opacity: 1;
@@ -395,6 +397,8 @@
         </select>
         <button class="btn secondary" id="btn-refresh-events" style="margin:0; padding:5px 10px; font-size:11px; white-space:nowrap;">Refresh</button>
       </div>
+
+      <div id="events-status" style="display:none; font-size:11px; margin-top:4px; font-weight:500;"></div>
 
       <label>Push Token</label>
       <input type="password" id="cfg-push-token" placeholder="Paste from Admin panel" />
@@ -496,6 +500,17 @@
       </div>
     </div>
 
+    <!-- Activity Log Card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Activity Log</span>
+        <span style="font-size:10px; color:var(--text-muted);" id="log-count"></span>
+      </div>
+      <div id="activity-log" style="max-height:120px; overflow-y:auto; font-size:11px; font-family:monospace; background:var(--input-bg); border-radius:6px; padding:8px; color:var(--text-dim);">
+        <div style="color:var(--text-muted);">Initializing…</div>
+      </div>
+    </div>
+
     <div class="footer">
       <span id="version-label">v1.0.0</span> &middot;
       <a id="link-logs">Open Logs</a>
@@ -508,16 +523,35 @@
     const bridge = window.bridge;
     const el = (id) => document.getElementById(id);
 
+    // ── Activity Log ─────────────────────────────────────────
+    let logEntries = 0;
+    function logActivity(message, type = "info") {
+      const logEl = el("activity-log");
+      const entry = document.createElement("div");
+      entry.style.padding = "2px 0";
+      entry.style.borderBottom = "1px solid rgba(255,255,255,0.04)";
+      const time = new Date().toLocaleTimeString();
+      const colors = { info: "var(--text-dim)", success: "var(--green)", error: "#fca5a5", warn: "var(--yellow)" };
+      entry.style.color = colors[type] || colors.info;
+      entry.textContent = time + "  " + message;
+      if (logEntries === 0) logEl.innerHTML = "";
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+      logEntries++;
+      el("log-count").textContent = logEntries + " entries";
+    }
+
+    // ── Toast (longer duration, better visibility) ───────────
     let toastTimer = null;
-    function showToast(message, type = "info", duration = 3000) {
+    function showToast(message, type = "info", duration = 5000) {
       const t = el("toast");
       t.textContent = message;
       t.className = "toast " + type;
       clearTimeout(toastTimer);
-      requestAnimationFrame(() => {
-        t.classList.add("visible");
-        toastTimer = setTimeout(() => t.classList.remove("visible"), duration);
-      });
+      void t.offsetWidth;
+      t.classList.add("visible");
+      toastTimer = setTimeout(() => t.classList.remove("visible"), duration);
+      logActivity(message, type);
     }
 
     if (!bridge) {
@@ -527,6 +561,7 @@
         'The preload script failed to connect. This usually means the app was not packaged correctly.<br><br>' +
         'Try reinstalling from the latest release, or check the logs.' +
         '</div>' + content.innerHTML;
+      logActivity("Bridge preload FAILED — buttons will not work", "error");
     }
 
     function updateSqlcipherVisibility() {
@@ -560,7 +595,7 @@
         : (s.softwareType === "auto" ? "Auto-detect" : s.softwareType);
       el("software-label").textContent = swLabel;
 
-      el("db-label").textContent = s.dbPath || "Detecting…";
+      el("db-label").textContent = s.dbPath || "Not found";
       el("queue-label").textContent = s.queueSize + " pending";
 
       if (s.lastTrack) {
@@ -605,15 +640,20 @@
       }
     }
 
-    bridge.onStatusUpdate(updateUI);
+    if (bridge) bridge.onStatusUpdate(updateUI);
 
     let cachedEvents = [];
 
     async function loadEvents(savedEventId) {
       const select = el("cfg-event-id");
       const btn = el("btn-refresh-events");
+      const statusLine = el("events-status");
       btn.disabled = true;
       btn.textContent = "Loading…";
+      statusLine.textContent = "Fetching events…";
+      statusLine.style.color = "var(--text-dim)";
+      statusLine.style.display = "";
+      logActivity("Fetching events from API…");
       try {
         const events = await bridge.fetchEvents();
         cachedEvents = events;
@@ -636,13 +676,19 @@
           }
         }
         if (events.length > 0) {
+          statusLine.textContent = "✓ " + events.length + " events loaded";
+          statusLine.style.color = "var(--green)";
           showToast("Loaded " + events.length + " events", "success");
         } else {
-          showToast("No events found — check API URL", "error");
+          statusLine.textContent = "⚠ No events found — check API URL";
+          statusLine.style.color = "var(--yellow)";
+          showToast("No events found — check API URL", "error", 8000);
         }
       } catch (e) {
         console.error("Failed to load events:", e);
-        showToast("Failed to load events: " + (e.message || e), "error", 5000);
+        statusLine.textContent = "✗ Failed: " + (e.message || e);
+        statusLine.style.color = "#fca5a5";
+        showToast("Failed to load events: " + (e.message || e), "error", 8000);
       } finally {
         btn.disabled = false;
         btn.textContent = "Refresh";
@@ -650,26 +696,39 @@
     }
 
     async function loadConfig() {
-      const c = await bridge.getConfig();
-      el("cfg-api-url").value = c.apiBaseUrl || "";
-      el("cfg-push-token").value = c.pushToken || "";
-      el("cfg-sqlcipher-key").value = c.sqlcipherKey || "";
-      el("cfg-interval").value = c.pollingIntervalMs || 10000;
-      el("cfg-mode").value = c.mode || "auto";
-      el("cfg-software-type").value = c.softwareType || "auto";
-      el("cfg-source-id").value = c.sourceId || "";
-      updateSqlcipherVisibility();
-      await loadEvents(c.eventId || "");
+      logActivity("Loading configuration…");
+      try {
+        const c = await bridge.getConfig();
+        el("cfg-api-url").value = c.apiBaseUrl || "";
+        el("cfg-push-token").value = c.pushToken || "";
+        el("cfg-sqlcipher-key").value = c.sqlcipherKey || "";
+        el("cfg-interval").value = c.pollingIntervalMs || 10000;
+        el("cfg-mode").value = c.mode || "auto";
+        el("cfg-software-type").value = c.softwareType || "auto";
+        el("cfg-source-id").value = c.sourceId || "";
+        updateSqlcipherVisibility();
+        logActivity("Config loaded — API: " + (c.apiBaseUrl || "not set").substring(0, 40) + "…", "success");
+        await loadEvents(c.eventId || "");
+      } catch (err) {
+        logActivity("Failed to load config: " + (err.message || err), "error");
+      }
     }
 
     async function loadStatus() {
-      const s = await bridge.getStatus();
-      updateUI(s);
+      try {
+        const s = await bridge.getStatus();
+        updateUI(s);
+        logActivity("Status: " + (s.connected ? "Connected" : s.error ? "Error: " + s.error : "Idle"), s.connected ? "success" : s.error ? "warn" : "info");
+      } catch (err) {
+        logActivity("Failed to load status: " + (err.message || err), "error");
+      }
     }
 
     el("btn-save-config").addEventListener("click", async () => {
-      el("btn-save-config").disabled = true;
-      el("btn-save-config").textContent = "Saving…";
+      const btn = el("btn-save-config");
+      btn.disabled = true;
+      btn.textContent = "Saving…";
+      logActivity("Saving configuration…");
       try {
         await bridge.setConfig({
           apiBaseUrl: el("cfg-api-url").value.trim(),
@@ -681,12 +740,12 @@
           softwareType: el("cfg-software-type").value,
           sourceId: el("cfg-source-id").value.trim(),
         });
-        showToast("Configuration saved", "success");
+        showToast("Configuration saved ✓", "success");
       } catch (err) {
-        showToast("Save failed: " + (err.message || err), "error", 5000);
+        showToast("Save failed: " + (err.message || err), "error", 8000);
       } finally {
-        el("btn-save-config").disabled = false;
-        el("btn-save-config").textContent = "Save Configuration";
+        btn.disabled = false;
+        btn.textContent = "Save Configuration";
       }
     });
 
@@ -695,8 +754,10 @@
     });
 
     el("btn-find-db").addEventListener("click", async () => {
-      el("btn-find-db").disabled = true;
-      el("btn-find-db").textContent = "Detecting…";
+      const btn = el("btn-find-db");
+      btn.disabled = true;
+      btn.textContent = "Detecting…";
+      logActivity("Detecting DJ software…");
       try {
         const sw = await bridge.detectSoftware();
         if (sw === "rekordbox") {
@@ -709,36 +770,38 @@
           showToast("Found Serato", "success");
         } else {
           el("db-label").textContent = "No DJ software detected";
-          showToast("No DJ software detected — is Rekordbox or Serato open?", "error", 5000);
+          showToast("No DJ software detected — is Rekordbox or Serato open?", "error", 8000);
         }
         el("software-label").textContent = sw
           ? sw.charAt(0).toUpperCase() + sw.slice(1)
           : "Not detected";
       } catch (err) {
-        showToast("Detection failed: " + (err.message || err), "error", 5000);
+        showToast("Detection failed: " + (err.message || err), "error", 8000);
       } finally {
-        el("btn-find-db").disabled = false;
-        el("btn-find-db").textContent = "Detect Source";
+        btn.disabled = false;
+        btn.textContent = "Detect Source";
       }
     });
 
     el("btn-poll").addEventListener("click", async () => {
-      el("btn-poll").disabled = true;
-      el("btn-poll").textContent = "Polling…";
+      const btn = el("btn-poll");
+      btn.disabled = true;
+      btn.textContent = "Polling…";
+      logActivity("Manual poll…");
       try {
         const result = await bridge.pollNow();
         if (result && result.lastTrack) {
           showToast("Polled: " + result.lastTrack.artist + " – " + result.lastTrack.title, "success");
         } else if (result && result.error) {
-          showToast(result.error, "error", 5000);
+          showToast(result.error, "error", 8000);
         } else {
           showToast("Poll complete — no track playing", "info");
         }
       } catch (err) {
-        showToast("Poll failed: " + (err.message || err), "error", 5000);
+        showToast("Poll failed: " + (err.message || err), "error", 8000);
       } finally {
-        el("btn-poll").disabled = false;
-        el("btn-poll").textContent = "Poll Now";
+        btn.disabled = false;
+        btn.textContent = "Poll Now";
       }
     });
 
@@ -749,9 +812,11 @@
         showToast("Enter a song title first", "error");
         return;
       }
-      el("btn-manual-push").disabled = true;
-      el("btn-manual-push").textContent = "Pushing…";
+      const btn = el("btn-manual-push");
+      btn.disabled = true;
+      btn.textContent = "Pushing…";
       el("manual-error").style.display = "none";
+      logActivity("Pushing track: " + artist + " – " + title);
       try {
         await bridge.manualPush(title, artist);
         el("manual-title").value = "";
@@ -760,24 +825,26 @@
       } catch (err) {
         el("manual-error").style.display = "";
         el("manual-error").textContent = err.message || "Push failed";
-        showToast("Push failed — see error below", "error", 5000);
+        showToast("Push failed — see error below", "error", 8000);
       } finally {
-        el("btn-manual-push").disabled = false;
-        el("btn-manual-push").textContent = "Push Track";
+        btn.disabled = false;
+        btn.textContent = "Push Track";
       }
     });
 
     el("btn-sync-library").addEventListener("click", async () => {
-      el("btn-sync-library").disabled = true;
-      el("btn-sync-library").textContent = "Scanning library…";
+      const btn = el("btn-sync-library");
+      btn.disabled = true;
+      btn.textContent = "Scanning library…";
       el("lib-sync-status").style.display = "none";
       el("lib-sync-error").style.display = "none";
+      logActivity("Starting library sync…");
       try {
         const result = await bridge.syncLibrary();
         if (result.error) {
           el("lib-sync-error").style.display = "";
           el("lib-sync-error").textContent = result.error;
-          showToast("Library sync failed — see error", "error", 5000);
+          showToast("Library sync failed — see error", "error", 8000);
         } else {
           el("lib-sync-status").style.display = "";
           el("lib-sync-status").textContent = "✓ " + result.trackCount + " tracks synced.";
@@ -787,14 +854,15 @@
       } catch (err) {
         el("lib-sync-error").style.display = "";
         el("lib-sync-error").textContent = err.message || "Library sync failed";
-        showToast("Library sync failed: " + (err.message || err), "error", 5000);
+        showToast("Library sync failed: " + (err.message || err), "error", 8000);
       } finally {
-        el("btn-sync-library").disabled = false;
-        el("btn-sync-library").textContent = "Sync Library";
+        btn.disabled = false;
+        btn.textContent = "Sync Library";
       }
     });
 
     el("chk-launch-login").addEventListener("change", async () => {
+      logActivity("Toggling launch at login…");
       await bridge.toggleLaunchAtLogin();
     });
 
@@ -848,28 +916,32 @@
       }
     }
 
-    bridge.onUpdateStatus(updateUpdateUI);
+    if (bridge) {
+      bridge.onUpdateStatus(updateUpdateUI);
 
-    el("btn-check-update").addEventListener("click", () => {
-      bridge.checkForUpdates();
-      showToast("Checking for updates…", "info");
-    });
+      el("btn-check-update").addEventListener("click", () => {
+        bridge.checkForUpdates();
+        showToast("Checking for updates…", "info");
+      });
 
-    el("btn-install-update").addEventListener("click", () => {
-      bridge.quitAndInstall();
-    });
+      el("btn-install-update").addEventListener("click", () => {
+        bridge.quitAndInstall();
+      });
 
-    bridge.getUpdateStatus().then((us) => {
-      if (us && (us.available || us.downloaded || us.downloading || us.checking || us.error)) {
-        updateUpdateUI(us);
-      }
-    });
+      bridge.getUpdateStatus().then((us) => {
+        if (us && (us.available || us.downloaded || us.downloading || us.checking || us.error)) {
+          updateUpdateUI(us);
+        }
+      });
+    }
 
     if (bridge) {
+      logActivity("Bridge connected ✓", "success");
       bridge.getAppVersion().then((v) => {
         const ver = "v" + v;
         el("titlebar-version").textContent = ver;
         el("version-label").textContent = ver;
+        logActivity("App version: " + ver, "info");
       });
       loadConfig();
       loadStatus();
