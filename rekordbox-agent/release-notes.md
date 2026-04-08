@@ -4,8 +4,7 @@ Download the installer for your Mac:
 
 | File | Description |
 |------|-------------|
-| `.pkg` | **Recommended** — double-click installer, installs to /Applications |
-| `.dmg` | Drag-to-Applications disk image |
+| `.dmg` | **Recommended** — drag-to-Applications disk image |
 | `.zip` | Portable zip archive (also used for auto-updates) |
 
 ---
@@ -13,9 +12,8 @@ Download the installer for your Mac:
 ### Setup Guide
 
 #### 1. Install
-- Download the `.pkg` or `.dmg` file above
-- **PKG:** Double-click to run the installer. DJ Bridge will be placed in /Applications
-- **DMG:** Open it and drag DJ Bridge into your Applications folder
+- Download the `.dmg` file above
+- Open it and drag **DJ Bridge** into your Applications folder
 - If macOS shows a security warning, right-click the app and choose **Open**
 
 #### 2. First Launch
