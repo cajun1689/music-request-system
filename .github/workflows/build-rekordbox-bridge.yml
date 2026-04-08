@@ -39,7 +39,7 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Import signing certificate into keychain
+      - name: Import signing certificates into keychain
         if: env.CSC_LINK != ''
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
@@ -49,14 +49,26 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          echo "$CSC_LINK" | base64 --decode > $RUNNER_TEMP/cert.p12
-          security import $RUNNER_TEMP/cert.p12 -k "$KEYCHAIN_PATH" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          # Import Developer ID Application certificate
+          echo "$CSC_LINK" | base64 --decode > $RUNNER_TEMP/app_cert.p12
+          security import $RUNNER_TEMP/app_cert.p12 -k "$KEYCHAIN_PATH" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          rm -f $RUNNER_TEMP/app_cert.p12
+
+          # Import Developer ID Installer certificate (for PKG signing)
+          if [ -n "$CSC_INSTALLER_LINK" ]; then
+            echo "$CSC_INSTALLER_LINK" | base64 --decode > $RUNNER_TEMP/installer_cert.p12
+            security import $RUNNER_TEMP/installer_cert.p12 -k "$KEYCHAIN_PATH" -P "$CSC_INSTALLER_KEY_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/pkgbuild
+            rm -f $RUNNER_TEMP/installer_cert.p12
+          fi
+
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
-          security find-identity -v "$KEYCHAIN_PATH"
 
-          rm -f $RUNNER_TEMP/cert.p12
+          echo "=== Signing identities ==="
+          security find-identity -v "$KEYCHAIN_PATH"
+        env:
+          CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+          CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
 
       - name: Package & publish to GitHub Releases
         if: startsWith(github.ref, 'refs/tags/')
@@ -77,7 +89,6 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG#dj-bridge-v}"
-          # Find the release (electron-builder may create tag as v$VERSION)
           RELEASE_TAG="$TAG"
           gh release view "$RELEASE_TAG" > /dev/null 2>&1 || RELEASE_TAG="v${VERSION}"
           gh release edit "$RELEASE_TAG" --draft=false --title "DJ Bridge v${VERSION}" --notes-file release-notes.md
@@ -94,6 +105,7 @@ jobs:
           path: |
             rekordbox-agent/out/*.dmg
             rekordbox-agent/out/*.zip
+            rekordbox-agent/out/*.pkg
             rekordbox-agent/out/*.yml
             rekordbox-agent/out/*.yaml
           if-no-files-found: warn
