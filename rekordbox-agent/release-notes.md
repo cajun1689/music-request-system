@@ -4,8 +4,7 @@ Download the installer for your Mac:
 
 | File | Description |
 |------|-------------|
-| `.pkg` | **Recommended** — double-click installer, installs to /Applications |
-| `.dmg` | Drag-to-Applications disk image |
+| `.dmg` | **Recommended** — drag-to-Applications disk image |
 | `.zip` | Portable zip archive (also used for auto-updates) |
 
 ### What's New

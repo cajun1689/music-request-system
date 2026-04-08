@@ -94,7 +94,6 @@ jobs:
           path: |
             rekordbox-agent/out/*.dmg
             rekordbox-agent/out/*.zip
-            rekordbox-agent/out/*.pkg
             rekordbox-agent/out/*.yml
             rekordbox-agent/out/*.yaml
           if-no-files-found: warn
