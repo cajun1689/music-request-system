@@ -310,14 +310,26 @@ function stopPolling(): void {
   }
 }
 
+function positionWindowNearTray(): void {
+  if (!mainWindow || !tray) return;
+  const trayBounds = tray.getBounds();
+  const windowBounds = mainWindow.getBounds();
+  const x = Math.round(trayBounds.x + trayBounds.width / 2 - windowBounds.width / 2);
+  const y = trayBounds.y + trayBounds.height + 4;
+  mainWindow.setPosition(x, y, false);
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 520,
-    height: 720,
-    minWidth: 420,
+    width: 420,
+    height: 700,
+    minWidth: 380,
     minHeight: 500,
     show: false,
     resizable: true,
+    frame: false,
+    transparent: false,
+    skipTaskbar: true,
     title: "DJ Bridge",
     titleBarStyle: "hiddenInset",
     vibrancy: "sidebar",
@@ -347,6 +359,12 @@ function createWindow(): void {
       mainWindow?.hide();
     }
   });
+
+  mainWindow.on("blur", () => {
+    if (mainWindow && !mainWindow.webContents.isDevToolsOpened()) {
+      mainWindow.hide();
+    }
+  });
 }
 
 function showWindow(): void {
@@ -354,6 +372,7 @@ function showWindow(): void {
     createWindow();
   }
   if (mainWindow) {
+    positionWindowNearTray();
     mainWindow.show();
     mainWindow.focus();
   }
@@ -366,12 +385,15 @@ function toggleWindow(): void {
   if (mainWindow && mainWindow.isVisible()) {
     mainWindow.hide();
   } else if (mainWindow) {
+    positionWindowNearTray();
     mainWindow.show();
     mainWindow.focus();
   }
 }
 
 app.on("ready", () => {
+  if (app.dock) app.dock.hide();
+
   status.version = app.getVersion();
   status.logsPath = app.getPath("logs");
   status.launchAtLogin = app.getLoginItemSettings().openAtLogin;
@@ -387,7 +409,7 @@ app.on("ready", () => {
   }
 
   tray = new Tray(icon);
-  tray.setToolTip("Rekordbox Bridge");
+  tray.setToolTip("DJ Bridge");
   tray.on("click", toggleWindow);
   updateTrayMenu();
 
