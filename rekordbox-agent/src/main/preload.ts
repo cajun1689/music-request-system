@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("bridge", {
+  getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   getConfig: () => ipcRenderer.invoke("get-config"),
   setConfig: (partial: Record<string, unknown>) =>
     ipcRenderer.invoke("set-config", partial),

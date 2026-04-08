@@ -337,7 +337,7 @@
   </style>
 </head>
 <body>
-  <div class="titlebar">DJ Bridge</div>
+  <div class="titlebar">DJ Bridge <span id="titlebar-version" style="color:var(--text-muted); font-weight:400; margin-left:4px;"></span></div>
 
   <div class="content">
     <!-- Status Card -->
@@ -866,6 +866,11 @@
     });
 
     if (bridge) {
+      bridge.getAppVersion().then((v) => {
+        const ver = "v" + v;
+        el("titlebar-version").textContent = ver;
+        el("version-label").textContent = ver;
+      });
       loadConfig();
       loadStatus();
     }

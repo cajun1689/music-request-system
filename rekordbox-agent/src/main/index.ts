@@ -44,6 +44,7 @@ let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastTrackKey = "";
+let isQuitting = false;
 
 interface StatusPayload {
   connected: boolean;
@@ -161,7 +162,8 @@ function updateTrayMenu(): void {
     {
       label: "Quit DJ Bridge",
       click: () => {
-        app.exit(0);
+        isQuitting = true;
+        app.quit();
       },
     },
   ]);
@@ -338,8 +340,10 @@ function createWindow(): void {
   });
 
   mainWindow.on("close", (e) => {
-    e.preventDefault();
-    mainWindow?.hide();
+    if (!isQuitting) {
+      e.preventDefault();
+      mainWindow?.hide();
+    }
   });
 }
 
@@ -403,6 +407,10 @@ app.on("ready", () => {
   });
 });
 
+app.on("before-quit", () => {
+  isQuitting = true;
+});
+
 app.on("window-all-closed", () => {
   // Keep running in tray
 });
@@ -413,6 +421,7 @@ app.on("activate", () => {
 
 // ─── IPC Handlers ────────────────────────────────────────────
 
+ipcMain.handle("get-app-version", () => app.getVersion());
 ipcMain.handle("get-config", () => getConfig());
 
 ipcMain.handle(
