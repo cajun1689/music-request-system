@@ -3,20 +3,52 @@ import * as os from "os";
 import * as path from "path";
 import type { LibraryTrack, TrackInfo } from "./rekordbox-reader";
 
-const SERATO_DIR_CANDIDATES = [
+const DEFAULT_SERATO_DIRS = [
   path.join(os.homedir(), "Music", "_Serato_"),
   path.join(os.homedir(), "Music", "ScratchLIVE"),
 ];
 
-export function findSeratoDir(): string | null {
-  for (const dir of SERATO_DIR_CANDIDATES) {
+function scanVolumesForSerato(): string[] {
+  const found: string[] = [];
+  try {
+    const volumes = fs.readdirSync("/Volumes");
+    for (const vol of volumes) {
+      if (vol === "Macintosh HD") continue;
+      for (const name of ["_Serato_", "ScratchLIVE"]) {
+        const candidate = path.join("/Volumes", vol, name);
+        if (fs.existsSync(candidate)) found.push(candidate);
+      }
+    }
+  } catch {
+    // /Volumes not readable or not macOS
+  }
+  return found;
+}
+
+function getAllSeratoDirs(customPath?: string): string[] {
+  const dirs = [...DEFAULT_SERATO_DIRS];
+
+  if (customPath) {
+    for (const name of ["_Serato_", "ScratchLIVE"]) {
+      const candidate = path.join(customPath, name);
+      if (!dirs.includes(candidate)) dirs.push(candidate);
+    }
+    if (!dirs.includes(customPath)) dirs.push(customPath);
+  }
+
+  dirs.push(...scanVolumesForSerato().filter((d) => !dirs.includes(d)));
+  return dirs;
+}
+
+export function findSeratoDir(customPath?: string): string | null {
+  for (const dir of getAllSeratoDirs(customPath)) {
     if (fs.existsSync(dir)) return dir;
   }
   return null;
 }
 
-export function resolveSeratoSessionDir(): string | null {
-  for (const dir of SERATO_DIR_CANDIDATES) {
+export function resolveSeratoSessionDir(customPath?: string): string | null {
+  for (const dir of getAllSeratoDirs(customPath)) {
     const sessDir = path.join(dir, "History", "Sessions");
     if (fs.existsSync(sessDir)) return sessDir;
   }
@@ -172,9 +204,9 @@ function getAllSessionFiles(sessDir: string): string[] {
   }
 }
 
-function buildPlayCountMap(): Map<string, number> {
+function buildPlayCountMap(customPath?: string): Map<string, number> {
   const counts = new Map<string, number>();
-  const sessDir = resolveSeratoSessionDir();
+  const sessDir = resolveSeratoSessionDir(customPath);
   if (!sessDir) return counts;
 
   for (const file of getAllSessionFiles(sessDir)) {
@@ -187,8 +219,8 @@ function buildPlayCountMap(): Map<string, number> {
   return counts;
 }
 
-function resolveSeratoDatabasePath(): string | null {
-  for (const dir of SERATO_DIR_CANDIDATES) {
+function resolveSeratoDatabasePath(customPath?: string): string | null {
+  for (const dir of getAllSeratoDirs(customPath)) {
     const dbFile = path.join(dir, "database V2");
     if (fs.existsSync(dbFile)) return dbFile;
   }
@@ -226,8 +258,8 @@ function parseOtrkFields(buf: Buffer, start: number, length: number): OtrkResult
   return { title, artist };
 }
 
-export async function readSeratoLibrary(): Promise<LibraryTrack[]> {
-  const dbPath = resolveSeratoDatabasePath();
+export async function readSeratoLibrary(customPath?: string): Promise<LibraryTrack[]> {
+  const dbPath = resolveSeratoDatabasePath(customPath);
   if (!dbPath) return [];
 
   let buf: Buffer;
@@ -237,7 +269,7 @@ export async function readSeratoLibrary(): Promise<LibraryTrack[]> {
     return [];
   }
 
-  const playCounts = buildPlayCountMap();
+  const playCounts = buildPlayCountMap(customPath);
 
   const tracks: LibraryTrack[] = [];
   let pos = 0;
@@ -269,8 +301,8 @@ export async function readSeratoLibrary(): Promise<LibraryTrack[]> {
 
 const STALE_SESSION_MS = 5 * 60 * 1000; // 5 minutes
 
-export async function readCurrentSeratoTrack(): Promise<TrackInfo | null> {
-  const sessDir = resolveSeratoSessionDir();
+export async function readCurrentSeratoTrack(customPath?: string): Promise<TrackInfo | null> {
+  const sessDir = resolveSeratoSessionDir(customPath);
   if (!sessDir) return null;
 
   const latestFile = findLatestSessionFile(sessDir);

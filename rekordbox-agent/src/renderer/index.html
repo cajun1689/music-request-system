@@ -415,6 +415,13 @@
         <option value="">— Select event first —</option>
       </select>
 
+      <label>Music Library Path <span style="font-weight:400; color:var(--text-muted);">(if your _Serato_ folder is on another drive)</span></label>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <input type="text" id="cfg-music-path" placeholder="Auto-detect (scans ~/Music + all drives)" style="flex:1;" />
+        <button class="btn secondary" id="btn-browse-music" style="margin:0; padding:5px 10px; font-size:11px; white-space:nowrap;">Browse…</button>
+      </div>
+      <div id="music-path-status" style="display:none; font-size:11px; margin-top:4px; font-weight:500;"></div>
+
       <div id="sqlcipher-row">
         <label>SQLCipher Key <span style="font-weight:400; color:var(--text-muted);">(Rekordbox only, leave blank for unencrypted)</span></label>
         <input type="password" id="cfg-sqlcipher-key" placeholder="Optional" />
@@ -765,6 +772,13 @@
         el("cfg-interval").value = c.pollingIntervalMs || 10000;
         el("cfg-mode").value = c.mode || "auto";
         el("cfg-software-type").value = c.softwareType || "auto";
+        el("cfg-music-path").value = c.musicLibraryPath || "";
+        if (c.musicLibraryPath) {
+          var mps = el("music-path-status");
+          mps.textContent = "Using: " + c.musicLibraryPath;
+          mps.style.color = "var(--green)";
+          mps.style.display = "";
+        }
         updateSqlcipherVisibility();
         logActivity("Config loaded — API: " + (c.apiBaseUrl || "not set").substring(0, 40) + "…", "success");
         await loadEvents(c.eventId || "");
@@ -801,6 +815,7 @@
           mode: el("cfg-mode").value,
           softwareType: el("cfg-software-type").value,
           sourceId: el("cfg-source-id").value.trim(),
+          musicLibraryPath: el("cfg-music-path").value.trim(),
         });
         showToast("Configuration saved ✓", "success");
       } catch (err) {
@@ -842,6 +857,23 @@
       } finally {
         btn.disabled = false;
         btn.textContent = "Detect Source";
+      }
+    });
+
+    el("btn-browse-music").addEventListener("click", async () => {
+      try {
+        var folder = await bridge.browseFolder();
+        if (folder) {
+          el("cfg-music-path").value = folder;
+          var statusEl = el("music-path-status");
+          statusEl.textContent = "Set to: " + folder;
+          statusEl.style.color = "var(--green)";
+          statusEl.style.display = "";
+          logActivity("Music library path set to: " + folder);
+          showToast("Music path set: " + folder, "success");
+        }
+      } catch (err) {
+        showToast("Browse failed: " + (err.message || err), "error");
       }
     });
 

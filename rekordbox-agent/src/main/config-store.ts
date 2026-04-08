@@ -9,6 +9,7 @@ interface ConfigSchema {
   mode: "auto" | "manual";
   softwareType: "rekordbox" | "serato" | "auto";
   sourceId: string;
+  musicLibraryPath: string;
 }
 
 const store = new Store<ConfigSchema>({
@@ -21,6 +22,7 @@ const store = new Store<ConfigSchema>({
     mode: "auto",
     softwareType: "auto",
     sourceId: "",
+    musicLibraryPath: "",
   },
 });
 
@@ -44,6 +46,7 @@ export function getConfig(): ConfigSchema {
     mode: store.get("mode"),
     softwareType: store.get("softwareType"),
     sourceId: store.get("sourceId"),
+    musicLibraryPath: store.get("musicLibraryPath"),
   };
 }
 

@@ -18,6 +18,7 @@ try {
     fetchEventSources: function (eventId) { return ipcRenderer.invoke("fetch-event-sources", eventId); },
     toggleLaunchAtLogin: function () { return ipcRenderer.invoke("toggle-launch-at-login"); },
     openLogs: function () { return ipcRenderer.invoke("open-logs"); },
+    browseFolder: function () { return ipcRenderer.invoke("browse-folder"); },
     getUpdateStatus: function () { return ipcRenderer.invoke("get-update-status"); },
     checkForUpdates: function () { return ipcRenderer.invoke("check-for-updates"); },
     quitAndInstall: function () { return ipcRenderer.invoke("quit-and-install"); },

@@ -195,9 +195,9 @@ function toggleLaunchAtLogin(): void {
   sendStatus();
 }
 
-function detectSoftware(): "rekordbox" | "serato" | null {
+function detectSoftware(customPath?: string): "rekordbox" | "serato" | null {
   if (resolveDbPath()) return "rekordbox";
-  if (resolveSeratoSessionDir()) return "serato";
+  if (resolveSeratoSessionDir(customPath)) return "serato";
   return null;
 }
 
@@ -216,7 +216,7 @@ async function readTrackForSoftware(
     return readCurrentTrack(dbPath, config.sqlcipherKey || undefined);
   }
 
-  return readCurrentSeratoTrack();
+  return readCurrentSeratoTrack(config.musicLibraryPath || undefined);
 }
 
 async function pollOnce(): Promise<void> {
@@ -232,7 +232,7 @@ async function pollOnce(): Promise<void> {
 
   let sw: "rekordbox" | "serato" | null = null;
   if (config.softwareType === "auto") {
-    sw = detectSoftware();
+    sw = detectSoftware(config.musicLibraryPath || undefined);
     if (!sw) {
       status.error = "No DJ software detected (Rekordbox or Serato).";
       status.activeSoftware = null;
@@ -538,13 +538,15 @@ ipcMain.handle("resolve-db-path", () => {
 });
 
 ipcMain.handle("resolve-serato-path", () => {
-  const sessDir = resolveSeratoSessionDir();
+  const config = getConfig();
+  const sessDir = resolveSeratoSessionDir(config.musicLibraryPath || undefined);
   log.info("Resolved Serato session dir:", sessDir);
   return sessDir;
 });
 
 ipcMain.handle("detect-software", () => {
-  const sw = detectSoftware();
+  const config = getConfig();
+  const sw = detectSoftware(config.musicLibraryPath || undefined);
   log.info("Detected software:", sw);
   return sw;
 });
@@ -588,10 +590,22 @@ ipcMain.handle("open-logs", () => {
   shell.openPath(app.getPath("logs"));
 });
 
+ipcMain.handle("browse-folder", async () => {
+  const { dialog } = require("electron");
+  const result = await dialog.showOpenDialog({
+    title: "Select Music Library Folder",
+    properties: ["openDirectory"],
+    message: "Choose the drive or folder containing your _Serato_ folder",
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  return result.filePaths[0];
+});
+
 ipcMain.handle("sync-library", async () => {
   const config = getConfig();
+  const customPath = config.musicLibraryPath || undefined;
   const scanBoth = config.softwareType === "auto";
-  const sw = scanBoth ? detectSoftware() : config.softwareType;
+  const sw = scanBoth ? detectSoftware(customPath) : config.softwareType;
 
   log.info("Library sync starting, software:", sw, "scanBoth:", scanBoth);
 
@@ -612,7 +626,7 @@ ipcMain.handle("sync-library", async () => {
 
   if (sw === "serato" || scanBoth) {
     try {
-      const seratoTracks = await readSeratoLibrary();
+      const seratoTracks = await readSeratoLibrary(customPath);
       log.info("Serato library:", seratoTracks.length, "tracks");
       allTracks.push(...seratoTracks);
     } catch (err) {
