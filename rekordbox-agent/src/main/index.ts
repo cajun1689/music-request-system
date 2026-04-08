@@ -48,6 +48,7 @@ let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastTrackKey = "";
+let lastPollError = "";
 let isQuitting = false;
 
 interface StatusPayload {
@@ -244,7 +245,22 @@ async function pollOnce(): Promise<void> {
   status.activeSoftware = sw;
 
   try {
-    const track = await readTrackForSoftware(sw, config);
+    let track: TrackInfo | null = null;
+    try {
+      track = await readTrackForSoftware(sw, config);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (config.softwareType === "auto" && sw === "rekordbox" &&
+          (msg.includes("file is not a database") || msg.includes("not a database"))) {
+        log.warn("Rekordbox DB unreadable (encrypted?), trying Serato…");
+        sw = "serato";
+        status.activeSoftware = sw;
+        track = await readTrackForSoftware(sw, config);
+      } else {
+        throw err;
+      }
+    }
+
     if (!track) {
       status.error = null;
       sendStatus();
@@ -289,8 +305,13 @@ async function pollOnce(): Promise<void> {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    log.error("Read error:", message);
-    status.error = `Read error: ${message}`;
+    if (message !== lastPollError) {
+      log.error("Read error:", message);
+      lastPollError = message;
+    }
+    status.error = message.includes("file is not a database")
+      ? "Rekordbox 6+ DB is encrypted. Provide a SQLCipher key or switch to Serato."
+      : `Read error: ${message}`;
     status.connected = false;
   }
 

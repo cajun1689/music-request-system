@@ -15,9 +15,8 @@ export function setLogWindow(win: BrowserWindow | null): void {
   rendererWindow = win;
 }
 
-const originalFactory = log.transports.console;
-log.hooks.push((message) => {
-  if (rendererWindow && !rendererWindow.isDestroyed()) {
+log.hooks.push((message, _transport, transportName) => {
+  if (transportName === "console" && rendererWindow && !rendererWindow.isDestroyed()) {
     const level = message.level ?? "info";
     const text = message.data?.map((d: unknown) =>
       typeof d === "object" ? JSON.stringify(d) : String(d)
