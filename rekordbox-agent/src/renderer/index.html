@@ -410,8 +410,10 @@
         <option value="serato">Serato DJ</option>
       </select>
 
-      <label>Source ID <span style="font-weight:400; color:var(--text-muted);">(e.g. dj-slim, deck-a — identifies this DJ in the system)</span></label>
-      <input type="text" id="cfg-source-id" placeholder="e.g. dj-slim-rekordbox" />
+      <label>DJ Source <span style="font-weight:400; color:var(--text-muted);">(which DJ/deck are you?)</span></label>
+      <select id="cfg-source-id">
+        <option value="">— Select event first —</option>
+      </select>
 
       <div id="sqlcipher-row">
         <label>SQLCipher Key <span style="font-weight:400; color:var(--text-muted);">(Rekordbox only, leave blank for unencrypted)</span></label>
@@ -661,6 +663,47 @@
 
     let cachedEvents = [];
 
+    async function loadSourcesForEvent(eventId, savedSourceId) {
+      var sourceSelect = el("cfg-source-id");
+      if (!eventId || !bridge.fetchEventSources) {
+        sourceSelect.innerHTML = '<option value="">— Select event first —</option>';
+        return;
+      }
+      sourceSelect.innerHTML = '<option value="">Loading sources…</option>';
+      try {
+        var sources = await bridge.fetchEventSources(eventId);
+        sourceSelect.innerHTML = '<option value="">— Pick your DJ source —</option>';
+        sources.forEach(function (src) {
+          var opt = document.createElement("option");
+          opt.value = src.id;
+          var label = (src.djName || src.name || src.id);
+          if (src.type) label += " (" + src.type + ")";
+          label += "  ·  id: " + src.id;
+          opt.textContent = label;
+          sourceSelect.appendChild(opt);
+        });
+        if (savedSourceId) {
+          sourceSelect.value = savedSourceId;
+          if (!sourceSelect.value && savedSourceId) {
+            var opt = document.createElement("option");
+            opt.value = savedSourceId;
+            opt.textContent = savedSourceId + " (custom)";
+            sourceSelect.appendChild(opt);
+            sourceSelect.value = savedSourceId;
+          }
+        }
+        logActivity("Loaded " + sources.length + " DJ sources for event");
+      } catch (e) {
+        sourceSelect.innerHTML = '<option value="">Failed to load sources</option>';
+        logActivity("Failed to load sources: " + (e.message || e), "error");
+      }
+    }
+
+    el("cfg-event-id").addEventListener("change", function () {
+      var eventId = el("cfg-event-id").value;
+      loadSourcesForEvent(eventId, "");
+    });
+
     async function loadEvents(savedEventId) {
       const select = el("cfg-event-id");
       const btn = el("btn-refresh-events");
@@ -715,17 +758,19 @@
     async function loadConfig() {
       logActivity("Loading configuration…");
       try {
-        const c = await bridge.getConfig();
+        var c = await bridge.getConfig();
         el("cfg-api-url").value = c.apiBaseUrl || "";
         el("cfg-push-token").value = c.pushToken || "";
         el("cfg-sqlcipher-key").value = c.sqlcipherKey || "";
         el("cfg-interval").value = c.pollingIntervalMs || 10000;
         el("cfg-mode").value = c.mode || "auto";
         el("cfg-software-type").value = c.softwareType || "auto";
-        el("cfg-source-id").value = c.sourceId || "";
         updateSqlcipherVisibility();
         logActivity("Config loaded — API: " + (c.apiBaseUrl || "not set").substring(0, 40) + "…", "success");
         await loadEvents(c.eventId || "");
+        if (c.eventId) {
+          await loadSourcesForEvent(c.eventId, c.sourceId || "");
+        }
       } catch (err) {
         logActivity("Failed to load config: " + (err.message || err), "error");
       }

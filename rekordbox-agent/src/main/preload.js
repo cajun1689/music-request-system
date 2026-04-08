@@ -15,6 +15,7 @@ try {
     syncLibrary: function () { return ipcRenderer.invoke("sync-library"); },
     pollNow: function () { return ipcRenderer.invoke("poll-now"); },
     fetchEvents: function () { return ipcRenderer.invoke("fetch-events"); },
+    fetchEventSources: function (eventId) { return ipcRenderer.invoke("fetch-event-sources", eventId); },
     toggleLaunchAtLogin: function () { return ipcRenderer.invoke("toggle-launch-at-login"); },
     openLogs: function () { return ipcRenderer.invoke("open-logs"); },
     getUpdateStatus: function () { return ipcRenderer.invoke("get-update-status"); },

@@ -25,6 +25,14 @@ export interface EventSummary {
   djBrandName?: string;
 }
 
+export interface EventSource {
+  id: string;
+  name: string;
+  type: string;
+  djName?: string;
+  url?: string;
+}
+
 async function electronFetch(
   url: string,
   options?: RequestInit,
@@ -48,6 +56,17 @@ export async function fetchEvents(): Promise<EventSummary[]> {
   const data = (await response.json()) as { events: EventSummary[] };
   log.info("Fetched", data.events?.length ?? 0, "events");
   return data.events ?? [];
+}
+
+export async function fetchEventSources(eventId: string): Promise<EventSource[]> {
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/events/${encodeURIComponent(eventId)}`;
+  const response = await electronFetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch event details (${response.status})`);
+  }
+  const data = (await response.json()) as { livePlaylistSources?: EventSource[] };
+  return data.livePlaylistSources ?? [];
 }
 
 const pendingQueue: Array<{ track: TrackInfo; retries: number }> = [];

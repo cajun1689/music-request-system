@@ -25,6 +25,7 @@ import {
   drainQueue,
   enqueueTrack,
   fetchEvents,
+  fetchEventSources,
   pushTrack,
   syncLibrary,
   queueSize,
@@ -566,6 +567,18 @@ ipcMain.handle("fetch-events", async () => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.error("Failed to fetch events:", message);
+    return [];
+  }
+});
+
+ipcMain.handle("fetch-event-sources", async (_e, eventId: string) => {
+  try {
+    const sources = await fetchEventSources(eventId);
+    log.info("Fetched sources for event", eventId, ":", sources.length);
+    return sources;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error("Failed to fetch event sources:", message);
     return [];
   }
 });
