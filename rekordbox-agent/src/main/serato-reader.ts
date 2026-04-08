@@ -206,25 +206,31 @@ function getAllSessionFiles(sessDir: string): string[] {
 
 function buildPlayCountMap(customPath?: string): Map<string, number> {
   const counts = new Map<string, number>();
-  const sessDir = resolveSeratoSessionDir(customPath);
-  if (!sessDir) return counts;
+  const scannedDirs = new Set<string>();
 
-  for (const file of getAllSessionFiles(sessDir)) {
-    for (const entry of parseSessionFile(file)) {
-      if (!entry.title) continue;
-      const key = `${entry.title.toLowerCase().trim()}::${entry.artist.toLowerCase().trim()}`;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+  for (const dir of getAllSeratoDirs(customPath)) {
+    const sessDir = path.join(dir, "History", "Sessions");
+    if (scannedDirs.has(sessDir) || !fs.existsSync(sessDir)) continue;
+    scannedDirs.add(sessDir);
+
+    for (const file of getAllSessionFiles(sessDir)) {
+      for (const entry of parseSessionFile(file)) {
+        if (!entry.title) continue;
+        const key = `${entry.title.toLowerCase().trim()}::${entry.artist.toLowerCase().trim()}`;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
     }
   }
   return counts;
 }
 
-function resolveSeratoDatabasePath(customPath?: string): string | null {
+function resolveAllSeratoDatabasePaths(customPath?: string): string[] {
+  const paths: string[] = [];
   for (const dir of getAllSeratoDirs(customPath)) {
     const dbFile = path.join(dir, "database V2");
-    if (fs.existsSync(dbFile)) return dbFile;
+    if (fs.existsSync(dbFile) && !paths.includes(dbFile)) paths.push(dbFile);
   }
-  return null;
+  return paths;
 }
 
 interface OtrkResult {
@@ -258,42 +264,49 @@ function parseOtrkFields(buf: Buffer, start: number, length: number): OtrkResult
   return { title, artist };
 }
 
-export async function readSeratoLibrary(customPath?: string): Promise<LibraryTrack[]> {
-  const dbPath = resolveSeratoDatabasePath(customPath);
-  if (!dbPath) return [];
-
-  let buf: Buffer;
-  try {
-    buf = fs.readFileSync(dbPath);
-  } catch {
-    return [];
-  }
-
-  const playCounts = buildPlayCountMap(customPath);
-
-  const tracks: LibraryTrack[] = [];
+function parseSeratoDatabase(buf: Buffer): OtrkResult[] {
+  const results: OtrkResult[] = [];
   let pos = 0;
-
   while (pos + 8 <= buf.length) {
     const tag = readTag(buf, pos);
     const chunkLen = readUint32BE(buf, pos + 4);
     pos += 8;
-
     if (pos + chunkLen > buf.length) break;
-
     if (tag === "otrk") {
       const parsed = parseOtrkFields(buf, pos, chunkLen);
-      if (parsed) {
-        const key = `${parsed.title.toLowerCase().trim()}::${parsed.artist.toLowerCase().trim()}`;
-        tracks.push({
-          title: parsed.title,
-          artist: parsed.artist,
-          playCount: playCounts.get(key) ?? 0,
-        });
-      }
+      if (parsed) results.push(parsed);
+    }
+    pos += chunkLen;
+  }
+  return results;
+}
+
+export async function readSeratoLibrary(customPath?: string): Promise<LibraryTrack[]> {
+  const dbPaths = resolveAllSeratoDatabasePaths(customPath);
+  if (!dbPaths.length) return [];
+
+  const playCounts = buildPlayCountMap(customPath);
+  const seen = new Set<string>();
+  const tracks: LibraryTrack[] = [];
+
+  for (const dbPath of dbPaths) {
+    let buf: Buffer;
+    try {
+      buf = fs.readFileSync(dbPath);
+    } catch {
+      continue;
     }
 
-    pos += chunkLen;
+    for (const parsed of parseSeratoDatabase(buf)) {
+      const key = `${parsed.title.toLowerCase().trim()}::${parsed.artist.toLowerCase().trim()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      tracks.push({
+        title: parsed.title,
+        artist: parsed.artist,
+        playCount: playCounts.get(key) ?? 0,
+      });
+    }
   }
 
   return tracks;
