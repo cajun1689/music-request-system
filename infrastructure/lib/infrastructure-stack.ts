@@ -18,6 +18,8 @@ import {
   aws_lambda_nodejs as lambdaNodejs,
   aws_s3 as s3,
   aws_s3_deployment as s3deploy,
+  aws_events as events,
+  aws_events_targets as targets,
   aws_ssm as ssm,
 } from "aws-cdk-lib";
 import { Construct } from "constructs";
@@ -255,6 +257,19 @@ export class InfrastructureStack extends Stack {
       "GetLibraryFn",
       "../../backend/lambdas/api/getLibrary.ts",
     );
+    const deleteEventFn = makeLambda(
+      "DeleteEventFn",
+      "../../backend/lambdas/api/deleteEvent.ts",
+    );
+    const cleanupEventsFn = makeLambda(
+      "CleanupEventsFn",
+      "../../backend/lambdas/api/cleanupEvents.ts",
+    );
+
+    new events.Rule(this, "CleanupEventsSchedule", {
+      schedule: events.Schedule.rate(Duration.hours(24)),
+      targets: [new targets.LambdaFunction(cleanupEventsFn)],
+    });
 
     const openaiApiKeyParam = ssm.StringParameter.fromSecureStringParameterAttributes(
       this,
@@ -308,6 +323,10 @@ export class InfrastructureStack extends Stack {
     connectionsTable.grantReadWriteData(wsDisconnectFn);
     connectionsTable.grantReadWriteData(wsSubscribeFn);
     connectionsTable.grantReadWriteData(requestStreamFn);
+    eventsTable.grantReadWriteData(deleteEventFn);
+    requestsTable.grantReadWriteData(deleteEventFn);
+    eventsTable.grantReadWriteData(cleanupEventsFn);
+    requestsTable.grantReadWriteData(cleanupEventsFn);
     brandAssetsBucket.grantPut(uploadBrandAssetFn);
     brandAssetsBucket.grantPut(syncLibraryFn);
     brandAssetsBucket.grantRead(getLibraryFn);
@@ -394,7 +413,7 @@ export class InfrastructureStack extends Stack {
       deployOptions: { stageName: "prod" },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ["GET", "POST", "PATCH", "OPTIONS"],
+        allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allowHeaders: ["Authorization", "Content-Type", "x-push-token"],
       },
     });
@@ -402,7 +421,7 @@ export class InfrastructureStack extends Stack {
     const gatewayCorsHeaders = {
       "Access-Control-Allow-Origin": "'*'",
       "Access-Control-Allow-Headers": "'Content-Type,Authorization,x-push-token'",
-      "Access-Control-Allow-Methods": "'GET,POST,PATCH,OPTIONS'",
+      "Access-Control-Allow-Methods": "'GET,POST,PATCH,DELETE,OPTIONS'",
     };
     restApi.addGatewayResponse("Default4xxCors", {
       type: apigateway.ResponseType.DEFAULT_4XX,
@@ -456,6 +475,10 @@ export class InfrastructureStack extends Stack {
     });
     eventByIdResource.addMethod("GET", new apigateway.LambdaIntegration(getEventFn));
     eventByIdResource.addMethod("PATCH", new apigateway.LambdaIntegration(updateEventFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    eventByIdResource.addMethod("DELETE", new apigateway.LambdaIntegration(deleteEventFn), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });

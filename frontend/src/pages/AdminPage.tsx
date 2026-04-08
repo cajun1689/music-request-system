@@ -39,6 +39,16 @@ const emptyEventDetails = {
   accentColor: "#f97316",
 };
 
+interface EventSummary {
+  eventId: string;
+  name: string;
+  date: string;
+  venueName: string;
+  djBrandName: string;
+  isActive: boolean;
+  slug?: string;
+}
+
 export function AdminPage() {
   const { session, logout } = useAuth();
   const [form, setForm] = useState(emptyForm);
@@ -56,6 +66,44 @@ export function AdminPage() {
   const [seratoDjName, setSeratoDjName] = useState<string>("");
   const [serato2DjName, setSerato2DjName] = useState<string>("");
   const [rekordboxDjName, setRekordboxDjName] = useState<string>("");
+  const [allEvents, setAllEvents] = useState<EventSummary[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function loadAllEvents() {
+    setLoadingEvents(true);
+    try {
+      const { events } = await api.listEvents();
+      setAllEvents(events);
+    } catch {
+      setAllEvents([]);
+    } finally {
+      setLoadingEvents(false);
+    }
+  }
+
+  async function onDeleteEvent(eventId: string, eventName: string) {
+    if (!session) return;
+    if (!window.confirm(`Delete "${eventName}"? This will also remove all its requests.`)) return;
+    setDeletingId(eventId);
+    try {
+      const result = await api.deleteEvent(eventId, session.idToken);
+      setMessage(`Deleted "${eventName}" and ${result.deletedRequests} requests.`);
+      if (eventData?.eventId === eventId) {
+        setEventData(null);
+        localStorage.removeItem("activeEventId");
+      }
+      void loadAllEvents();
+    } catch (err) {
+      setMessage(`Delete failed: ${(err as Error).message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  useEffect(() => {
+    void loadAllEvents();
+  }, []);
 
   const requestUrl = useMemo(() => {
     if (!eventData) {
@@ -283,15 +331,17 @@ export function AdminPage() {
     }
   }
 
-  async function onLoadEventById() {
-    if (!session || !lookupEventId.trim()) {
+  async function onLoadEventById(overrideId?: string) {
+    const id = overrideId ?? lookupEventId.trim();
+    if (!session || !id) {
       return;
     }
     setSaving(true);
     setMessage("");
     try {
-      const loaded = await api.getEvent(lookupEventId.trim());
+      const loaded = await api.getEvent(id);
       setEventData(loaded);
+      setLookupEventId(id);
       localStorage.setItem("activeEventId", loaded.eventId);
       setMessage("Loaded existing event.");
     } catch (err) {
@@ -386,6 +436,64 @@ export function AdminPage() {
             </button>
           </div>
         </header>
+        <section className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">All Events</h2>
+            <button
+              type="button"
+              onClick={() => void loadAllEvents()}
+              disabled={loadingEvents}
+              className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
+            >
+              {loadingEvents ? "Loading…" : "Refresh"}
+            </button>
+          </div>
+          {allEvents.length === 0 && !loadingEvents ? (
+            <p className="mt-2 text-sm text-slate-400">No events found.</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {allEvents.map((evt) => (
+                <div
+                  key={evt.eventId}
+                  className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950/50 px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {evt.name}
+                      {evt.slug ? (
+                        <span className="ml-2 rounded bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+                          recurring
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {evt.venueName} &middot; {evt.date || "no date"} &middot;{" "}
+                      <span className="font-mono text-[10px] text-slate-500">{evt.eventId}</span>
+                    </p>
+                  </div>
+                  <div className="ml-3 flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void onLoadEventById(evt.eventId)}
+                      className="rounded bg-slate-700 px-2.5 py-1 text-xs font-semibold"
+                    >
+                      Load
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onDeleteEvent(evt.eventId, evt.name)}
+                      disabled={deletingId === evt.eventId}
+                      className="rounded bg-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/30 disabled:opacity-60"
+                    >
+                      {deletingId === evt.eventId ? "Deleting…" : "Delete"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         <section className="rounded-xl border border-slate-800 bg-slate-900 p-4">
           <h2 className="text-lg font-semibold">Load Existing Event</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2">

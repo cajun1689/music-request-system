@@ -6,7 +6,7 @@ export const handler: APIGatewayProxyHandlerV2 = async () => {
   const result = await docClient.send(
     new ScanCommand({
       TableName: env.eventsTableName,
-      ProjectionExpression: "eventId, #n, venueName, #d, djBrandName, isActive, slug",
+      ProjectionExpression: "eventId, #n, venueName, #d, djBrandName, isActive, slug, isRecurring",
       ExpressionAttributeNames: {
         "#n": "name",
         "#d": "date",

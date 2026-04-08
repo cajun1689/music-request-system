@@ -88,6 +88,18 @@ export const api = {
     return request<EventRecord>(`/events/${eventId}`);
   },
 
+  listEvents() {
+    return request<{ events: Array<{ eventId: string; name: string; date: string; venueName: string; djBrandName: string; isActive: boolean; slug?: string }> }>("/events");
+  },
+
+  deleteEvent(eventId: string, token: string) {
+    return request<{ deleted: boolean; eventId: string; deletedRequests: number }>(
+      `/events/${eventId}`,
+      { method: "DELETE" },
+      token,
+    );
+  },
+
   submitGenreVote(eventId: string, genre: GenreName) {
     return request<EventRecord>(`/events/${eventId}/genre-votes`, {
       method: "POST",
