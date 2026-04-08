@@ -24,6 +24,16 @@ const store = new Store<ConfigSchema>({
   },
 });
 
+const CORRECT_API_URL = "https://zjjnyyeo8c.execute-api.us-east-1.amazonaws.com/prod";
+const WRONG_API_URLS = [
+  "https://casperrequests.com/prod",
+  "https://casperrequests.com",
+];
+
+if (WRONG_API_URLS.includes(store.get("apiBaseUrl"))) {
+  store.set("apiBaseUrl", CORRECT_API_URL);
+}
+
 export function getConfig(): ConfigSchema {
   return {
     apiBaseUrl: store.get("apiBaseUrl"),
