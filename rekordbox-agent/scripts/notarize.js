@@ -30,7 +30,7 @@ exports.default = async function notarizing(context) {
   console.log(`Notarizing ${appPath}...`);
 
   await notarize({
-    appBundleId: "com.casperrequests.rekordbox-bridge",
+    appBundleId: "com.casperrequests.dj-bridge",
     appPath,
     appleId,
     appleIdPassword,
