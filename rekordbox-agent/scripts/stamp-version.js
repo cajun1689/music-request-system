@@ -21,12 +21,15 @@ html = html.replace(
 fs.writeFileSync(htmlPath, html);
 console.log("Stamped version", ver, "into", htmlPath);
 
-// Fix preload.js: TypeScript emits `Object.defineProperty(exports, ...)` which
-// crashes in Electron's preload context where `exports` is undefined.
+// Verify preload.js was copied (it's plain JS, not compiled by tsc)
 const preloadPath = path.join(__dirname, "..", "dist", "main", "preload.js");
-let preload = fs.readFileSync(preloadPath, "utf8");
-if (!preload.startsWith("if(typeof exports")) {
-  preload = 'if(typeof exports==="undefined"){var exports={}};\n' + preload;
-  fs.writeFileSync(preloadPath, preload);
-  console.log("Patched exports polyfill into", preloadPath);
+if (fs.existsSync(preloadPath)) {
+  const content = fs.readFileSync(preloadPath, "utf8");
+  if (content.includes("contextBridge")) {
+    console.log("Verified preload.js at", preloadPath);
+  } else {
+    console.error("WARNING: preload.js does not contain contextBridge!");
+  }
+} else {
+  console.error("ERROR: preload.js not found at", preloadPath);
 }
