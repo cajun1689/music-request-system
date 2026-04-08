@@ -13,7 +13,7 @@ interface ConfigSchema {
 
 const store = new Store<ConfigSchema>({
   defaults: {
-    apiBaseUrl: "https://casperrequests.com/prod",
+    apiBaseUrl: "https://zjjnyyeo8c.execute-api.us-east-1.amazonaws.com/prod",
     eventId: "gaslight-residency",
     pushToken: "",
     pollingIntervalMs: 10_000,
