@@ -112,6 +112,8 @@ export function checkForUpdates(): void {
 }
 
 export function quitAndInstall(): void {
-  log.info("Updater: quit and install");
-  autoUpdater.quitAndInstall();
+  log.info("Updater: quit and install (isSilent=false, isForceRunAfter=true)");
+  setImmediate(() => {
+    autoUpdater.quitAndInstall(false, true);
+  });
 }

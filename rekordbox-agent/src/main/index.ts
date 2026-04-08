@@ -643,5 +643,7 @@ ipcMain.handle("check-for-updates", () => {
 });
 
 ipcMain.handle("quit-and-install", () => {
+  log.info("Quit-and-install requested, setting isQuitting=true");
+  isQuitting = true;
   quitAndInstall();
 });
