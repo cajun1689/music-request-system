@@ -560,13 +560,24 @@
     }
 
     if (!bridge) {
-      const content = document.querySelector(".content");
+      var errMsg = window._preloadError || "unknown reason";
+      var preloadLoaded = window._preloadOk === true;
+      var detail = preloadLoaded
+        ? "Preload ran but bridge is missing (unexpected)"
+        : (window._preloadError
+          ? "Preload error: " + errMsg
+          : "Preload script did not execute — file may not be found or require() is unavailable");
+      var content = document.querySelector(".content");
       content.innerHTML = '<div class="bridge-error-banner">' +
         '<strong>Bridge not loaded</strong><br>' +
-        'The preload script failed to connect. This usually means the app was not packaged correctly.<br><br>' +
-        'Try reinstalling from the latest release, or check the logs.' +
+        detail + '<br><br>' +
+        '<strong>Debug info:</strong><br>' +
+        'window.bridge = ' + typeof bridge + '<br>' +
+        'window._preloadOk = ' + String(window._preloadOk) + '<br>' +
+        'window._preloadError = ' + String(window._preloadError) + '<br>' +
+        'userAgent = ' + navigator.userAgent.substring(0, 80) +
         '</div>' + content.innerHTML;
-      logActivity("Bridge preload FAILED — buttons will not work", "error");
+      logActivity("Bridge FAILED: " + detail, "error");
     }
 
     function updateSqlcipherVisibility() {

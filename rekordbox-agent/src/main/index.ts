@@ -320,6 +320,9 @@ function positionWindowNearTray(): void {
 }
 
 function createWindow(): void {
+  const preloadPath = path.join(__dirname, "preload.js");
+  log.info("Preload path:", preloadPath);
+
   mainWindow = new BrowserWindow({
     width: 420,
     height: 700,
@@ -327,14 +330,12 @@ function createWindow(): void {
     minHeight: 500,
     show: false,
     resizable: true,
-    frame: false,
-    transparent: false,
     skipTaskbar: true,
     title: "DJ Bridge",
     titleBarStyle: "hiddenInset",
     vibrancy: "sidebar",
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -347,6 +348,13 @@ function createWindow(): void {
 
   mainWindow.webContents.on("did-finish-load", () => {
     log.info("Renderer loaded successfully");
+    mainWindow?.webContents.executeJavaScript(
+      `JSON.stringify({ bridge: typeof window.bridge, _preloadOk: window._preloadOk, _preloadError: window._preloadError })`
+    ).then((result) => {
+      log.info("Preload check from renderer:", result);
+    }).catch((err) => {
+      log.error("Failed to check preload state:", String(err));
+    });
   });
 
   mainWindow.webContents.on("did-fail-load", (_e, code, desc) => {
@@ -357,12 +365,6 @@ function createWindow(): void {
     if (!isQuitting) {
       e.preventDefault();
       mainWindow?.hide();
-    }
-  });
-
-  mainWindow.on("blur", () => {
-    if (mainWindow && !mainWindow.webContents.isDevToolsOpened()) {
-      mainWindow.hide();
     }
   });
 }
