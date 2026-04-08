@@ -501,13 +501,12 @@ export function RequestPage() {
       ) : null}
       {eventData.nowPlayingSlots?.some((slot) => slot.active && slot.songTitle) ? (
         <section className="mt-3 rounded-2xl border border-white/20 bg-black/30 p-5">
-          <h2 className="text-lg font-semibold">Now Playing Across DJs</h2>
+          <h2 className="text-lg font-semibold">Now Playing</h2>
           <div className="mt-2 grid gap-2 md:grid-cols-3">
             {eventData.nowPlayingSlots
               .filter((slot) => slot.active && slot.songTitle)
               .map((slot) => (
                 <div key={slot.id} className="rounded-lg border border-slate-700 bg-slate-950/40 p-3">
-                  <p className="text-xs uppercase tracking-wide text-slate-300">{slot.djName}</p>
                   <p className="mt-1 text-sm font-semibold">{slot.songTitle}</p>
                   <p className="text-xs text-slate-300">{slot.artistName || "Unknown artist"}</p>
                 </div>
