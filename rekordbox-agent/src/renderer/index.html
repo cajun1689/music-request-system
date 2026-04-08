@@ -621,7 +621,9 @@
         : (s.softwareType === "auto" ? "Auto-detect" : s.softwareType);
       el("software-label").textContent = swLabel;
 
-      el("db-label").textContent = s.dbPath || "Not found";
+      el("db-label").textContent = s.dbPath
+        ? s.dbPath.split("/").slice(-2).join("/")
+        : "Not found";
       el("queue-label").textContent = s.queueSize + " pending";
 
       if (s.lastTrack) {

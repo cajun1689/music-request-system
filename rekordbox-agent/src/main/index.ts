@@ -216,7 +216,10 @@ async function readTrackForSoftware(
     return readCurrentTrack(dbPath, config.sqlcipherKey || undefined);
   }
 
-  return readCurrentSeratoTrack(config.musicLibraryPath || undefined);
+  const customPath = config.musicLibraryPath || undefined;
+  const sessDir = resolveSeratoSessionDir(customPath);
+  status.dbPath = sessDir;
+  return readCurrentSeratoTrack(customPath);
 }
 
 async function pollOnce(): Promise<void> {
