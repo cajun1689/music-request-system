@@ -927,7 +927,11 @@
         btnCheck.textContent = "Checking…";
       } else if (us.error) {
         badge.style.display = "none";
-        msg.textContent = "Update check failed: " + us.error;
+        var errText = us.error;
+        if (errText.indexOf("read-only volume") !== -1) {
+          errText = "Move DJ Bridge to /Applications before updating. Running from a DMG or Downloads folder prevents updates.";
+        }
+        msg.textContent = errText;
         progressRow.style.display = "none";
         btnInstall.style.display = "none";
         btnCheck.style.display = "";

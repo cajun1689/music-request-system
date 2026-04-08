@@ -87,7 +87,7 @@ function sendStatus(): void {
 }
 
 function trackKey(t: TrackInfo): string {
-  return `${t.artist}::${t.title}::${t.playedAt}`;
+  return `${t.artist}::${t.title}`;
 }
 
 function showNotification(title: string, body: string): void {

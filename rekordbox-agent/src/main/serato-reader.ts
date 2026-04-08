@@ -267,12 +267,23 @@ export async function readSeratoLibrary(): Promise<LibraryTrack[]> {
   return tracks;
 }
 
+const STALE_SESSION_MS = 5 * 60 * 1000; // 5 minutes
+
 export async function readCurrentSeratoTrack(): Promise<TrackInfo | null> {
   const sessDir = resolveSeratoSessionDir();
   if (!sessDir) return null;
 
   const latestFile = findLatestSessionFile(sessDir);
   if (!latestFile) return null;
+
+  try {
+    const stat = fs.statSync(latestFile);
+    if (Date.now() - stat.mtimeMs > STALE_SESSION_MS) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
 
   const entries = parseSessionFile(latestFile);
   if (!entries.length) return null;
