@@ -27,6 +27,7 @@ export interface LivePlaylistSource {
 }
 
 export interface AutoMatchSourceState {
+  lastPushedTrackNorm?: string;
   lastMatchedTrackNorm?: string;
   lastMatchedAt?: string;
 }

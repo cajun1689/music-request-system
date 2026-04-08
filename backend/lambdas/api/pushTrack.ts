@@ -108,8 +108,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const sourceDjName = matchingSource?.djName || matchingSource?.name || PUSH_SOURCE_ID;
 
   const trackNorm = normalize(`${input.artist ?? ""} ${input.title}`);
-  const lastMatched = eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.lastMatchedTrackNorm;
-  if (trackNorm && lastMatched && trackNorm === lastMatched) {
+  const lastPushed = eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.lastPushedTrackNorm
+    ?? eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.lastMatchedTrackNorm;
+  if (trackNorm && lastPushed && trackNorm === lastPushed) {
     return json(200, { matched: false, reason: "Duplicate track, already processed." });
   }
 
@@ -154,12 +155,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         TableName: env.eventsTableName,
         Key: { eventId },
         UpdateExpression:
-          "SET #ams.#sid.#lmtn = :tn, #ams.#sid.#lma = :now, updatedAt = :now",
+          "SET #ams.#sid.#lptn = :tn, updatedAt = :now",
         ExpressionAttributeNames: {
           "#ams": "autoMatchState",
           "#sid": PUSH_SOURCE_ID,
-          "#lmtn": "lastMatchedTrackNorm",
-          "#lma": "lastMatchedAt",
+          "#lptn": "lastPushedTrackNorm",
         },
         ExpressionAttributeValues: { ":tn": trackNorm, ":now": now },
       }),
@@ -259,6 +259,26 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       ReturnValues: "ALL_NEW",
     }),
   );
+
+  try {
+    await docClient.send(
+      new UpdateCommand({
+        TableName: env.eventsTableName,
+        Key: { eventId },
+        UpdateExpression:
+          "SET #ams.#sid.#lmtn = :tn, #ams.#sid.#lma = :now",
+        ExpressionAttributeNames: {
+          "#ams": "autoMatchState",
+          "#sid": PUSH_SOURCE_ID,
+          "#lmtn": "lastMatchedTrackNorm",
+          "#lma": "lastMatchedAt",
+        },
+        ExpressionAttributeValues: { ":tn": trackNorm, ":now": now },
+      }),
+    );
+  } catch {
+    // Non-fatal
+  }
 
   return json(200, {
     matched: true,

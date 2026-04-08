@@ -784,17 +784,31 @@ export function DashboardPage() {
             ) : null}
             {(() => {
               const pushState = eventData?.autoMatchState?.["rekordbox-push"];
-              if (!pushState?.lastMatchedAt) return null;
-              const ago = Math.round(
-                (Date.now() - new Date(pushState.lastMatchedAt).getTime()) / 1000,
-              );
-              const agoLabel = ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)}m ago`;
+              if (!pushState) return null;
+              const hasMatch = pushState.lastMatchedAt && pushState.lastMatchedTrackNorm;
+              const hasPush = pushState.lastPushedTrackNorm;
+              if (!hasMatch && !hasPush) return null;
               return (
                 <div className="mt-3 rounded border border-indigo-500/40 bg-indigo-950/20 p-2 text-xs">
-                  <p className="font-semibold text-indigo-300">Rekordbox Bridge (push)</p>
-                  <p className="mt-1 text-slate-300">
-                    Last match: {pushState.lastMatchedTrackNorm ?? "unknown"} ({agoLabel})
-                  </p>
+                  <p className="font-semibold text-indigo-300">DJ Bridge (push)</p>
+                  {hasPush ? (
+                    <p className="mt-1 text-slate-400">
+                      Now playing: {pushState.lastPushedTrackNorm}
+                    </p>
+                  ) : null}
+                  {hasMatch ? (() => {
+                    const ago = Math.round(
+                      (Date.now() - new Date(pushState.lastMatchedAt!).getTime()) / 1000,
+                    );
+                    const agoLabel = ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)}m ago`;
+                    return (
+                      <p className="mt-1 text-emerald-300">
+                        Last match: {pushState.lastMatchedTrackNorm} ({agoLabel})
+                      </p>
+                    );
+                  })() : (
+                    <p className="mt-1 text-slate-500">No request matches yet</p>
+                  )}
                 </div>
               );
             })()}
