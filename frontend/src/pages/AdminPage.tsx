@@ -657,9 +657,9 @@ export function AdminPage() {
               ))}
             </div>
             <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
-              <h3 className="text-sm font-semibold">Rekordbox Bridge Token</h3>
+              <h3 className="text-sm font-semibold">DJ Bridge Token (Rekordbox &amp; Serato)</h3>
               <p className="text-xs text-slate-400">
-                Paste this token into the Rekordbox Bridge Mac app to auto-push now-playing tracks.
+                Paste this token into the DJ Bridge Mac app to auto-push now-playing tracks. All DJs at this event share the same token.
               </p>
               {eventData.pushToken ? (
                 <div className="flex items-center gap-2">
@@ -688,7 +688,7 @@ export function AdminPage() {
                         .updateEvent(eventData.eventId, { pushToken: newToken } as Partial<EventRecord>, session.idToken)
                         .then((updated) => {
                           setEventData(updated);
-                          setMessage("Push token rotated. Update the bridge app with the new token.");
+                          setMessage("Push token rotated. Update all DJ Bridge apps with the new token.");
                         })
                         .catch((err) => setMessage(`Failed: ${(err as Error).message}`))
                         .finally(() => setSaving(false));
@@ -833,7 +833,7 @@ export function AdminPage() {
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400">Rekordbox (Bridge App)</label>
+                <label className="text-xs font-medium text-slate-400">DJ Bridge (Rekordbox / Serato)</label>
                 <div className="flex gap-2">
                   <input
                     className="w-1/3 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
