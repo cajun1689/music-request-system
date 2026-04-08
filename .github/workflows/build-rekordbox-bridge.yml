@@ -72,6 +72,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.CSC_LINK != '' && 'true' || 'false' }}
 
+      - name: Update release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#dj-bridge-v}"
+          # Find the release (electron-builder may create tag as v$VERSION)
+          RELEASE_TAG="$TAG"
+          gh release view "$RELEASE_TAG" > /dev/null 2>&1 || RELEASE_TAG="v${VERSION}"
+          gh release edit "$RELEASE_TAG" --draft=false --title "DJ Bridge v${VERSION}" --notes-file release-notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: List build output
         run: ls -la out/ || true
 
