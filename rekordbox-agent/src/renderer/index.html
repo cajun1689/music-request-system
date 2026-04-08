@@ -525,8 +525,9 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    const bridge = window.bridge;
-    const el = (id) => document.getElementById(id);
+  (function() {
+    var bridge = window.bridge;
+    var el = function(id) { return document.getElementById(id); };
 
     // ── Activity Log ─────────────────────────────────────────
     let logEntries = 0;
@@ -1007,6 +1008,7 @@
       loadConfig();
       loadStatus();
     }
+  })();
   </script>
 </body>
 </html>

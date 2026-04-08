@@ -40,6 +40,10 @@ import {
 
 log.info("DJ Bridge starting", { version: app.getVersion() });
 
+process.on("unhandledRejection", (reason) => {
+  log.error("Unhandled rejection:", String(reason));
+});
+
 let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
