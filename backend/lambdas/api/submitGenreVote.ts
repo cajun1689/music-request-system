@@ -21,13 +21,26 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   }
 
   const now = new Date().toISOString();
-  const result = await docClient.send(
+
+  await docClient.send(
     new UpdateCommand({
       TableName: env.eventsTableName,
       Key: { eventId },
       ConditionExpression: "attribute_exists(eventId)",
       UpdateExpression:
-        "SET genreVotes.#genre = if_not_exists(genreVotes.#genre, :zero) + :inc, genreVotesTotal = if_not_exists(genreVotesTotal, :zero) + :inc, updatedAt = :updatedAt",
+        "SET genreVotes = if_not_exists(genreVotes, :emptyVotes)",
+      ExpressionAttributeValues: {
+        ":emptyVotes": { hip_hop: 0, country: 0, edm: 0 },
+      },
+    }),
+  );
+
+  const result = await docClient.send(
+    new UpdateCommand({
+      TableName: env.eventsTableName,
+      Key: { eventId },
+      UpdateExpression:
+        "SET genreVotes.#genre = genreVotes.#genre + :inc, genreVotesTotal = if_not_exists(genreVotesTotal, :zero) + :inc, updatedAt = :updatedAt",
       ExpressionAttributeNames: {
         "#genre": input.genre,
       },
