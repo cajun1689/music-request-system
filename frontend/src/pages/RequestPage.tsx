@@ -275,7 +275,7 @@ export function RequestPage() {
     return <div className="p-6 text-slate-200">Loading event...</div>;
   }
 
-  const { votes: genreVotes, total: genreVoteTotal } = normalizeGenreVotes(eventData);
+  const { total: genreVoteTotal } = normalizeGenreVotes(eventData);
 
   return (
     <BrandedLayout event={eventData} title="Request a Song" subtitle="Your request goes to the DJ team for approval">
@@ -306,11 +306,9 @@ export function RequestPage() {
         <p className="mt-2 text-xs text-slate-300">
           {votedGenre ? `Your vote: ${GENRE_LABELS[votedGenre]}. Tap another to change it.` : "Tap a genre to vote. You can change your mind anytime."}
         </p>
-        <p className="mt-2 text-xs text-slate-300">
-          Votes: {genreVoteTotal} | Hip Hop {genreVoteTotal ? Math.round((genreVotes.hip_hop / genreVoteTotal) * 100) : 0}% |
-          Country {genreVoteTotal ? Math.round((genreVotes.country / genreVoteTotal) * 100) : 0}% | EDM{" "}
-          {genreVoteTotal ? Math.round((genreVotes.edm / genreVoteTotal) * 100) : 0}%
-        </p>
+        {genreVoteTotal > 0 ? (
+          <p className="mt-2 text-xs text-slate-500">{genreVoteTotal} vote{genreVoteTotal === 1 ? "" : "s"} so far</p>
+        ) : null}
       </section>
       <form onSubmit={onSubmit} className="space-y-3 rounded-2xl border border-white/20 bg-black/30 p-5">
         <label className="block text-sm">
