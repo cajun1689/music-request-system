@@ -100,10 +100,10 @@ export const api = {
     );
   },
 
-  submitGenreVote(eventId: string, genre: GenreName) {
+  submitGenreVote(eventId: string, genre: GenreName, previousGenre?: GenreName) {
     return request<EventRecord>(`/events/${eventId}/genre-votes`, {
       method: "POST",
-      body: JSON.stringify({ genre }),
+      body: JSON.stringify({ genre, previousGenre }),
     });
   },
 

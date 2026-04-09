@@ -255,12 +255,12 @@ export function RequestPage() {
   }
 
   async function onVoteGenre(genre: GenreName) {
-    if (!eventId || voteBusy || votedGenre) {
+    if (!eventId || voteBusy || genre === votedGenre) {
       return;
     }
     setVoteBusy(true);
     try {
-      const updatedEvent = await api.submitGenreVote(eventId, genre);
+      const updatedEvent = await api.submitGenreVote(eventId, genre, votedGenre ?? undefined);
       setEventData(updatedEvent);
       setVotedGenre(genre);
       localStorage.setItem(voteKey, genre);
@@ -289,20 +289,22 @@ export function RequestPage() {
             <button
               key={genre}
               type="button"
-              disabled={voteBusy || Boolean(votedGenre)}
+              disabled={voteBusy || genre === votedGenre}
               onClick={() => void onVoteGenre(genre)}
-              className={`rounded-md px-3 py-1.5 text-sm font-semibold ${
+              className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
                 votedGenre === genre
                   ? "bg-emerald-400 text-emerald-950"
-                  : "bg-slate-800 text-slate-100 disabled:opacity-60"
-              }`}
+                  : votedGenre
+                    ? "bg-slate-700 text-slate-200 hover:bg-slate-600"
+                    : "bg-slate-800 text-slate-100"
+              } disabled:opacity-60`}
             >
               {GENRE_LABELS[genre]}
             </button>
           ))}
         </div>
         <p className="mt-2 text-xs text-slate-300">
-          {votedGenre ? `Thanks for voting: ${GENRE_LABELS[votedGenre]}.` : "You can vote once per device for this event."}
+          {votedGenre ? `Your vote: ${GENRE_LABELS[votedGenre]}. Tap another to change it.` : "Tap a genre to vote. You can change your mind anytime."}
         </p>
         <p className="mt-2 text-xs text-slate-300">
           Votes: {genreVoteTotal} | Hip Hop {genreVoteTotal ? Math.round((genreVotes.hip_hop / genreVoteTotal) * 100) : 0}% |
