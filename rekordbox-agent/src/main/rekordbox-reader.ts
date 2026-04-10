@@ -1,7 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import Database from "better-sqlite3";
+import * as zlib from "zlib";
+import Database from "better-sqlite3-multiple-ciphers";
 
 export interface TrackInfo {
   title: string;
@@ -23,6 +24,49 @@ const HISTORY_QUERY = `
   ORDER BY h.created_at DESC
   LIMIT 1
 `;
+
+// Rekordbox 6/7 obfuscated database password (same across all installations)
+const RB_BLOB = Buffer.from(
+  "PN_Pq^*N>(JYe*u^8;Yg76HuZ)b9;DpoTXV(6ItkU`}8*m6tx_I{Solh_N#dfe{v=",
+  "ascii",
+);
+const RB_BLOB_KEY = Buffer.from("657f48f84c437cc1", "ascii");
+
+function base85Decode(input: Buffer): Buffer {
+  const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
+  const str = input.toString("ascii");
+  const result: number[] = [];
+  for (let i = 0; i < str.length; i += 5) {
+    let acc = 0;
+    for (let j = 0; j < 5 && i + j < str.length; j++) {
+      const idx = chars.indexOf(str[i + j]);
+      acc = acc * 85 + (idx >= 0 ? idx : 0);
+    }
+    const chunkSize = Math.min(4, Math.floor(((str.length - i) * 4) / 5));
+    for (let j = 3; j >= 4 - chunkSize; j--) {
+      result.push((acc >> (j * 8)) & 0xff);
+    }
+  }
+  return Buffer.from(result);
+}
+
+function deobfuscateRekordboxKey(): string {
+  const data = base85Decode(RB_BLOB);
+  const xored = Buffer.alloc(data.length);
+  for (let i = 0; i < data.length; i++) {
+    xored[i] = data[i] ^ RB_BLOB_KEY[i % RB_BLOB_KEY.length];
+  }
+  return zlib.inflateSync(xored).toString("utf8");
+}
+
+let cachedRbKey: string | null = null;
+
+export function getRekordboxKey(): string {
+  if (!cachedRbKey) {
+    cachedRbKey = deobfuscateRekordboxKey();
+  }
+  return cachedRbKey;
+}
 
 function findOptionsJson(): string | null {
   const candidates = [
@@ -98,14 +142,33 @@ const LIBRARY_QUERY = `
   ORDER BY playCount DESC
 `;
 
+function openDatabase(dbPath: string, sqlcipherKey?: string): Database.Database {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  db.pragma("journal_mode = WAL");
+
+  const key = sqlcipherKey || getRekordboxKey();
+
+  try {
+    db.pragma(`cipher='sqlcipher'`);
+    db.pragma(`legacy=4`);
+    db.pragma(`key='${key.replace(/'/g, "''")}'`);
+    db.prepare("SELECT count(*) FROM sqlite_master").get();
+    return db;
+  } catch {
+    // Key didn't work — try without encryption (Rekordbox 5 / unencrypted DB)
+    try { db.close(); } catch { /* ignore */ }
+  }
+
+  const plainDb = new Database(dbPath, { readonly: true, fileMustExist: true });
+  plainDb.pragma("journal_mode = WAL");
+  plainDb.prepare("SELECT count(*) FROM sqlite_master").get();
+  return plainDb;
+}
+
 export async function readRekordboxLibrary(dbPath: string, sqlcipherKey?: string): Promise<LibraryTrack[]> {
   let db: Database.Database | null = null;
   try {
-    db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    db.pragma("journal_mode = WAL");
-    if (sqlcipherKey) {
-      db.pragma(`key = '${sqlcipherKey.replace(/'/g, "''")}'`);
-    }
+    db = openDatabase(dbPath, sqlcipherKey);
     const rows = db.prepare(LIBRARY_QUERY).all() as Array<{
       title: string;
       artist: string | null;
@@ -127,12 +190,7 @@ export async function readCurrentTrack(dbPath: string, sqlcipherKey?: string): P
   for (let attempt = 0; attempt < MAX_BUSY_RETRIES; attempt++) {
     let db: Database.Database | null = null;
     try {
-      db = new Database(dbPath, { readonly: true, fileMustExist: true });
-      db.pragma("journal_mode = WAL");
-
-      if (sqlcipherKey) {
-        db.pragma(`key = '${sqlcipherKey.replace(/'/g, "''")}'`);
-      }
+      db = openDatabase(dbPath, sqlcipherKey);
 
       const row = db.prepare(HISTORY_QUERY).get() as {
         title: string;
