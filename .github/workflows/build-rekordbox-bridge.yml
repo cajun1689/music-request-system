@@ -30,6 +30,9 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install Python setuptools (needed by node-gyp on Python 3.12+)
+        run: pip3 install setuptools
+
       - name: Install dependencies (skip native compile)
         run: npm ci --ignore-scripts
 
