@@ -336,6 +336,113 @@
       color: #fca5a5;
       line-height: 1.6;
     }
+
+    .tab-bar {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 10px;
+      background: var(--input-bg);
+      border-radius: 6px;
+      padding: 2px;
+    }
+    .tab-bar button {
+      flex: 1;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .tab-bar button.active {
+      background: var(--card-border);
+      color: var(--text);
+    }
+    .tab-bar button:hover:not(.active) {
+      color: var(--text-dim);
+    }
+
+    .request-list {
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    .request-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 6px;
+      background: var(--input-bg);
+      margin-bottom: 6px;
+    }
+    .request-item:last-child { margin-bottom: 0; }
+    .request-info { flex: 1; min-width: 0; }
+    .request-song {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .request-artist {
+      font-size: 11px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .request-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .request-actions {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .request-actions button {
+      border: none;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.15s;
+    }
+    .request-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-approve {
+      background: rgba(34,197,94,0.15);
+      color: var(--green);
+    }
+    .btn-approve:hover:not(:disabled) { background: rgba(34,197,94,0.25); }
+    .btn-veto {
+      background: rgba(239,68,68,0.1);
+      color: #fca5a5;
+    }
+    .btn-veto:hover:not(:disabled) { background: rgba(239,68,68,0.2); }
+    .request-tip {
+      display: inline-block;
+      background: rgba(34,197,94,0.12);
+      color: var(--green);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-left: 4px;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 16px 8px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
@@ -378,6 +485,24 @@
       <div class="btn-row">
         <button class="btn secondary" id="btn-poll">Poll Now</button>
         <button class="btn secondary" id="btn-find-db">Detect Source</button>
+      </div>
+    </div>
+
+    <!-- Requests Card -->
+    <div class="card" id="requests-card">
+      <div class="card-header">
+        <span class="card-title">Requests</span>
+        <span style="font-size:10px; color:var(--text-muted);" id="requests-count"></span>
+      </div>
+      <div class="tab-bar">
+        <button class="active" id="tab-pending" data-tab="pending">Pending</button>
+        <button id="tab-approved" data-tab="approved">Approved</button>
+      </div>
+      <div id="requests-list" class="request-list">
+        <div class="empty-state">Loading requests…</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary" id="btn-refresh-requests" style="font-size:11px; padding:5px 10px;">Refresh</button>
       </div>
     </div>
 
@@ -1073,6 +1198,140 @@
       if (bridge) await bridge.openLogs();
     });
 
+    // ── Requests Management ────────────────────────────────────
+    var currentRequestTab = "pending";
+    var requestsCache = [];
+    var requestsRefreshTimer = null;
+
+    function renderRequests(requests) {
+      var list = el("requests-list");
+      var filtered = requests.filter(function(r) { return r.status === currentRequestTab; });
+      el("requests-count").textContent = filtered.length + " " + currentRequestTab;
+
+      if (!filtered.length) {
+        list.innerHTML = '<div class="empty-state">No ' + currentRequestTab + ' requests</div>';
+        return;
+      }
+
+      list.innerHTML = "";
+      filtered.forEach(function(req) {
+        var item = document.createElement("div");
+        item.className = "request-item";
+
+        var info = document.createElement("div");
+        info.className = "request-info";
+
+        var song = document.createElement("div");
+        song.className = "request-song";
+        song.textContent = req.songTitle || "Unknown Song";
+        if (req.tipAmount && req.tipAmount > 0) {
+          var tip = document.createElement("span");
+          tip.className = "request-tip";
+          tip.textContent = "$" + req.tipAmount.toFixed(2);
+          song.appendChild(tip);
+        }
+
+        var artist = document.createElement("div");
+        artist.className = "request-artist";
+        artist.textContent = req.artistName || "Unknown Artist";
+
+        var meta = document.createElement("div");
+        meta.className = "request-meta";
+        var parts = [];
+        if (req.requesterName) parts.push(req.requesterName);
+        if (req.submittedAt) parts.push(new Date(req.submittedAt).toLocaleTimeString());
+        meta.textContent = parts.join(" · ");
+
+        info.appendChild(song);
+        info.appendChild(artist);
+        info.appendChild(meta);
+        item.appendChild(info);
+
+        var actions = document.createElement("div");
+        actions.className = "request-actions";
+
+        if (currentRequestTab === "pending") {
+          var approveBtn = document.createElement("button");
+          approveBtn.className = "btn-approve";
+          approveBtn.textContent = "✓";
+          approveBtn.title = "Approve";
+          approveBtn.addEventListener("click", function() { handleReview(req.requestId, "approved", item); });
+
+          var vetoBtn = document.createElement("button");
+          vetoBtn.className = "btn-veto";
+          vetoBtn.textContent = "✗";
+          vetoBtn.title = "Veto";
+          vetoBtn.addEventListener("click", function() { handleReview(req.requestId, "vetoed", item); });
+
+          actions.appendChild(approveBtn);
+          actions.appendChild(vetoBtn);
+        } else if (currentRequestTab === "approved") {
+          var vetoBtn2 = document.createElement("button");
+          vetoBtn2.className = "btn-veto";
+          vetoBtn2.textContent = "Veto";
+          vetoBtn2.addEventListener("click", function() { handleReview(req.requestId, "vetoed", item); });
+          actions.appendChild(vetoBtn2);
+        }
+
+        item.appendChild(actions);
+        list.appendChild(item);
+      });
+    }
+
+    async function handleReview(requestId, newStatus, itemEl) {
+      var btns = itemEl.querySelectorAll("button");
+      btns.forEach(function(b) { b.disabled = true; });
+      try {
+        await bridge.reviewRequest(requestId, newStatus);
+        itemEl.style.opacity = "0.3";
+        itemEl.style.transition = "opacity 0.3s";
+        showToast(
+          (newStatus === "approved" ? "Approved" : "Vetoed") + " request",
+          newStatus === "approved" ? "success" : "info"
+        );
+        setTimeout(function() { loadRequests(); }, 500);
+      } catch (err) {
+        btns.forEach(function(b) { b.disabled = false; });
+        showToast("Review failed: " + (err.message || err), "error", 8000);
+      }
+    }
+
+    async function loadRequests() {
+      if (!bridge || !bridge.fetchRequests) return;
+      try {
+        var requests = await bridge.fetchRequests();
+        requestsCache = requests || [];
+        renderRequests(requestsCache);
+      } catch (err) {
+        el("requests-list").innerHTML = '<div class="empty-state" style="color:#fca5a5;">Failed to load requests</div>';
+      }
+    }
+
+    document.querySelectorAll(".tab-bar button").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        document.querySelectorAll(".tab-bar button").forEach(function(b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        currentRequestTab = btn.getAttribute("data-tab");
+        renderRequests(requestsCache);
+      });
+    });
+
+    if (bridge) {
+      el("btn-refresh-requests").addEventListener("click", function() {
+        var btn = el("btn-refresh-requests");
+        btn.disabled = true;
+        btn.textContent = "Loading…";
+        loadRequests().then(function() {
+          showToast("Requests refreshed", "success");
+        }).finally(function() {
+          btn.disabled = false;
+          btn.textContent = "Refresh";
+        });
+      });
+
+      requestsRefreshTimer = setInterval(loadRequests, 15000);
+    }
+
     if (bridge) {
       bridge.onMainLog((entry) => {
         const levelColors = { error: "error", warn: "warn", info: "info", verbose: "info", debug: "info", silly: "info" };
@@ -1090,6 +1349,7 @@
       });
       loadConfig();
       loadStatus();
+      loadRequests();
     }
   })();
   </script>

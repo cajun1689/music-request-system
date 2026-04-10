@@ -134,6 +134,64 @@ export function queueSize(): number {
   return pendingQueue.length;
 }
 
+export interface RequestItem {
+  requestId: string;
+  eventId: string;
+  songTitle: string;
+  artistName: string;
+  requesterName?: string;
+  message?: string;
+  status: string;
+  tipAmount?: number;
+  submittedAt: string;
+}
+
+export async function fetchRequests(statusFilter?: string): Promise<RequestItem[]> {
+  const config = getConfig();
+  if (!config.eventId) return [];
+
+  const baseUrl = getApiBaseUrl();
+  let url = `${baseUrl}/events/${encodeURIComponent(config.eventId)}/requests`;
+  if (statusFilter) {
+    url += `?status=${encodeURIComponent(statusFilter)}`;
+  }
+
+  const response = await electronFetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch requests (${response.status})`);
+  }
+  return (await response.json()) as RequestItem[];
+}
+
+export async function reviewRequest(
+  requestId: string,
+  status: "approved" | "vetoed",
+): Promise<Record<string, unknown>> {
+  const config = getConfig();
+  if (!config.eventId || !config.pushToken) {
+    throw new Error("Event ID and Push Token must be configured.");
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/events/${encodeURIComponent(config.eventId)}/review-request`;
+
+  const response = await electronFetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-push-token": config.pushToken,
+    },
+    body: JSON.stringify({ requestId, status }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Review failed (${response.status}): ${text}`);
+  }
+
+  return (await response.json()) as Record<string, unknown>;
+}
+
 export interface LibrarySyncResult {
   trackCount: number;
   message: string;

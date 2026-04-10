@@ -26,7 +26,9 @@ import {
   enqueueTrack,
   fetchEvents,
   fetchEventSources,
+  fetchRequests,
   pushTrack,
+  reviewRequest,
   syncLibrary,
   queueSize,
   type PushResult,
@@ -679,6 +681,27 @@ ipcMain.handle("sync-library", async () => {
     return { error: message };
   }
 });
+
+ipcMain.handle("fetch-requests", async (_e, statusFilter?: string) => {
+  try {
+    const requests = await fetchRequests(statusFilter);
+    log.info("Fetched requests:", requests.length, "status:", statusFilter ?? "all");
+    return requests;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error("Failed to fetch requests:", message);
+    return [];
+  }
+});
+
+ipcMain.handle(
+  "review-request",
+  async (_e, requestId: string, newStatus: "approved" | "vetoed") => {
+    log.info("Review request:", requestId, "→", newStatus);
+    const result = await reviewRequest(requestId, newStatus);
+    return result;
+  },
+);
 
 ipcMain.handle("get-update-status", () => getUpdateStatus());
 

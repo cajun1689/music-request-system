@@ -249,6 +249,11 @@ export class InfrastructureStack extends Stack {
       "../../backend/lambdas/api/pushTrack.ts",
     );
 
+    const reviewRequestByTokenFn = makeLambda(
+      "ReviewRequestByTokenFn",
+      "../../backend/lambdas/api/reviewRequestByToken.ts",
+    );
+
     const syncLibraryFn = makeLambda(
       "SyncLibraryFn",
       "../../backend/lambdas/api/syncLibrary.ts",
@@ -455,6 +460,7 @@ export class InfrastructureStack extends Stack {
     const detectPlayedResource = eventByIdResource.addResource("detect-played");
     const autoDetectPlayedResource = eventByIdResource.addResource("auto-detect-played");
     const pushTrackResource = eventByIdResource.addResource("push-track");
+    const reviewRequestResource = eventByIdResource.addResource("review-request");
     const libraryResource = eventByIdResource.addResource("library");
     const genreVotesResource = eventByIdResource.addResource("genre-votes");
     const resetGenreVotesResource = genreVotesResource.addResource("reset");
@@ -505,6 +511,7 @@ export class InfrastructureStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
     pushTrackResource.addMethod("POST", new apigateway.LambdaIntegration(pushTrackFn));
+    reviewRequestResource.addMethod("POST", new apigateway.LambdaIntegration(reviewRequestByTokenFn));
     libraryResource.addMethod("POST", new apigateway.LambdaIntegration(syncLibraryFn));
     libraryResource.addMethod("GET", new apigateway.LambdaIntegration(getLibraryFn));
     genreVotesResource.addMethod("POST", new apigateway.LambdaIntegration(submitGenreVoteFn));
