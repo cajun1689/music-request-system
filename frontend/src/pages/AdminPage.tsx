@@ -22,7 +22,6 @@ const emptyForm = {
   seratoLiveUrl: "",
   seratoLiveUrl2: "",
   rekordboxLiveUrl: "",
-  venmoHandle: "",
   primaryColor: "#0f172a",
   secondaryColor: "#1e293b",
   accentColor: "#f97316",
@@ -33,7 +32,6 @@ const emptyEventDetails = {
   date: "",
   venueName: "",
   djBrandName: "",
-  venmoHandle: "",
   primaryColor: "#0f172a",
   secondaryColor: "#1e293b",
   accentColor: "#f97316",
@@ -119,7 +117,6 @@ export function AdminPage() {
         date: eventData.date ?? "",
         venueName: eventData.venueName ?? "",
         djBrandName: eventData.djBrandName ?? "",
-        venmoHandle: eventData.venmoHandle ?? "",
         primaryColor: eventData.primaryColor ?? "#0f172a",
         secondaryColor: eventData.secondaryColor ?? "#1e293b",
         accentColor: eventData.accentColor ?? "#f97316",
@@ -248,7 +245,6 @@ export function AdminPage() {
               active: Boolean(form.rekordboxLiveUrl),
             },
           ],
-          venmoHandle: form.venmoHandle,
           primaryColor: form.primaryColor,
           secondaryColor: form.secondaryColor,
           accentColor: form.accentColor,
@@ -303,7 +299,6 @@ export function AdminPage() {
               active: Boolean(form.rekordboxLiveUrl),
             },
           ],
-          venmoHandle: form.venmoHandle,
           primaryColor: form.primaryColor,
           secondaryColor: form.secondaryColor,
           accentColor: form.accentColor,
@@ -401,7 +396,6 @@ export function AdminPage() {
             { id: "serato-b", name: "Serato B", djName: serato2DjName || undefined, type: "serato", url: seratoLiveUrl2Edit, active: Boolean(seratoLiveUrl2Edit) },
             { id: "rekordbox", name: "Rekordbox", djName: rekordboxDjName || undefined, type: "rekordbox", url: rekordboxLiveUrlEdit, active: Boolean(rekordboxLiveUrlEdit || rekordboxDjName) },
           ],
-          venmoHandle: eventDetails.venmoHandle.replace("@", "").trim(),
           primaryColor: eventDetails.primaryColor,
           secondaryColor: eventDetails.secondaryColor,
           accentColor: eventDetails.accentColor,
@@ -578,17 +572,6 @@ export function AdminPage() {
             value={form.seratoLiveUrl2}
             onChange={(e) => setForm((prev) => ({ ...prev, seratoLiveUrl2: e.target.value.trim() }))}
           />
-          <input
-            className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-            placeholder="Venmo Handle (without @)"
-            value={form.venmoHandle}
-            onChange={(e) =>
-              setForm((prev) => ({
-                ...prev,
-                venmoHandle: e.target.value.replace("@", "").trim(),
-              }))
-            }
-          />
           <div className="grid grid-cols-3 gap-2">
             <label className="text-xs">
               Primary
@@ -636,9 +619,6 @@ export function AdminPage() {
                 Recurring residency enabled. Keep this same QR each week.
               </p>
             ) : null}
-            <p className="text-sm text-emerald-300">
-              Venmo: {eventData.venmoHandle ? `@${eventData.venmoHandle}` : "not set"}
-            </p>
             <p className="text-sm text-sky-300">
               Serato Live: {eventData.seratoLiveUrl ? "configured" : "not set"}
             </p>
@@ -745,17 +725,6 @@ export function AdminPage() {
                 placeholder="DJ Brand Name"
                 value={eventDetails.djBrandName}
                 onChange={(e) => setEventDetails((prev) => ({ ...prev, djBrandName: e.target.value }))}
-              />
-              <input
-                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-                placeholder="Venmo Handle (without @)"
-                value={eventDetails.venmoHandle}
-                onChange={(e) =>
-                  setEventDetails((prev) => ({
-                    ...prev,
-                    venmoHandle: e.target.value.replace("@", ""),
-                  }))
-                }
               />
               <div className="grid grid-cols-3 gap-2">
                 <label className="text-xs">

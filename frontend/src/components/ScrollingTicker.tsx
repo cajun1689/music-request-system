@@ -1,7 +1,7 @@
 export function ScrollingTicker({
   items,
   accentColor,
-  emptyMessage = "Scan The QR Code To Request A Song",
+  emptyMessage = "SCAN THE QR CODE TO REQUEST A SONG & PICK TONIGHT'S GENRE",
 }: {
   items: string[];
   accentColor: string;

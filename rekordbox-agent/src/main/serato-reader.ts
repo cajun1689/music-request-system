@@ -312,7 +312,7 @@ export async function readSeratoLibrary(customPath?: string): Promise<LibraryTra
   return tracks;
 }
 
-const STALE_SESSION_MS = 5 * 60 * 1000; // 5 minutes
+const STALE_SESSION_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 export async function readCurrentSeratoTrack(customPath?: string): Promise<TrackInfo | null> {
   const sessDir = resolveSeratoSessionDir(customPath);

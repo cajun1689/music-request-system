@@ -14,8 +14,6 @@ export function RequestPage() {
   const [requesterName, setRequesterName] = useState("");
   const [message, setMessage] = useState("");
   const [tipAmount, setTipAmount] = useState("");
-  const [paymentReference, setPaymentReference] = useState("");
-  const [confirmPaid, setConfirmPaid] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [voteBusy, setVoteBusy] = useState(false);
@@ -24,25 +22,7 @@ export function RequestPage() {
   const [votedGenre, setVotedGenre] = useState<GenreName | null>(null);
   const handlingPaypalReturnRef = useRef(false);
 
-  function buildVenmoParams() {
-    if (!eventData?.venmoHandle) {
-      return null;
-    }
-
-    const params = new URLSearchParams({
-      txn: "pay",
-      recipients: eventData.venmoHandle,
-    });
-    if (tipAmount) {
-      params.set("amount", tipAmount);
-    }
-    if (songTitle) {
-      params.set("note", `Song request: ${songTitle}`);
-    }
-    return params;
-  }
-
-  async function createGuestRequest(preferPendingVerification: boolean) {
+  async function createGuestRequest(pendingPayment = false) {
     if (!eventId || !eventData) {
       throw new Error("Event is still loading. Please try again.");
     }
@@ -52,10 +32,7 @@ export function RequestPage() {
       requesterName,
       message,
       tipAmount: tipAmount ? Number(tipAmount) : undefined,
-      venmoHandle: eventData.venmoHandle,
-      paymentReference: paymentReference || undefined,
-      paymentStatus:
-        tipAmount && (preferPendingVerification || confirmPaid) ? "pending_verification" : "unpaid",
+      paymentStatus: tipAmount && pendingPayment ? "pending_verification" : "unpaid",
     });
 
     localStorage.setItem(trackedRequestKey, created.requestId);
@@ -63,53 +40,6 @@ export function RequestPage() {
     setSongsAway(null);
     localStorage.setItem(lockKey, String(Date.now() + 2 * 60 * 1000));
     return created;
-  }
-
-  async function openVenmo() {
-    const params = buildVenmoParams();
-    if (!params) {
-      return;
-    }
-
-    if (!eventId || !eventData) {
-      setFeedback("Event is still loading. Please try again.");
-      return;
-    }
-    if (!songTitle.trim() || !artistName.trim()) {
-      setFeedback("Enter song title and artist before opening Venmo.");
-      return;
-    }
-
-    const lockedUntil = Number(localStorage.getItem(lockKey) ?? "0");
-    if (Date.now() >= lockedUntil) {
-      setSubmitting(true);
-      try {
-        await createGuestRequest(true);
-        setFeedback("Request saved. Complete Venmo payment, then return to this page.");
-      } catch (err) {
-        setFeedback(`Could not save request before opening Venmo: ${(err as Error).message}`);
-        setSubmitting(false);
-        return;
-      } finally {
-        setSubmitting(false);
-      }
-    }
-
-    const appUrl = `venmo://paycharge?${params.toString()}`;
-    const webUrl = `https://account.venmo.com/pay?${params.toString()}`;
-    const fallbackTimer = window.setTimeout(() => {
-      window.location.href = webUrl;
-    }, 900);
-
-    const cancelFallback = () => {
-      window.clearTimeout(fallbackTimer);
-      document.removeEventListener("visibilitychange", cancelFallback);
-      window.removeEventListener("pagehide", cancelFallback);
-    };
-
-    document.addEventListener("visibilitychange", cancelFallback);
-    window.addEventListener("pagehide", cancelFallback);
-    window.location.href = appUrl;
   }
 
   useEffect(() => {
@@ -192,7 +122,7 @@ export function RequestPage() {
     };
 
     if (paypalState === "cancel") {
-      setFeedback("Payment canceled. Your request is still in queue and can be paid later.");
+      setFeedback("Payment canceled. Your request is still in queue.");
       clearQuery();
       return;
     }
@@ -238,14 +168,12 @@ export function RequestPage() {
 
     setSubmitting(true);
     try {
-      await createGuestRequest(false);
+      await createGuestRequest();
       setSongTitle("");
       setArtistName("");
       setRequesterName("");
       setMessage("");
       setTipAmount("");
-      setPaymentReference("");
-      setConfirmPaid(false);
       setFeedback("Request submitted. The DJs will review it shortly.");
     } catch (err) {
       setFeedback(`Request failed: ${(err as Error).message}`);
@@ -346,113 +274,83 @@ export function RequestPage() {
             rows={3}
           />
         </label>
-        {eventData.venmoHandle ? (
-          <div className="rounded-lg border border-emerald-400/40 bg-emerald-900/20 p-3">
-            <p className="text-sm font-semibold text-emerald-300">Tip to prioritize your request (optional)</p>
-            <p className="mt-1 text-xs text-emerald-100/90">
-              Send a Venmo tip to @{eventData.venmoHandle}. DJs can verify paid requests in their queue.
-            </p>
-            <label className="mt-2 block text-sm">
-              Tip amount (USD)
-              <input
-                className="mt-1 w-full rounded-md border border-white/25 bg-slate-950/50 px-3 py-2"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                value={tipAmount}
-                onChange={(e) => setTipAmount(e.target.value)}
-              />
-            </label>
-            <div className="mt-2">
-              <button
-                type="button"
-                className="inline-flex rounded-md bg-emerald-400 px-3 py-1.5 text-xs font-semibold text-emerald-950"
-                onClick={() => void openVenmo()}
-                disabled={submitting}
-              >
-                Open Venmo App (saves request first)
-              </button>
-            </div>
-            <div className="mt-2">
-              <button
-                type="button"
-                className="inline-flex rounded-md bg-indigo-400 px-3 py-1.5 text-xs font-semibold text-indigo-950 disabled:opacity-60"
-                disabled={submitting || !tipAmount || Number(tipAmount) <= 0}
-                onClick={() => {
-                  void (async () => {
-                    if (!eventId || !eventData) {
-                      setFeedback("Event is still loading. Please try again.");
-                      return;
-                    }
-                    if (!songTitle.trim() || !artistName.trim()) {
-                      setFeedback("Enter song title and artist before checkout.");
-                      return;
-                    }
-                    if (!tipAmount || Number(tipAmount) <= 0) {
-                      setFeedback("Enter a tip amount before checkout.");
-                      return;
-                    }
-                    const lockedUntil = Number(localStorage.getItem(lockKey) ?? "0");
-                    if (Date.now() < lockedUntil) {
-                      setFeedback("Please wait before sending another request.");
-                      return;
-                    }
+        <div className="rounded-lg border border-indigo-400/40 bg-indigo-900/20 p-3">
+          <p className="text-sm font-semibold text-indigo-300">Tip to prioritize your request (optional)</p>
+          <p className="mt-1 text-xs text-indigo-100/90">
+            Pay via PayPal to bump your request to the top. DJs can verify paid requests in their queue.
+          </p>
+          <label className="mt-2 block text-sm">
+            Tip amount (USD)
+            <input
+              className="mt-1 w-full rounded-md border border-white/25 bg-slate-950/50 px-3 py-2"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              value={tipAmount}
+              onChange={(e) => setTipAmount(e.target.value)}
+            />
+          </label>
+          <div className="mt-2">
+            <button
+              type="button"
+              className="inline-flex rounded-md bg-indigo-400 px-3 py-1.5 text-xs font-semibold text-indigo-950 disabled:opacity-60"
+              disabled={submitting || !tipAmount || Number(tipAmount) <= 0}
+              onClick={() => {
+                void (async () => {
+                  if (!eventId || !eventData) {
+                    setFeedback("Event is still loading. Please try again.");
+                    return;
+                  }
+                  if (!songTitle.trim() || !artistName.trim()) {
+                    setFeedback("Enter song title and artist before checkout.");
+                    return;
+                  }
+                  if (!tipAmount || Number(tipAmount) <= 0) {
+                    setFeedback("Enter a tip amount before checkout.");
+                    return;
+                  }
+                  const lockedUntil = Number(localStorage.getItem(lockKey) ?? "0");
+                  if (Date.now() < lockedUntil) {
+                    setFeedback("Please wait before sending another request.");
+                    return;
+                  }
 
-                    setSubmitting(true);
-                    try {
-                      const created = await createGuestRequest(true);
-                      const order = await api.createPaypalOrder(
-                        eventId,
-                        created.requestId,
-                        Number(tipAmount),
-                      );
-                      if (order.alreadyPaid) {
-                        setFeedback("This request is already marked paid.");
-                        setSubmitting(false);
-                        return;
-                      }
-                      if (!order.approveUrl) {
-                        throw new Error("Could not start checkout session.");
-                      }
-                      window.location.href = order.approveUrl;
-                    } catch (err) {
-                      setFeedback(`Checkout failed: ${(err as Error).message}`);
+                  setSubmitting(true);
+                  try {
+                    const created = await createGuestRequest(true);
+                    const order = await api.createPaypalOrder(
+                      eventId,
+                      created.requestId,
+                      Number(tipAmount),
+                    );
+                    if (order.alreadyPaid) {
+                      setFeedback("This request is already marked paid.");
                       setSubmitting(false);
+                      return;
                     }
-                  })();
-                }}
-              >
-                Pay with Venmo (auto-verify)
-              </button>
-            </div>
-            <label className="mt-3 block text-sm">
-              Venmo payment reference (optional)
-              <input
-                className="mt-1 w-full rounded-md border border-white/25 bg-slate-950/50 px-3 py-2"
-                placeholder="Last 4 chars, note, or @username"
-                value={paymentReference}
-                onChange={(e) => setPaymentReference(e.target.value)}
-              />
-            </label>
-            <label className="mt-2 flex items-center gap-2 text-xs text-emerald-100/90">
-              <input
-                type="checkbox"
-                checked={confirmPaid}
-                onChange={(e) => setConfirmPaid(e.target.checked)}
-                disabled={!tipAmount}
-              />
-              I sent this payment already
-            </label>
+                    if (!order.approveUrl) {
+                      throw new Error("Could not start checkout session.");
+                    }
+                    window.location.href = order.approveUrl;
+                  } catch (err) {
+                    setFeedback(`Checkout failed: ${(err as Error).message}`);
+                    setSubmitting(false);
+                  }
+                })();
+              }}
+            >
+              Pay with PayPal
+            </button>
           </div>
-        ) : null}
+        </div>
         <button
           type="submit"
           disabled={submitting}
           className="w-full rounded-lg px-4 py-2 font-semibold text-slate-900"
           style={{ backgroundColor: eventData.accentColor }}
         >
-          {submitting ? "Sending..." : "Send Request"}
+          {submitting ? "Sending..." : "Send Request (no tip)"}
         </button>
         {feedback ? <p className="text-sm text-slate-200">{feedback}</p> : null}
       </form>

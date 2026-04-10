@@ -53,12 +53,13 @@ export function OverlayPage() {
     }
   }
 
+  const genreCta = "SCAN THE QR CODE TO REQUEST A SONG & PICK TONIGHT'S GENRE";
   const tickerItems =
     eventData.fireSaleActive && eventData.fireSaleMessage
       ? [eventData.fireSaleMessage]
       : [
           ...nowPlayingItems,
-          ...(requestItems.length ? ["COMING UP", ...promoItems, ...requestItems] : promoItems),
+          ...(requestItems.length ? [genreCta, "COMING UP", ...promoItems, ...requestItems] : [genreCta, ...promoItems]),
         ];
 
   return <ScrollingTicker items={tickerItems} accentColor={eventData.accentColor} />;

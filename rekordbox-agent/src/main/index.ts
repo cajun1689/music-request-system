@@ -254,12 +254,26 @@ async function pollOnce(): Promise<void> {
       track = await readTrackForSoftware(sw, config);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (config.softwareType === "auto" && sw === "rekordbox" &&
-          (msg.includes("file is not a database") || msg.includes("not a database"))) {
-        log.warn("Rekordbox DB unreadable (encrypted?), trying Serato…");
+      const isDbUnreadable =
+        msg.includes("file is not a database") || msg.includes("not a database");
+      const isNativeModuleError =
+        msg.includes("incompatible architecture") ||
+        msg.includes("dlopen") ||
+        msg.includes("MODULE_NOT_FOUND");
+
+      if (config.softwareType === "auto" && sw === "rekordbox" && (isDbUnreadable || isNativeModuleError)) {
+        const reason = isNativeModuleError
+          ? "Rekordbox native module failed (architecture mismatch), trying Serato…"
+          : "Rekordbox DB unreadable (encrypted?), trying Serato…";
+        log.warn(reason);
         sw = "serato";
         status.activeSoftware = sw;
         track = await readTrackForSoftware(sw, config);
+      } else if (sw === "rekordbox" && isNativeModuleError) {
+        throw new Error(
+          "Rekordbox support unavailable: native SQLite module is not compatible with this Mac's architecture. " +
+          "Reinstall DJ Bridge or switch DJ Software to Serato.",
+        );
       } else {
         throw err;
       }
