@@ -313,8 +313,139 @@ export async function readSeratoLibrary(customPath?: string): Promise<LibraryTra
 }
 
 const STALE_SESSION_MS = 4 * 60 * 60 * 1000; // 4 hours
+const STALE_LOG_MS = 4 * 60 * 60 * 1000;
 
-export async function readCurrentSeratoTrack(customPath?: string): Promise<TrackInfo | null> {
+function findSeratoLogFile(): string | null {
+  const logDir = path.join(os.homedir(), "Music", "_Serato_", "Logs");
+  const symlink = path.join(logDir, "DJ.INFO");
+  try {
+    if (fs.existsSync(symlink)) {
+      const resolved = fs.realpathSync(symlink);
+      if (fs.existsSync(resolved)) return resolved;
+    }
+  } catch {
+    // Symlink broken; fall back to scanning
+  }
+
+  try {
+    const files = fs
+      .readdirSync(logDir)
+      .filter((f) => f.endsWith(".log"))
+      .map((f) => {
+        const full = path.join(logDir, f);
+        return { path: full, mtime: fs.statSync(full).mtimeMs };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    return files[0]?.path ?? null;
+  } catch {
+    return null;
+  }
+}
+
+interface DeckLoadEntry {
+  timestamp: Date;
+  filePath: string;
+  deck: number;
+  artist: string;
+  title: string;
+}
+
+const DECK_LOAD_RE =
+  /^I(\d{8} \d{2}:\d{2}:\d{2})\.\d+.*Creating audio cache store resource for 'cache:\/\/\/(.*?):deck_(\d+)_instrumental\?/;
+
+function extractArtistTitle(filePath: string): { artist: string; title: string } {
+  const basename = path.basename(filePath).replace(/\.\w{2,4}$/, "");
+
+  const dashMatch = basename.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+  if (dashMatch) {
+    return {
+      artist: dashMatch[1].trim(),
+      title: dashMatch[2]
+        .replace(/\s+\d{1,2}[AB]\s+\d{2,3}$/, "")
+        .trim(),
+    };
+  }
+
+  const ddMatch = basename.match(/^(.+?)\s+--\s+(.+)$/);
+  if (ddMatch) {
+    return {
+      artist: ddMatch[1].trim(),
+      title: ddMatch[2]
+        .replace(/\s+\d{1,2}[AB]\s+\d{2,3}$/, "")
+        .trim(),
+    };
+  }
+
+  return {
+    artist: "",
+    title: basename.replace(/\s+\d{1,2}[AB]\s+\d{2,3}$/, "").trim(),
+  };
+}
+
+function parseSeratoTimestamp(raw: string): Date {
+  const m = raw.match(/^(\d{4})(\d{2})(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+  if (!m) return new Date();
+  return new Date(
+    parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]),
+    parseInt(m[4]), parseInt(m[5]), parseInt(m[6]),
+  );
+}
+
+function readRecentDeckLoads(logPath: string, tailBytes = 200_000): DeckLoadEntry[] {
+  let data: string;
+  try {
+    const stat = fs.statSync(logPath);
+    const start = Math.max(0, stat.size - tailBytes);
+    const buf = Buffer.alloc(Math.min(tailBytes, stat.size));
+    const fd = fs.openSync(logPath, "r");
+    fs.readSync(fd, buf, 0, buf.length, start);
+    fs.closeSync(fd);
+    data = buf.toString("utf8");
+  } catch {
+    return [];
+  }
+
+  const entries: DeckLoadEntry[] = [];
+  for (const line of data.split("\n")) {
+    const m = DECK_LOAD_RE.exec(line);
+    if (!m) continue;
+
+    const timestamp = parseSeratoTimestamp(m[1]);
+    const filePath = m[2];
+    const deck = parseInt(m[3]);
+    const { artist, title } = extractArtistTitle(filePath);
+
+    entries.push({ timestamp, filePath, deck, artist, title });
+  }
+
+  return entries;
+}
+
+function readCurrentTrackFromLog(): TrackInfo | null {
+  const logFile = findSeratoLogFile();
+  if (!logFile) return null;
+
+  try {
+    const stat = fs.statSync(logFile);
+    if (Date.now() - stat.mtimeMs > STALE_LOG_MS) return null;
+  } catch {
+    return null;
+  }
+
+  const loads = readRecentDeckLoads(logFile);
+  if (!loads.length) return null;
+
+  const latest = loads[loads.length - 1];
+  if (!latest.title) return null;
+
+  return {
+    title: latest.title,
+    artist: latest.artist,
+    playedAt: latest.timestamp.toISOString(),
+  };
+}
+
+function readCurrentTrackFromSession(customPath?: string): TrackInfo | null {
   const sessDir = resolveSeratoSessionDir(customPath);
   if (!sessDir) return null;
 
@@ -323,9 +454,7 @@ export async function readCurrentSeratoTrack(customPath?: string): Promise<Track
 
   try {
     const stat = fs.statSync(latestFile);
-    if (Date.now() - stat.mtimeMs > STALE_SESSION_MS) {
-      return null;
-    }
+    if (Date.now() - stat.mtimeMs > STALE_SESSION_MS) return null;
   } catch {
     return null;
   }
@@ -344,4 +473,10 @@ export async function readCurrentSeratoTrack(customPath?: string): Promise<Track
       ? new Date(latest.startTime * 1000).toISOString()
       : new Date().toISOString(),
   };
+}
+
+export async function readCurrentSeratoTrack(customPath?: string): Promise<TrackInfo | null> {
+  const fromLog = readCurrentTrackFromLog();
+  if (fromLog) return fromLog;
+  return readCurrentTrackFromSession(customPath);
 }
