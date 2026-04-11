@@ -1,7 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import * as zlib from "zlib";
 import Database from "better-sqlite3-multiple-ciphers";
 
 export interface TrackInfo {
@@ -25,47 +24,12 @@ const HISTORY_QUERY = `
   LIMIT 1
 `;
 
-// Rekordbox 6/7 obfuscated database password (same across all installations)
-const RB_BLOB = Buffer.from(
-  "PN_Pq^*N>(JYe*u^8;Yg76HuZ)b9;DpoTXV(6ItkU`}8*m6tx_I{Solh_N#dfe{v=",
-  "ascii",
-);
-const RB_BLOB_KEY = Buffer.from("657f48f84c437cc1", "ascii");
-
-function base85Decode(input: Buffer): Buffer {
-  const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
-  const str = input.toString("ascii");
-  const result: number[] = [];
-  for (let i = 0; i < str.length; i += 5) {
-    let acc = 0;
-    for (let j = 0; j < 5 && i + j < str.length; j++) {
-      const idx = chars.indexOf(str[i + j]);
-      acc = acc * 85 + (idx >= 0 ? idx : 0);
-    }
-    const chunkSize = Math.min(4, Math.floor(((str.length - i) * 4) / 5));
-    for (let j = 3; j >= 4 - chunkSize; j--) {
-      result.push((acc >> (j * 8)) & 0xff);
-    }
-  }
-  return Buffer.from(result);
-}
-
-function deobfuscateRekordboxKey(): string {
-  const data = base85Decode(RB_BLOB);
-  const xored = Buffer.alloc(data.length);
-  for (let i = 0; i < data.length; i++) {
-    xored[i] = data[i] ^ RB_BLOB_KEY[i % RB_BLOB_KEY.length];
-  }
-  return zlib.inflateSync(xored).toString("utf8");
-}
-
-let cachedRbKey: string | null = null;
+// Rekordbox 6/7 SQLCipher key — same across all installations
+const REKORDBOX_DB_KEY =
+  "402fd482c38817c35ffa8ffb8c7d93143b749e7d315df7a81732a1ff43608497";
 
 export function getRekordboxKey(): string {
-  if (!cachedRbKey) {
-    cachedRbKey = deobfuscateRekordboxKey();
-  }
-  return cachedRbKey;
+  return REKORDBOX_DB_KEY;
 }
 
 function findOptionsJson(): string | null {
@@ -143,22 +107,23 @@ const LIBRARY_QUERY = `
 `;
 
 function openDatabase(dbPath: string, sqlcipherKey?: string): Database.Database {
-  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
-  db.pragma("journal_mode = WAL");
-
   const key = sqlcipherKey || getRekordboxKey();
 
+  // Encrypted attempt — key must be set BEFORE any other operation
   try {
+    const db = new Database(dbPath, { readonly: true, fileMustExist: true });
     db.pragma(`cipher='sqlcipher'`);
     db.pragma(`legacy=4`);
     db.pragma(`key='${key.replace(/'/g, "''")}'`);
+    db.pragma("journal_mode = WAL");
     db.prepare("SELECT count(*) FROM sqlite_master").get();
     return db;
-  } catch {
-    // Key didn't work — try without encryption (Rekordbox 5 / unencrypted DB)
-    try { db.close(); } catch { /* ignore */ }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("SQLCipher open failed:", msg);
   }
 
+  // Plaintext fallback (Rekordbox 5 / unencrypted DB)
   const plainDb = new Database(dbPath, { readonly: true, fileMustExist: true });
   plainDb.pragma("journal_mode = WAL");
   plainDb.prepare("SELECT count(*) FROM sqlite_master").get();
