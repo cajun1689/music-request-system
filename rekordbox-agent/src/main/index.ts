@@ -120,6 +120,12 @@ function updateTrayTooltip(): void {
 }
 
 function updateTrayMenu(): void {
+  buildTrayMenu();
+}
+
+let cachedContextMenu: Electron.Menu | null = null;
+
+function buildTrayMenu(): void {
   if (!tray) return;
   updateTrayTooltip();
 
@@ -133,7 +139,7 @@ function updateTrayMenu(): void {
       ? "● Error"
       : "○ Idle";
 
-  const contextMenu = Menu.buildFromTemplate([
+  cachedContextMenu = Menu.buildFromTemplate([
     { label: statusLabel, enabled: false },
     { label: trackLabel, enabled: false },
     { type: "separator" },
@@ -175,7 +181,6 @@ function updateTrayMenu(): void {
       },
     },
   ]);
-  tray.setContextMenu(contextMenu);
 }
 
 function switchMode(mode: "auto" | "manual"): void {
@@ -461,8 +466,14 @@ app.on("ready", () => {
 
   tray = new Tray(icon);
   tray.setToolTip("DJ Bridge");
-  tray.on("click", toggleWindow);
-  updateTrayMenu();
+  tray.on("click", () => {
+    showWindow();
+  });
+  tray.on("right-click", () => {
+    buildTrayMenu();
+    if (cachedContextMenu) tray?.popUpContextMenu(cachedContextMenu);
+  });
+  buildTrayMenu();
 
   createWindow();
   mainWindow?.show();
