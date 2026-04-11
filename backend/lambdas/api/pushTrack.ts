@@ -12,6 +12,20 @@ interface PushTrackInput {
 
 const REMIX_WORDS = ["remix", "mix", "edit", "version", "vip", "bootleg", "rework"];
 
+const DJ_POOL_TAGS = [
+  "dirty", "clean", "explicit", "radio edit",
+  "quick hit", "quick hitter", "short edit",
+  "intro", "outro", "intro edit", "outro edit",
+  "instrumental", "acapella", "acap",
+  "funkymix", "x-mix", "xtendz",
+  "transition", "re-drum", "redrum", "hype",
+  "ck cut", "dj edit", "dj tool",
+];
+
+const DJ_POOL_RE = new RegExp(
+  "\\b(" + DJ_POOL_TAGS.join("|") + ")\\b", "gi",
+);
+
 function normalize(raw: string): string {
   return raw
     .normalize("NFKD")
@@ -21,13 +35,22 @@ function normalize(raw: string): string {
     .trim();
 }
 
+function stripDjPoolTags(raw: string): string {
+  let s = raw;
+  s = s.replace(/^\d{1,3}\s+/, "");
+  s = s.replace(DJ_POOL_RE, " ");
+  s = s.replace(/\b(?:by\s+\w[\w\s]{0,25})$/i, "");
+  s = s.replace(/\s+(?:ft\.?|feat\.?|featuring)\s+/gi, " ");
+  return s.replace(/\s{2,}/g, " ").trim();
+}
+
 function coreTitle(raw: string): string {
   const noBrackets = raw.replace(/\((.*?)\)|\[(.*?)\]/g, " ");
   const stripped = REMIX_WORDS.reduce(
     (acc, word) => acc.replace(new RegExp(`\\b${word}\\b`, "gi"), " "),
     noBrackets,
   );
-  return normalize(stripped);
+  return normalize(stripDjPoolTags(stripped));
 }
 
 function remixTag(raw: string): string {
@@ -40,6 +63,10 @@ function tokens(value: string): Set<string> {
   return new Set(normalize(value).split(" ").filter(Boolean));
 }
 
+function coreTokens(value: string): Set<string> {
+  return new Set(normalize(stripDjPoolTags(value)).split(" ").filter(Boolean));
+}
+
 function jaccard(a: Set<string>, b: Set<string>): number {
   if (!a.size || !b.size) return 0;
   const intersection = [...a].filter((token) => b.has(token)).length;
@@ -47,30 +74,51 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return intersection / union;
 }
 
+function containsAllTokens(haystack: Set<string>, needle: Set<string>): boolean {
+  if (!needle.size) return false;
+  return [...needle].every((t) => haystack.has(t));
+}
+
 function scoreMatch(request: RequestRecord, playedTitle: string, playedArtist?: string): number {
   const requestTitle = request.songTitle ?? "";
   const requestArtist = request.artistName ?? "";
   const playedTitleNorm = normalize(playedTitle);
   const requestTitleNorm = normalize(requestTitle);
+  const playedCore = coreTitle(playedTitle);
+  const requestCore = coreTitle(requestTitle);
 
   let score = 0;
+
   if (playedTitleNorm === requestTitleNorm) score += 100;
-  if (coreTitle(playedTitle) === coreTitle(requestTitle)) score += 50;
-  score += jaccard(tokens(playedTitle), tokens(requestTitle)) * 40;
+  else if (playedCore === requestCore) score += 80;
+
+  const playedCoreTokens = coreTokens(playedTitle);
+  const requestCoreTokens = coreTokens(requestTitle);
+
+  if (containsAllTokens(playedCoreTokens, requestCoreTokens)) score += 40;
+  else if (containsAllTokens(requestCoreTokens, playedCoreTokens)) score += 30;
+
+  score += jaccard(playedCoreTokens, requestCoreTokens) * 40;
 
   const playedRemix = remixTag(playedTitle);
   const requestRemix = remixTag(requestTitle);
   if (playedRemix && requestRemix && playedRemix === requestRemix) score += 20;
 
   if (playedArtist) {
-    const pa = normalize(playedArtist);
+    const pa = normalize(stripDjPoolTags(playedArtist));
     const ra = normalize(requestArtist);
-    if (pa === ra) {
+    if (pa && ra && pa === ra) {
       score += 25;
-    } else if (pa && ra && (pa.includes(ra) || ra.includes(pa))) {
-      score += 15;
-    } else {
-      score -= 10;
+    } else if (pa && ra) {
+      const paTokens = new Set(pa.split(" ").filter(Boolean));
+      const raTokens = new Set(ra.split(" ").filter(Boolean));
+      if (containsAllTokens(paTokens, raTokens) || containsAllTokens(raTokens, paTokens)) {
+        score += 20;
+      } else if (pa.includes(ra) || ra.includes(pa)) {
+        score += 15;
+      } else {
+        score -= 5;
+      }
     }
   }
 
@@ -114,6 +162,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     return json(200, { matched: false, reason: "Duplicate track, already processed." });
   }
 
+  console.log("pushTrack:", JSON.stringify({
+    title: input.title, artist: input.artist, sourceId: PUSH_SOURCE_ID,
+    coreTitle: coreTitle(input.title),
+    coreArtist: input.artist ? normalize(stripDjPoolTags(input.artist)) : undefined,
+  }));
+
   const approved = await docClient.send(
     new QueryCommand({
       TableName: env.requestsTableName,
@@ -124,6 +178,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }),
   );
   const candidates = (approved.Items ?? []) as RequestRecord[];
+  console.log("approved candidates:", candidates.length);
 
   const now = new Date().toISOString();
 
@@ -209,6 +264,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     .map((r) => ({ request: r, score: scoreMatch(r, input.title, input.artist) }))
     .sort((a, b) => b.score - a.score);
 
+  console.log("scores:", JSON.stringify(
+    ranked.slice(0, 5).map((e) => ({
+      song: e.request.songTitle, artist: e.request.artistName,
+      score: Number(e.score.toFixed(2)),
+    })),
+  ));
+
   const best = ranked[0];
   if (!best || best.score < 55) {
     return json(200, {
@@ -241,6 +303,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   } catch {
     // Non-fatal
   }
+
+  console.log("MATCH:", JSON.stringify({
+    requestId: best.request.requestId,
+    requestSong: best.request.songTitle,
+    requestArtist: best.request.artistName,
+    score: Number(best.score.toFixed(2)),
+  }));
 
   const updated = await docClient.send(
     new UpdateCommand({

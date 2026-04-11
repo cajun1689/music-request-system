@@ -321,6 +321,8 @@ export class InfrastructureStack extends Stack {
     eventsTable.grantReadWriteData(autoDetectPlayedFn);
     eventsTable.grantReadWriteData(pushTrackFn);
     requestsTable.grantReadWriteData(pushTrackFn);
+    eventsTable.grantReadData(reviewRequestByTokenFn);
+    requestsTable.grantReadWriteData(reviewRequestByTokenFn);
     eventsTable.grantReadWriteData(submitGenreVoteFn);
     eventsTable.grantReadWriteData(resetGenreVotesFn);
     requestsTable.grantStreamRead(requestStreamFn);

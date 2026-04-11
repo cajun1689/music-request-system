@@ -353,32 +353,66 @@ interface DeckLoadEntry {
 const DECK_LOAD_RE =
   /^I(\d{8} \d{2}:\d{2}:\d{2})\.\d+.*Creating audio cache store resource for 'cache:\/\/\/(.*?):deck_(\d+)_instrumental\?/;
 
+const DJ_POOL_TAGS_RE = new RegExp(
+  "\\b(" +
+    [
+      "dirty", "clean", "explicit", "radio edit",
+      "quick hit", "quick hitter", "short edit",
+      "intro", "outro", "intro edit", "outro edit",
+      "instrumental", "acapella", "acap",
+      "funkymix", "x-mix", "xtendz",
+      "transition", "re-drum", "redrum", "hype",
+      "ck cut", "dj edit", "dj tool",
+    ].join("|") +
+  ")\\b",
+  "gi",
+);
+
+function cleanDjPoolTitle(raw: string): string {
+  let s = raw;
+  s = s.replace(/^\d{1,3}\s+/, "");
+  s = s.replace(/\s+\d{1,2}[AB]\s+\d{2,3}$/, "");
+  s = s.replace(/\s*\(([^)]*)\)\s*/g, (full, inner) => {
+    if (DJ_POOL_TAGS_RE.test(inner)) return " ";
+    return full;
+  });
+  s = s.replace(/\s*\[([^\]]*)\]\s*/g, (full, inner) => {
+    if (DJ_POOL_TAGS_RE.test(inner)) return " ";
+    return full;
+  });
+  s = s.replace(DJ_POOL_TAGS_RE, " ");
+  s = s.replace(/\b(?:by\s+\w[\w\s]{0,25})$/i, "").trim();
+  s = s.replace(/\s{2,}/g, " ").trim();
+  return s;
+}
+
+function cleanFeaturing(artist: string): string {
+  return artist
+    .replace(/\s+(?:ft\.?|feat\.?|featuring)\s+/gi, " & ")
+    .trim();
+}
+
 function extractArtistTitle(filePath: string): { artist: string; title: string } {
   const basename = path.basename(filePath).replace(/\.\w{2,4}$/, "");
 
+  let rawArtist = "";
+  let rawTitle = basename;
+
   const dashMatch = basename.match(/^(.+?)\s+[-–—]\s+(.+)$/);
   if (dashMatch) {
-    return {
-      artist: dashMatch[1].trim(),
-      title: dashMatch[2]
-        .replace(/\s+\d{1,2}[AB]\s+\d{2,3}$/, "")
-        .trim(),
-    };
-  }
-
-  const ddMatch = basename.match(/^(.+?)\s+--\s+(.+)$/);
-  if (ddMatch) {
-    return {
-      artist: ddMatch[1].trim(),
-      title: ddMatch[2]
-        .replace(/\s+\d{1,2}[AB]\s+\d{2,3}$/, "")
-        .trim(),
-    };
+    rawArtist = dashMatch[1].trim();
+    rawTitle = dashMatch[2].trim();
+  } else {
+    const ddMatch = basename.match(/^(.+?)\s+--\s+(.+)$/);
+    if (ddMatch) {
+      rawArtist = ddMatch[1].trim();
+      rawTitle = ddMatch[2].trim();
+    }
   }
 
   return {
-    artist: "",
-    title: basename.replace(/\s+\d{1,2}[AB]\s+\d{2,3}$/, "").trim(),
+    artist: cleanFeaturing(cleanDjPoolTitle(rawArtist)),
+    title: cleanDjPoolTitle(rawTitle),
   };
 }
 
