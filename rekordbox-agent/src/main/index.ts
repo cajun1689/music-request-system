@@ -355,12 +355,16 @@ function stopPolling(): void {
   }
 }
 
-function positionWindowNearTray(): void {
-  if (!mainWindow || !tray) return;
-  const trayBounds = tray.getBounds();
+function positionWindowTopRight(): void {
+  if (!mainWindow) return;
+  const { screen } = require("electron");
+  const display = screen.getPrimaryDisplay();
+  const { width: screenW, height: screenH } = display.workAreaSize;
+  const { x: workX, y: workY } = display.workArea;
   const windowBounds = mainWindow.getBounds();
-  const x = Math.round(trayBounds.x + trayBounds.width / 2 - windowBounds.width / 2);
-  const y = trayBounds.y + trayBounds.height + 4;
+  const padding = 12;
+  const x = workX + screenW - windowBounds.width - padding;
+  const y = workY + padding;
   mainWindow.setPosition(x, y, false);
 }
 
@@ -419,7 +423,7 @@ function showWindow(): void {
     createWindow();
   }
   if (mainWindow) {
-    positionWindowNearTray();
+    positionWindowTopRight();
     mainWindow.show();
     mainWindow.focus();
   }
@@ -432,7 +436,7 @@ function toggleWindow(): void {
   if (mainWindow && mainWindow.isVisible()) {
     mainWindow.hide();
   } else if (mainWindow) {
-    positionWindowNearTray();
+    positionWindowTopRight();
     mainWindow.show();
     mainWindow.focus();
   }
