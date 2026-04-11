@@ -682,10 +682,14 @@ ipcMain.handle("sync-library", async () => {
   }
 });
 
+let lastRequestCount = -1;
 ipcMain.handle("fetch-requests", async (_e, statusFilter?: string) => {
   try {
     const requests = await fetchRequests(statusFilter);
-    log.info("Fetched requests:", requests.length, "status:", statusFilter ?? "all");
+    if (requests.length !== lastRequestCount) {
+      log.info("Requests:", requests.length, statusFilter ?? "all");
+      lastRequestCount = requests.length;
+    }
     return requests;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
