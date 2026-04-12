@@ -3,7 +3,7 @@ import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import type { EventRecord, RequestStatus } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
 
-const ALLOWED_STATUSES: RequestStatus[] = ["approved", "vetoed"];
+const ALLOWED_STATUSES: RequestStatus[] = ["approved", "vetoed", "played"];
 
 interface ReviewInput {
   requestId: string;
@@ -23,7 +23,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     return json(400, { error: "requestId is required" });
   }
   if (!input.status || !ALLOWED_STATUSES.includes(input.status)) {
-    return json(400, { error: "status must be 'approved' or 'vetoed'" });
+    return json(400, { error: "status must be 'approved', 'vetoed', or 'played'" });
   }
 
   const eventResponse = await docClient.send(
@@ -38,20 +38,26 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
   const now = new Date().toISOString();
 
+  const updateExpr = input.status === "played"
+    ? "SET #status = :status, reviewedAt = :reviewedAt, reviewedBy = :reviewedBy, playedAt = :playedAt"
+    : "SET #status = :status, reviewedAt = :reviewedAt, reviewedBy = :reviewedBy";
+
+  const exprValues: Record<string, string> = {
+    ":status": input.status,
+    ":reviewedAt": now,
+    ":reviewedBy": "dj-bridge",
+  };
+  if (input.status === "played") exprValues[":playedAt"] = now;
+
   const result = await docClient.send(
     new UpdateCommand({
       TableName: env.requestsTableName,
       Key: { eventId, requestId: input.requestId },
       ConditionExpression:
         "attribute_exists(eventId) and attribute_exists(requestId)",
-      UpdateExpression:
-        "SET #status = :status, reviewedAt = :reviewedAt, reviewedBy = :reviewedBy",
+      UpdateExpression: updateExpr,
       ExpressionAttributeNames: { "#status": "status" },
-      ExpressionAttributeValues: {
-        ":status": input.status,
-        ":reviewedAt": now,
-        ":reviewedBy": "dj-bridge",
-      },
+      ExpressionAttributeValues: exprValues,
       ReturnValues: "ALL_NEW",
     }),
   );

@@ -427,6 +427,11 @@
       color: #fca5a5;
     }
     .btn-veto:hover:not(:disabled) { background: rgba(239,68,68,0.2); }
+    .btn-played {
+      background: rgba(59,130,246,0.15);
+      color: var(--accent);
+    }
+    .btn-played:hover:not(:disabled) { background: rgba(59,130,246,0.25); }
     .request-tip {
       display: inline-block;
       background: rgba(34,197,94,0.12);
@@ -495,8 +500,8 @@
         <span style="font-size:10px; color:var(--text-muted);" id="requests-count"></span>
       </div>
       <div class="tab-bar">
-        <button class="active" id="tab-pending" data-tab="pending">Pending</button>
-        <button id="tab-approved" data-tab="approved">Approved</button>
+        <button class="active" id="tab-pending" data-tab="pending">Pending (0)</button>
+        <button id="tab-approved" data-tab="approved">Approved (0)</button>
       </div>
       <div id="requests-list" class="request-list">
         <div class="empty-state">Loading requests…</div>
@@ -1203,10 +1208,18 @@
     var requestsCache = [];
     var requestsRefreshTimer = null;
 
+    function updateTabCounts(requests) {
+      var pendingCount = requests.filter(function(r) { return r.status === "pending"; }).length;
+      var approvedCount = requests.filter(function(r) { return r.status === "approved"; }).length;
+      el("tab-pending").textContent = "Pending (" + pendingCount + ")";
+      el("tab-approved").textContent = "Approved (" + approvedCount + ")";
+    }
+
     function renderRequests(requests) {
       var list = el("requests-list");
       var filtered = requests.filter(function(r) { return r.status === currentRequestTab; });
       el("requests-count").textContent = filtered.length + " " + currentRequestTab;
+      updateTabCounts(requests);
 
       if (!filtered.length) {
         list.innerHTML = '<div class="empty-state">No ' + currentRequestTab + ' requests</div>';
@@ -1266,6 +1279,13 @@
           actions.appendChild(approveBtn);
           actions.appendChild(vetoBtn);
         } else if (currentRequestTab === "approved") {
+          var playedBtn = document.createElement("button");
+          playedBtn.className = "btn-played";
+          playedBtn.textContent = "Played";
+          playedBtn.title = "Mark as played";
+          playedBtn.addEventListener("click", function() { handleReview(req.requestId, "played", item); });
+          actions.appendChild(playedBtn);
+
           var vetoBtn2 = document.createElement("button");
           vetoBtn2.className = "btn-veto";
           vetoBtn2.textContent = "Veto";
@@ -1285,10 +1305,9 @@
         await bridge.reviewRequest(requestId, newStatus);
         itemEl.style.opacity = "0.3";
         itemEl.style.transition = "opacity 0.3s";
-        showToast(
-          (newStatus === "approved" ? "Approved" : "Vetoed") + " request",
-          newStatus === "approved" ? "success" : "info"
-        );
+        var statusLabel = newStatus === "approved" ? "Approved" : newStatus === "played" ? "Marked as played" : "Vetoed";
+        var statusType = newStatus === "approved" || newStatus === "played" ? "success" : "info";
+        showToast(statusLabel + " request", statusType);
         setTimeout(function() { loadRequests(); }, 500);
       } catch (err) {
         btns.forEach(function(b) { b.disabled = false; });

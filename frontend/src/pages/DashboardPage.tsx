@@ -838,7 +838,7 @@ export function DashboardPage() {
                 request={request}
                 libraryMatch={findLibraryMatch(request.songTitle, request.artistName)}
                 onApprove={tab === "pending" ? (id) => void updateStatus(id, "approved") : undefined}
-                onVeto={tab === "pending" ? (id) => void updateStatus(id, "vetoed") : undefined}
+                onVeto={tab === "pending" || tab === "approved" ? (id) => void updateStatus(id, "vetoed") : undefined}
                 onPlayed={tab === "approved" ? (id) => void updateStatus(id, "played") : undefined}
                 onVerifyTip={
                   (request.paymentStatus ?? "unpaid") === "pending_verification"

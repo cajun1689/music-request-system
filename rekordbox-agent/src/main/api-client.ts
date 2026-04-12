@@ -165,7 +165,7 @@ export async function fetchRequests(statusFilter?: string): Promise<RequestItem[
 
 export async function reviewRequest(
   requestId: string,
-  status: "approved" | "vetoed",
+  status: "approved" | "vetoed" | "played",
 ): Promise<Record<string, unknown>> {
   const config = getConfig();
   if (!config.eventId || !config.pushToken) {
