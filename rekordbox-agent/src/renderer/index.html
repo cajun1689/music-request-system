@@ -448,6 +448,42 @@
       color: var(--text-muted);
       font-size: 12px;
     }
+    .fire-sale-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--input-bg);
+      color: var(--text-muted);
+    }
+    .fire-sale-badge.active {
+      background: rgba(251,191,36,0.2);
+      color: #fbbf24;
+    }
+    .btn-fire-sale-on {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      background: #f59e0b;
+      color: #451a03;
+    }
+    .btn-fire-sale-on:hover { background: #fbbf24; }
+    .btn-fire-sale-on:disabled { opacity: 0.5; cursor: default; }
+    .btn-fire-sale-off {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      background: var(--input-bg);
+      color: var(--text-dim);
+    }
+    .btn-fire-sale-off:hover { background: rgba(255,255,255,0.15); }
+    .btn-fire-sale-off:disabled { opacity: 0.5; cursor: default; }
     .genre-row {
       display: flex;
       align-items: center;
@@ -552,6 +588,21 @@
         <span style="font-size:10px; color:var(--text-muted);" id="genre-total"></span>
       </div>
       <div id="genre-bars" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+
+    <!-- Fire Sale Card -->
+    <div class="card" id="fire-sale-card">
+      <div class="card-header">
+        <span class="card-title">Fire Sale</span>
+        <span class="fire-sale-badge" id="fire-sale-status">Off</span>
+      </div>
+      <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">
+        Replaces the ticker with the fire sale message until the next song match.
+      </p>
+      <div style="display:flex; gap:6px;">
+        <button class="btn-fire-sale-on" id="btn-fire-sale-on" onclick="handleFireSale(true)">Activate</button>
+        <button class="btn-fire-sale-off" id="btn-fire-sale-off" onclick="handleFireSale(false)">Turn Off</button>
+      </div>
     </div>
 
     <!-- Configuration Card -->
@@ -1393,8 +1444,40 @@
 
       requestsRefreshTimer = setInterval(function() {
         loadRequests();
-        loadGenreVotes();
+        loadEventStatus();
       }, 15000);
+    }
+
+    // ── Fire Sale ────────────────────────────────────────────
+    var fireSaleIsActive = false;
+
+    async function handleFireSale(active) {
+      if (!bridge || !bridge.toggleFireSale) return;
+      var onBtn = el("btn-fire-sale-on");
+      var offBtn = el("btn-fire-sale-off");
+      onBtn.disabled = true;
+      offBtn.disabled = true;
+      try {
+        var result = await bridge.toggleFireSale(active);
+        fireSaleIsActive = result.fireSaleActive;
+        updateFireSaleBadge();
+      } catch (err) {
+        console.error("Fire sale error:", err);
+      } finally {
+        onBtn.disabled = false;
+        offBtn.disabled = false;
+      }
+    }
+
+    function updateFireSaleBadge() {
+      var badge = el("fire-sale-status");
+      if (fireSaleIsActive) {
+        badge.textContent = "Active";
+        badge.className = "fire-sale-badge active";
+      } else {
+        badge.textContent = "Off";
+        badge.className = "fire-sale-badge";
+      }
     }
 
     // ── Genre Votes ──────────────────────────────────────────
@@ -1456,11 +1539,18 @@
       });
     }
 
-    async function loadGenreVotes() {
-      if (!bridge || !bridge.fetchGenreVotes) return;
+    async function loadEventStatus() {
+      if (!bridge) return;
       try {
-        var data = await bridge.fetchGenreVotes();
-        renderGenreVotes(data);
+        if (bridge.fetchEventStatus) {
+          var status = await bridge.fetchEventStatus();
+          renderGenreVotes(status.genreVotes);
+          fireSaleIsActive = status.fireSaleActive;
+          updateFireSaleBadge();
+        } else if (bridge.fetchGenreVotes) {
+          var data = await bridge.fetchGenreVotes();
+          renderGenreVotes(data);
+        }
       } catch (err) {
         el("genre-bars").innerHTML = '<div class="empty-state" style="color:#fca5a5;">Failed to load votes</div>';
       }
@@ -1484,7 +1574,7 @@
       loadConfig();
       loadStatus();
       loadRequests();
-      loadGenreVotes();
+      loadEventStatus();
     }
   })();
   </script>

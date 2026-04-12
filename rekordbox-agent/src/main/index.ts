@@ -26,8 +26,10 @@ import {
   enqueueTrack,
   fetchEvents,
   fetchEventSources,
+  fetchEventStatus,
   fetchGenreVotes,
   fetchRequests,
+  toggleFireSale,
   pushTrack,
   reviewRequest,
   syncLibrary,
@@ -730,6 +732,30 @@ ipcMain.handle("fetch-genre-votes", async () => {
     const message = err instanceof Error ? err.message : String(err);
     log.error("Failed to fetch genre votes:", message);
     return { hip_hop: 0, country: 0, edm: 0, alternative_rock: 0, total: 0 };
+  }
+});
+
+ipcMain.handle("fetch-event-status", async () => {
+  try {
+    return await fetchEventStatus();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error("Failed to fetch event status:", message);
+    return {
+      genreVotes: { hip_hop: 0, country: 0, edm: 0, alternative_rock: 0, total: 0 },
+      fireSaleActive: false,
+    };
+  }
+});
+
+ipcMain.handle("toggle-fire-sale", async (_e, active: boolean, message?: string) => {
+  log.info("Fire sale:", active ? "ON" : "OFF");
+  try {
+    return await toggleFireSale(active, message);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.error("Fire sale toggle failed:", msg);
+    throw err;
   }
 });
 

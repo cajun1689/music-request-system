@@ -16,6 +16,8 @@ try {
     fetchRequests: function (statusFilter) { return ipcRenderer.invoke("fetch-requests", statusFilter); },
     reviewRequest: function (requestId, status) { return ipcRenderer.invoke("review-request", requestId, status); },
     fetchGenreVotes: function () { return ipcRenderer.invoke("fetch-genre-votes"); },
+    fetchEventStatus: function () { return ipcRenderer.invoke("fetch-event-status"); },
+    toggleFireSale: function (active, message) { return ipcRenderer.invoke("toggle-fire-sale", active, message); },
     pollNow: function () { return ipcRenderer.invoke("poll-now"); },
     fetchEvents: function () { return ipcRenderer.invoke("fetch-events"); },
     fetchEventSources: function (eventId) { return ipcRenderer.invoke("fetch-event-sources", eventId); },

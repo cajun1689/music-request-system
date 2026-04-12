@@ -77,9 +77,19 @@ export interface GenreVotesData {
   total: number;
 }
 
-export async function fetchGenreVotes(): Promise<GenreVotesData> {
+export interface EventStatusData {
+  genreVotes: GenreVotesData;
+  fireSaleActive: boolean;
+}
+
+export async function fetchEventStatus(): Promise<EventStatusData> {
   const config = getConfig();
-  if (!config.eventId) return { hip_hop: 0, country: 0, edm: 0, alternative_rock: 0, total: 0 };
+  if (!config.eventId) {
+    return {
+      genreVotes: { hip_hop: 0, country: 0, edm: 0, alternative_rock: 0, total: 0 },
+      fireSaleActive: false,
+    };
+  }
 
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}/events/${encodeURIComponent(config.eventId)}`;
@@ -90,9 +100,10 @@ export async function fetchGenreVotes(): Promise<GenreVotesData> {
   const data = (await response.json()) as {
     genreVotes?: { hip_hop?: number; country?: number; edm?: number; alternative_rock?: number };
     genreVotesTotal?: number;
+    fireSaleActive?: boolean;
   };
   const v = data.genreVotes ?? {};
-  const votes = {
+  const votes: GenreVotesData = {
     hip_hop: Number(v.hip_hop ?? 0),
     country: Number(v.country ?? 0),
     edm: Number(v.edm ?? 0),
@@ -100,7 +111,15 @@ export async function fetchGenreVotes(): Promise<GenreVotesData> {
     total: 0,
   };
   votes.total = Number(data.genreVotesTotal ?? votes.hip_hop + votes.country + votes.edm + votes.alternative_rock);
-  return votes;
+  return {
+    genreVotes: votes,
+    fireSaleActive: Boolean(data.fireSaleActive),
+  };
+}
+
+export async function fetchGenreVotes(): Promise<GenreVotesData> {
+  const result = await fetchEventStatus();
+  return result.genreVotes;
 }
 
 const pendingQueue: Array<{ track: TrackInfo; retries: number }> = [];
@@ -224,6 +243,37 @@ export async function reviewRequest(
   }
 
   return (await response.json()) as Record<string, unknown>;
+}
+
+export interface FireSaleResult {
+  fireSaleActive: boolean;
+  fireSaleMessage: string;
+}
+
+export async function toggleFireSale(active: boolean, message?: string): Promise<FireSaleResult> {
+  const config = getConfig();
+  if (!config.eventId || !config.pushToken) {
+    throw new Error("Event ID and Push Token must be configured.");
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/events/${encodeURIComponent(config.eventId)}/fire-sale`;
+
+  const response = await electronFetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-push-token": config.pushToken,
+    },
+    body: JSON.stringify({ active, message }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Fire sale toggle failed (${response.status}): ${text}`);
+  }
+
+  return (await response.json()) as FireSaleResult;
 }
 
 export interface LibrarySyncResult {

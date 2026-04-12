@@ -254,6 +254,11 @@ export class InfrastructureStack extends Stack {
       "../../backend/lambdas/api/reviewRequestByToken.ts",
     );
 
+    const toggleFireSaleByTokenFn = makeLambda(
+      "ToggleFireSaleByTokenFn",
+      "../../backend/lambdas/api/toggleFireSaleByToken.ts",
+    );
+
     const syncLibraryFn = makeLambda(
       "SyncLibraryFn",
       "../../backend/lambdas/api/syncLibrary.ts",
@@ -323,6 +328,7 @@ export class InfrastructureStack extends Stack {
     requestsTable.grantReadWriteData(pushTrackFn);
     eventsTable.grantReadData(reviewRequestByTokenFn);
     requestsTable.grantReadWriteData(reviewRequestByTokenFn);
+    eventsTable.grantReadWriteData(toggleFireSaleByTokenFn);
     eventsTable.grantReadWriteData(submitGenreVoteFn);
     eventsTable.grantReadWriteData(resetGenreVotesFn);
     requestsTable.grantStreamRead(requestStreamFn);
@@ -514,6 +520,8 @@ export class InfrastructureStack extends Stack {
     });
     pushTrackResource.addMethod("POST", new apigateway.LambdaIntegration(pushTrackFn));
     reviewRequestResource.addMethod("POST", new apigateway.LambdaIntegration(reviewRequestByTokenFn));
+    const fireSaleResource = eventByIdResource.addResource("fire-sale");
+    fireSaleResource.addMethod("POST", new apigateway.LambdaIntegration(toggleFireSaleByTokenFn));
     libraryResource.addMethod("POST", new apigateway.LambdaIntegration(syncLibraryFn));
     libraryResource.addMethod("GET", new apigateway.LambdaIntegration(getLibraryFn));
     genreVotesResource.addMethod("POST", new apigateway.LambdaIntegration(submitGenreVoteFn));
