@@ -16,7 +16,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       ConditionExpression: "attribute_exists(eventId)",
       UpdateExpression: "SET genreVotes = :genreVotes, genreVotesTotal = :genreVotesTotal, updatedAt = :updatedAt",
       ExpressionAttributeValues: {
-        ":genreVotes": { hip_hop: 0, country: 0, edm: 0 },
+        ":genreVotes": { hip_hop: 0, country: 0, edm: 0, alternative_rock: 0 },
         ":genreVotesTotal": 0,
         ":updatedAt": now,
       },

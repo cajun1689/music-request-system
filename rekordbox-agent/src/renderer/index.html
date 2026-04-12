@@ -448,6 +448,40 @@
       color: var(--text-muted);
       font-size: 12px;
     }
+    .genre-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .genre-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      width: 100px;
+      flex-shrink: 0;
+    }
+    .genre-bar-bg {
+      flex: 1;
+      height: 18px;
+      background: var(--input-bg);
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .genre-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+    .genre-bar-text {
+      position: absolute;
+      right: 6px;
+      top: 0;
+      line-height: 18px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text);
+    }
   </style>
 </head>
 <body>
@@ -509,6 +543,15 @@
       <div class="btn-row">
         <button class="btn secondary" id="btn-refresh-requests" style="font-size:11px; padding:5px 10px;">Refresh</button>
       </div>
+    </div>
+
+    <!-- Genre Votes Card -->
+    <div class="card" id="genre-votes-card">
+      <div class="card-header">
+        <span class="card-title">Genre Votes</span>
+        <span style="font-size:10px; color:var(--text-muted);" id="genre-total"></span>
+      </div>
+      <div id="genre-bars" style="display:flex; flex-direction:column; gap:6px;"></div>
     </div>
 
     <!-- Configuration Card -->
@@ -1348,7 +1391,79 @@
         });
       });
 
-      requestsRefreshTimer = setInterval(loadRequests, 15000);
+      requestsRefreshTimer = setInterval(function() {
+        loadRequests();
+        loadGenreVotes();
+      }, 15000);
+    }
+
+    // ── Genre Votes ──────────────────────────────────────────
+    var GENRE_LABELS = {
+      hip_hop: "Hip Hop",
+      country: "Country",
+      edm: "EDM",
+      alternative_rock: "Alt Rock",
+    };
+    var GENRE_COLORS = {
+      hip_hop: "#a855f7",
+      country: "#f59e0b",
+      edm: "#3b82f6",
+      alternative_rock: "#ef4444",
+    };
+    var GENRE_KEYS = ["hip_hop", "country", "edm", "alternative_rock"];
+
+    function renderGenreVotes(data) {
+      var container = el("genre-bars");
+      var total = data.total || 0;
+      el("genre-total").textContent = total + " vote" + (total === 1 ? "" : "s");
+
+      if (total === 0) {
+        container.innerHTML = '<div class="empty-state">No votes yet</div>';
+        return;
+      }
+
+      container.innerHTML = "";
+      var sorted = GENRE_KEYS.slice().sort(function(a, b) { return (data[b] || 0) - (data[a] || 0); });
+      sorted.forEach(function(key) {
+        var count = data[key] || 0;
+        if (count === 0) return;
+        var pct = Math.round((count / total) * 100);
+
+        var row = document.createElement("div");
+        row.className = "genre-row";
+
+        var label = document.createElement("div");
+        label.className = "genre-label";
+        label.textContent = GENRE_LABELS[key] || key;
+
+        var barBg = document.createElement("div");
+        barBg.className = "genre-bar-bg";
+
+        var fill = document.createElement("div");
+        fill.className = "genre-bar-fill";
+        fill.style.width = pct + "%";
+        fill.style.background = GENRE_COLORS[key] || "var(--accent)";
+
+        var text = document.createElement("div");
+        text.className = "genre-bar-text";
+        text.textContent = pct + "% (" + count + ")";
+
+        barBg.appendChild(fill);
+        barBg.appendChild(text);
+        row.appendChild(label);
+        row.appendChild(barBg);
+        container.appendChild(row);
+      });
+    }
+
+    async function loadGenreVotes() {
+      if (!bridge || !bridge.fetchGenreVotes) return;
+      try {
+        var data = await bridge.fetchGenreVotes();
+        renderGenreVotes(data);
+      } catch (err) {
+        el("genre-bars").innerHTML = '<div class="empty-state" style="color:#fca5a5;">Failed to load votes</div>';
+      }
     }
 
     if (bridge) {
@@ -1369,6 +1484,7 @@
       loadConfig();
       loadStatus();
       loadRequests();
+      loadGenreVotes();
     }
   })();
   </script>

@@ -69,6 +69,40 @@ export async function fetchEventSources(eventId: string): Promise<EventSource[]>
   return data.livePlaylistSources ?? [];
 }
 
+export interface GenreVotesData {
+  hip_hop: number;
+  country: number;
+  edm: number;
+  alternative_rock: number;
+  total: number;
+}
+
+export async function fetchGenreVotes(): Promise<GenreVotesData> {
+  const config = getConfig();
+  if (!config.eventId) return { hip_hop: 0, country: 0, edm: 0, alternative_rock: 0, total: 0 };
+
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/events/${encodeURIComponent(config.eventId)}`;
+  const response = await electronFetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch event (${response.status})`);
+  }
+  const data = (await response.json()) as {
+    genreVotes?: { hip_hop?: number; country?: number; edm?: number; alternative_rock?: number };
+    genreVotesTotal?: number;
+  };
+  const v = data.genreVotes ?? {};
+  const votes = {
+    hip_hop: Number(v.hip_hop ?? 0),
+    country: Number(v.country ?? 0),
+    edm: Number(v.edm ?? 0),
+    alternative_rock: Number(v.alternative_rock ?? 0),
+    total: 0,
+  };
+  votes.total = Number(data.genreVotesTotal ?? votes.hip_hop + votes.country + votes.edm + votes.alternative_rock);
+  return votes;
+}
+
 const pendingQueue: Array<{ track: TrackInfo; retries: number }> = [];
 const MAX_RETRIES = 5;
 

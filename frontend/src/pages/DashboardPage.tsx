@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useRequests } from "../hooks/useRequests";
 import { api } from "../services/api";
 import type { EventRecord, LivePlaylistSource, NowPlayingSlot } from "../types";
-import { GENRE_LABELS, GENRE_VOTE_THRESHOLD, normalizeGenreVotes } from "../utils/genreVotes";
+import { ALL_GENRES, GENRE_LABELS, GENRE_VOTE_THRESHOLD, normalizeGenreVotes } from "../utils/genreVotes";
 
 type Tab = "pending" | "approved" | "played" | "vetoed";
 const FIRE_SALE_MESSAGE = "🔥🔥🔥 FIRE SALE 🔥🔥🔥  $1 SHOTS 🥃🥃  Bartender's Choice - Until The End Of This Song";
@@ -673,7 +673,7 @@ export function DashboardPage() {
                   Live after {GENRE_VOTE_THRESHOLD} votes. Total votes: {total}
                 </p>
                 <div className="mt-3 grid gap-2 md:grid-cols-3">
-                  {(["hip_hop", "country", "edm"] as const).map((genre) => {
+                  {ALL_GENRES.map((genre) => {
                     const percentage = total ? Math.round((votes[genre] / total) * 100) : 0;
                     return (
                       <div key={genre} className="rounded border border-slate-700 bg-slate-950 p-3">

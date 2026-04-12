@@ -1,6 +1,6 @@
 {
   "name": "dj-bridge",
-  "version": "1.9.7",
+  "version": "1.9.8",
   "description": "Menubar Mac app that reads Rekordbox or Serato now-playing tracks and pushes them to the Casper Requests cloud API",
   "author": "Casper Requests <admin@casperrequests.com>",
   "repository": "https://github.com/cajun1689/music-request-system",

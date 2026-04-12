@@ -26,6 +26,7 @@ import {
   enqueueTrack,
   fetchEvents,
   fetchEventSources,
+  fetchGenreVotes,
   fetchRequests,
   pushTrack,
   reviewRequest,
@@ -715,12 +716,22 @@ ipcMain.handle("fetch-requests", async (_e, statusFilter?: string) => {
 
 ipcMain.handle(
   "review-request",
-  async (_e, requestId: string, newStatus: "approved" | "vetoed") => {
+  async (_e, requestId: string, newStatus: "approved" | "vetoed" | "played") => {
     log.info("Review request:", requestId, "→", newStatus);
     const result = await reviewRequest(requestId, newStatus);
     return result;
   },
 );
+
+ipcMain.handle("fetch-genre-votes", async () => {
+  try {
+    return await fetchGenreVotes();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error("Failed to fetch genre votes:", message);
+    return { hip_hop: 0, country: 0, edm: 0, alternative_rock: 0, total: 0 };
+  }
+});
 
 ipcMain.handle("get-update-status", () => getUpdateStatus());
 

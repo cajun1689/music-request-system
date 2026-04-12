@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { BrandedLayout } from "../components/BrandedLayout";
 import { api } from "../services/api";
 import type { EventRecord, GenreName, RequestRecord } from "../types";
-import { GENRE_LABELS, GENRE_VOTE_THRESHOLD, normalizeGenreVotes } from "../utils/genreVotes";
+import { GENRE_LABELS, GENRE_VOTE_THRESHOLD, getAvailableGenres, normalizeGenreVotes } from "../utils/genreVotes";
 
 export function RequestPage() {
   const { eventId } = useParams();
@@ -67,7 +67,7 @@ export function RequestPage() {
       setVotedGenre(null);
       return;
     }
-    if (existingVote === "hip_hop" || existingVote === "country" || existingVote === "edm") {
+    if (existingVote === "hip_hop" || existingVote === "country" || existingVote === "edm" || existingVote === "alternative_rock") {
       setVotedGenre(existingVote);
       return;
     }
@@ -213,7 +213,7 @@ export function RequestPage() {
           Help guide the vibe. Results appear on the ticker after {GENRE_VOTE_THRESHOLD} votes.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {(["hip_hop", "country", "edm"] as GenreName[]).map((genre) => (
+          {getAvailableGenres().map((genre) => (
             <button
               key={genre}
               type="button"

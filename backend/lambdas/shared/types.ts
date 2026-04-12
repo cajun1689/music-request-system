@@ -1,11 +1,12 @@
 export type RequestStatus = "pending" | "approved" | "vetoed" | "played";
 export type PaymentStatus = "unpaid" | "pending_verification" | "verified" | "rejected";
-export type GenreName = "hip_hop" | "country" | "edm";
+export type GenreName = "hip_hop" | "country" | "edm" | "alternative_rock";
 
 export interface GenreVotes {
   hip_hop: number;
   country: number;
   edm: number;
+  alternative_rock: number;
 }
 
 export interface NowPlayingSlot {

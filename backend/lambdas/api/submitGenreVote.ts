@@ -8,7 +8,7 @@ interface SubmitGenreVoteInput {
   previousGenre?: GenreName;
 }
 
-const VALID_GENRES: GenreName[] = ["hip_hop", "country", "edm"];
+const VALID_GENRES: GenreName[] = ["hip_hop", "country", "edm", "alternative_rock"];
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
@@ -18,7 +18,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
   const input = parseBody<SubmitGenreVoteInput>(event.body);
   if (!input?.genre || !VALID_GENRES.includes(input.genre)) {
-    return json(400, { error: "genre must be one of hip_hop, country, edm" });
+    return json(400, { error: "genre must be one of hip_hop, country, edm, alternative_rock" });
   }
 
   const isSwitch = input.previousGenre
@@ -35,7 +35,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       UpdateExpression:
         "SET genreVotes = if_not_exists(genreVotes, :emptyVotes)",
       ExpressionAttributeValues: {
-        ":emptyVotes": { hip_hop: 0, country: 0, edm: 0 },
+        ":emptyVotes": { hip_hop: 0, country: 0, edm: 0, alternative_rock: 0 },
       },
     }),
   );
