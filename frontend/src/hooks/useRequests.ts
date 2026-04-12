@@ -56,5 +56,15 @@ export function useRequests(eventId: string | undefined, role: "dj" | "overlay")
     );
   }, []);
 
-  return { requests, grouped, loading, refresh, applyLocalStatus };
+  const swapPositions = useCallback((idA: string, posA: number, idB: string, posB: number) => {
+    setRequests((prev) =>
+      prev.map((req) => {
+        if (req.requestId === idA) return { ...req, position: posB };
+        if (req.requestId === idB) return { ...req, position: posA };
+        return req;
+      }),
+    );
+  }, []);
+
+  return { requests, grouped, loading, refresh, applyLocalStatus, swapPositions };
 }

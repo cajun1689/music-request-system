@@ -79,7 +79,7 @@ export function DashboardPage() {
   }
   const [libraryTracks, setLibraryTracks] = useState<LibraryEntry[] | null>(null);
   const [tab, setTab] = useState<Tab>("pending");
-  const { grouped, loading, applyLocalStatus, refresh } = useRequests(eventId || undefined, "dj");
+  const { grouped, loading, applyLocalStatus, swapPositions, refresh } = useRequests(eventId || undefined, "dj");
 
   const visible = useMemo(() => grouped[tab], [grouped, tab]);
 
@@ -186,25 +186,29 @@ export function DashboardPage() {
 
     const current = list[idx];
     const target = list[swapIdx];
-    const currentPos = current.position ?? idx;
-    const targetPos = target.position ?? swapIdx;
+    const currentPos = current.position ?? Date.now();
+    const targetPos = target.position ?? Date.now() + 1;
 
-    await Promise.all([
-      api.updateRequest(
-        eventId,
-        current.requestId,
-        { position: targetPos, reviewedBy: session.email },
-        session.idToken,
-      ),
-      api.updateRequest(
-        eventId,
-        target.requestId,
-        { position: currentPos, reviewedBy: session.email },
-        session.idToken,
-      ),
-    ]);
+    swapPositions(current.requestId, currentPos, target.requestId, targetPos);
 
-    await refresh();
+    try {
+      await Promise.all([
+        api.updateRequest(
+          eventId,
+          current.requestId,
+          { position: targetPos },
+          session.idToken,
+        ),
+        api.updateRequest(
+          eventId,
+          target.requestId,
+          { position: currentPos },
+          session.idToken,
+        ),
+      ]);
+    } catch {
+      swapPositions(current.requestId, targetPos, target.requestId, currentPos);
+    }
   }
 
   async function updatePayment(requestId: string, paymentStatus: "verified" | "rejected") {
