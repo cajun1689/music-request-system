@@ -155,11 +155,52 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   );
   const sourceDjName = matchingSource?.djName || matchingSource?.name || PUSH_SOURCE_ID;
 
+  const now = new Date().toISOString();
+
   const trackNorm = normalize(`${input.artist ?? ""} ${input.title}`);
   const lastPushed = eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.lastPushedTrackNorm
     ?? eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.lastMatchedTrackNorm;
   if (trackNorm && lastPushed && trackNorm === lastPushed) {
     return json(200, { matched: false, reason: "Duplicate track, already processed." });
+  }
+
+  const pendingRequestId = eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.pendingPlayedRequestId;
+  const pendingReviewedBy = eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.pendingPlayedReviewedBy;
+  if (pendingRequestId) {
+    try {
+      await docClient.send(
+        new UpdateCommand({
+          TableName: env.requestsTableName,
+          Key: { eventId, requestId: pendingRequestId },
+          ConditionExpression: "attribute_exists(eventId) and attribute_exists(requestId) and #status = :approved",
+          UpdateExpression:
+            "SET #status = :status, playedAt = :playedAt",
+          ExpressionAttributeNames: { "#status": "status" },
+          ExpressionAttributeValues: {
+            ":status": "played",
+            ":approved": "approved",
+            ":playedAt": now,
+          },
+          ReturnValues: "NONE",
+        }),
+      );
+      console.log("Deferred played:", pendingRequestId, "by", pendingReviewedBy);
+    } catch {
+      console.log("Deferred played skip (already changed):", pendingRequestId);
+    }
+    try {
+      await docClient.send(
+        new UpdateCommand({
+          TableName: env.eventsTableName,
+          Key: { eventId },
+          UpdateExpression: "REMOVE #ams.#sid.#ppri, #ams.#sid.#pprb",
+          ExpressionAttributeNames: {
+            "#ams": "autoMatchState", "#sid": PUSH_SOURCE_ID,
+            "#ppri": "pendingPlayedRequestId", "#pprb": "pendingPlayedReviewedBy",
+          },
+        }),
+      );
+    } catch { /* non-fatal */ }
   }
 
   console.log("pushTrack:", JSON.stringify({
@@ -179,8 +220,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   );
   const candidates = (approved.Items ?? []) as RequestRecord[];
   console.log("approved candidates:", candidates.length);
-
-  const now = new Date().toISOString();
 
   try {
     if (!eventRecord.autoMatchState) {
@@ -304,28 +343,27 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // Non-fatal
   }
 
-  console.log("MATCH:", JSON.stringify({
+  const reviewedBy = `auto:${PUSH_SOURCE_ID}:${sourceDjName}`;
+
+  console.log("MATCH (deferred played):", JSON.stringify({
     requestId: best.request.requestId,
     requestSong: best.request.songTitle,
     requestArtist: best.request.artistName,
     score: Number(best.score.toFixed(2)),
   }));
 
-  const updated = await docClient.send(
+  await docClient.send(
     new UpdateCommand({
       TableName: env.requestsTableName,
       Key: { eventId, requestId: best.request.requestId },
       ConditionExpression: "attribute_exists(eventId) and attribute_exists(requestId)",
       UpdateExpression:
-        "SET #status = :status, reviewedAt = :reviewedAt, reviewedBy = :reviewedBy, playedAt = :playedAt",
-      ExpressionAttributeNames: { "#status": "status" },
+        "SET reviewedAt = :reviewedAt, reviewedBy = :reviewedBy",
       ExpressionAttributeValues: {
-        ":status": "played",
         ":reviewedAt": now,
-        ":reviewedBy": `auto:${PUSH_SOURCE_ID}:${sourceDjName}`,
-        ":playedAt": now,
+        ":reviewedBy": reviewedBy,
       },
-      ReturnValues: "ALL_NEW",
+      ReturnValues: "NONE",
     }),
   );
 
@@ -335,14 +373,19 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         TableName: env.eventsTableName,
         Key: { eventId },
         UpdateExpression:
-          "SET #ams.#sid.#lmtn = :tn, #ams.#sid.#lma = :now",
+          "SET #ams.#sid.#lmtn = :tn, #ams.#sid.#lma = :now, #ams.#sid.#ppri = :rid, #ams.#sid.#pprb = :rb",
         ExpressionAttributeNames: {
           "#ams": "autoMatchState",
           "#sid": PUSH_SOURCE_ID,
           "#lmtn": "lastMatchedTrackNorm",
           "#lma": "lastMatchedAt",
+          "#ppri": "pendingPlayedRequestId",
+          "#pprb": "pendingPlayedReviewedBy",
         },
-        ExpressionAttributeValues: { ":tn": trackNorm, ":now": now },
+        ExpressionAttributeValues: {
+          ":tn": trackNorm, ":now": now,
+          ":rid": best.request.requestId, ":rb": reviewedBy,
+        },
       }),
     );
   } catch {
@@ -355,6 +398,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     sourceName: sourceDjName,
     confidenceScore: Number(best.score.toFixed(2)),
     pushedTrack: { title: input.title, artist: input.artist },
-    request: updated.Attributes,
+    request: best.request,
   });
 };

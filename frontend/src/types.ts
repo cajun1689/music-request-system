@@ -31,6 +31,8 @@ export interface AutoMatchSourceState {
   lastPushedTrackNorm?: string;
   lastMatchedTrackNorm?: string;
   lastMatchedAt?: string;
+  pendingPlayedRequestId?: string;
+  pendingPlayedReviewedBy?: string;
 }
 
 export interface EventRecord {
