@@ -32,6 +32,7 @@ const lambdaDefaults = {
   runtime: lambda.Runtime.NODEJS_20_X,
   memorySize: 256,
   timeout: Duration.seconds(15),
+  logRetention: logs.RetentionDays.ONE_MONTH,
   bundling: {
     minify: true,
     sourceMap: true,
@@ -557,24 +558,6 @@ export class InfrastructureStack extends Stack {
     paypalWebhookFn.addEnvironment("PAYPAL_CLIENT_SECRET", paypalClientSecret);
     paypalWebhookFn.addEnvironment("PAYPAL_ENVIRONMENT", paypalEnvironment);
     paypalWebhookFn.addEnvironment("PAYPAL_WEBHOOK_ID", paypalWebhookId);
-
-    // --- Log retention (30 days) for all Lambda functions ---
-    const allLambdas = [
-      listEventsFn, createEventFn, getEventFn, getEventBySlugFn, updateEventFn,
-      createRequestFn, getRequestsFn, updateRequestFn, uploadBrandAssetFn,
-      resetRequestsFn, detectPlayedFn, autoDetectPlayedFn, submitGenreVoteFn,
-      resetGenreVotesFn, createPaypalOrderFn, capturePaypalOrderFn, pushTrackFn,
-      reviewRequestByTokenFn, toggleFireSaleByTokenFn, syncLibraryFn, getLibraryFn,
-      deleteEventFn, cleanupEventsFn, paypalWebhookFn, wsConnectFn, wsDisconnectFn,
-      wsSubscribeFn, requestStreamFn,
-    ];
-    for (const fn of allLambdas) {
-      new logs.LogGroup(this, `${fn.node.id}Logs`, {
-        logGroupName: `/aws/lambda/${fn.functionName}`,
-        retention: logs.RetentionDays.ONE_MONTH,
-        removalPolicy: RemovalPolicy.DESTROY,
-      });
-    }
 
     // --- CloudWatch alarms ---
     const alarmTopic = new sns.Topic(this, "AlarmTopic", {
