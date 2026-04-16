@@ -10,14 +10,18 @@ import {
   aws_certificatemanager as acm,
   aws_cloudfront as cloudfront,
   aws_cloudfront_origins as origins,
+  aws_cloudwatch as cloudwatch,
+  aws_cloudwatch_actions as cwActions,
   aws_cognito as cognito,
   aws_dynamodb as dynamodb,
   aws_iam as iam,
   aws_lambda as lambda,
   aws_lambda_event_sources as eventSources,
   aws_lambda_nodejs as lambdaNodejs,
+  aws_logs as logs,
   aws_s3 as s3,
   aws_s3_deployment as s3deploy,
+  aws_sns as sns,
   aws_events as events,
   aws_events_targets as targets,
   aws_ssm as ssm,
@@ -46,7 +50,8 @@ export class InfrastructureStack extends Stack {
     const eventsTable = new dynamodb.Table(this, "EventsTable", {
       partitionKey: { name: "eventId", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: RemovalPolicy.DESTROY,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
     });
     eventsTable.addGlobalSecondaryIndex({
       indexName: "slug-index",
@@ -58,7 +63,8 @@ export class InfrastructureStack extends Stack {
       sortKey: { name: "requestId", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
-      removalPolicy: RemovalPolicy.DESTROY,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
     });
 
     requestsTable.addGlobalSecondaryIndex({
@@ -423,7 +429,11 @@ export class InfrastructureStack extends Stack {
 
     const restApi = new apigateway.RestApi(this, "DjRequestsRestApi", {
       restApiName: "dj-requests-api",
-      deployOptions: { stageName: "prod" },
+      deployOptions: {
+        stageName: "prod",
+        throttlingRateLimit: 50,
+        throttlingBurstLimit: 100,
+      },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
@@ -547,6 +557,59 @@ export class InfrastructureStack extends Stack {
     paypalWebhookFn.addEnvironment("PAYPAL_CLIENT_SECRET", paypalClientSecret);
     paypalWebhookFn.addEnvironment("PAYPAL_ENVIRONMENT", paypalEnvironment);
     paypalWebhookFn.addEnvironment("PAYPAL_WEBHOOK_ID", paypalWebhookId);
+
+    // --- Log retention (30 days) for all Lambda functions ---
+    const allLambdas = [
+      listEventsFn, createEventFn, getEventFn, getEventBySlugFn, updateEventFn,
+      createRequestFn, getRequestsFn, updateRequestFn, uploadBrandAssetFn,
+      resetRequestsFn, detectPlayedFn, autoDetectPlayedFn, submitGenreVoteFn,
+      resetGenreVotesFn, createPaypalOrderFn, capturePaypalOrderFn, pushTrackFn,
+      reviewRequestByTokenFn, toggleFireSaleByTokenFn, syncLibraryFn, getLibraryFn,
+      deleteEventFn, cleanupEventsFn, paypalWebhookFn, wsConnectFn, wsDisconnectFn,
+      wsSubscribeFn, requestStreamFn,
+    ];
+    for (const fn of allLambdas) {
+      new logs.LogGroup(this, `${fn.node.id}Logs`, {
+        logGroupName: `/aws/lambda/${fn.functionName}`,
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      });
+    }
+
+    // --- CloudWatch alarms ---
+    const alarmTopic = new sns.Topic(this, "AlarmTopic", {
+      displayName: "Casper Requests Alarms",
+    });
+
+    const criticalFunctions = {
+      CreateRequest: createRequestFn,
+      PushTrack: pushTrackFn,
+      CapturePaypalOrder: capturePaypalOrderFn,
+      RequestStream: requestStreamFn,
+    };
+    for (const [label, fn] of Object.entries(criticalFunctions)) {
+      const alarm = new cloudwatch.Alarm(this, `${label}ErrorAlarm`, {
+        metric: fn.metricErrors({ period: Duration.minutes(5) }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        alarmDescription: `${label} Lambda errors >= 1 in 5 min`,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      });
+      alarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
+    }
+
+    const api5xxAlarm = new cloudwatch.Alarm(this, "RestApi5xxAlarm", {
+      metric: restApi.metricServerError({ period: Duration.minutes(5) }),
+      threshold: 5,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      alarmDescription: "REST API 5xx errors >= 5 in 5 min",
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    api5xxAlarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
+
+    new CfnOutput(this, "AlarmTopicArn", { value: alarmTopic.topicArn });
 
     new CfnOutput(this, "RestApiUrl", { value: restApi.url });
     new CfnOutput(this, "WebSocketUrl", {

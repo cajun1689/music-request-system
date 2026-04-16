@@ -413,6 +413,7 @@ export function AdminPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 p-6 text-slate-100">
+      <title>Admin — Casper Requests</title>
       <div className="mx-auto max-w-3xl space-y-6">
         <header className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900 p-4">
           <div>

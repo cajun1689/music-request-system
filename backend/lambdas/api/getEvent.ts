@@ -38,5 +38,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
   }
 
+  const authHeader = event.headers?.authorization ?? event.headers?.Authorization;
+  if (!authHeader) {
+    const { pushToken: _stripped, autoMatchState: _match, ...publicFields } = response.Item;
+    return json(200, publicFields);
+  }
+
   return json(200, response.Item);
 };

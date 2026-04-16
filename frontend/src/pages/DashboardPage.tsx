@@ -464,6 +464,7 @@ export function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 p-6 text-slate-100">
+      <title>{eventData ? `Dashboard — ${eventData.name}` : "Dashboard — Casper Requests"}</title>
       <div className="mx-auto max-w-6xl">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900 p-4">
           <div>

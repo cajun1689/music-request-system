@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useParams } from "react-router-dom";
+import { toast } from "sonner";
 import { BrandedLayout } from "../components/BrandedLayout";
+import { useWebSocket } from "../hooks/useWebSocket";
 import { api } from "../services/api";
 import type { EventRecord, GenreName, RequestRecord } from "../types";
 import { GENRE_LABELS, GENRE_VOTE_THRESHOLD, getAvailableGenres, normalizeGenreVotes } from "../utils/genreVotes";
@@ -99,9 +101,36 @@ export function RequestPage() {
     };
 
     void refreshStatus();
-    const interval = window.setInterval(() => void refreshStatus(), 7000);
-    return () => window.clearInterval(interval);
   }, [eventId, trackedRequestKey]);
+
+  useWebSocket(eventId, "guest", (payload) => {
+    const parsed = payload as { type?: string; data?: RequestRecord };
+    if (parsed.type !== "request_updated" || !parsed.data) return;
+    const trackedId = localStorage.getItem(trackedRequestKey);
+    if (!trackedId) return;
+
+    if (parsed.data.requestId === trackedId) {
+      setTrackedRequest(parsed.data);
+      if (parsed.data.status === "approved") {
+        toast.success("Your request was approved!");
+      } else if (parsed.data.status === "played") {
+        toast.success("Your song is playing!");
+      } else if (parsed.data.status === "vetoed") {
+        toast("Request not accepted this round. Try another track.");
+      }
+    }
+
+    if (parsed.data.status === "approved") {
+      void (async () => {
+        const all = await api.getRequests(eventId!);
+        const approved = all
+          .filter((item) => item.status === "approved")
+          .sort((a, b) => Number(a.position ?? Number.MAX_SAFE_INTEGER) - Number(b.position ?? Number.MAX_SAFE_INTEGER));
+        const idx = approved.findIndex((item) => item.requestId === trackedId);
+        setSongsAway(idx >= 0 ? idx + 1 : null);
+      })();
+    }
+  });
 
   useEffect(() => {
     if (!eventId || handlingPaypalReturnRef.current) {
@@ -139,8 +168,10 @@ export function RequestPage() {
           setTrackedRequest(result.request);
         }
         setFeedback("Payment received and auto-verified. DJs will see this as paid.");
+        toast.success("Payment verified!");
       } catch (err) {
         setFeedback(`Payment return detected, but verification failed: ${(err as Error).message}`);
+        toast.error("Payment verification failed");
       } finally {
         clearQuery();
       }
@@ -175,8 +206,21 @@ export function RequestPage() {
       setMessage("");
       setTipAmount("");
       setFeedback("Request submitted. The DJs will review it shortly.");
+      toast.success("Request submitted!");
     } catch (err) {
-      setFeedback(`Request failed: ${(err as Error).message}`);
+      const msg = (err as Error).message;
+      if (msg.includes("already been requested")) {
+        try {
+          const parsed = JSON.parse(msg);
+          setFeedback(`"${parsed.existingRequest?.songTitle}" by ${parsed.existingRequest?.artistName} is already in the queue (${parsed.existingRequest?.status}).`);
+        } catch {
+          setFeedback("This song has already been requested.");
+        }
+        toast("This song has already been requested!");
+      } else {
+        setFeedback(`Request failed: ${msg}`);
+        toast.error(msg);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -207,6 +251,7 @@ export function RequestPage() {
 
   return (
     <BrandedLayout event={eventData} title="Request a Song" subtitle="Your request goes to the DJ team for approval">
+      <title>{`Request a Song — ${eventData.djBrandName} at ${eventData.venueName}`}</title>
       <section className="mt-3 rounded-2xl border border-white/20 bg-black/30 p-5">
         <h2 className="text-lg font-semibold">Vote on Tonight&apos;s Style</h2>
         <p className="mt-1 text-sm text-slate-300">

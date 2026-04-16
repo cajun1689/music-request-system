@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 
 export function LoginPage() {
@@ -22,6 +23,7 @@ export function LoginPage() {
       navigate(from, { replace: true });
     } catch (err) {
       setError((err as Error).message);
+      toast.error((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -29,6 +31,7 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+      <title>Sign In — Casper Requests</title>
       <form onSubmit={onSubmit} className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6">
         <h1 className="text-2xl font-bold text-white">DJ/Admin Login</h1>
         <p className="mt-1 text-sm text-slate-300">Use your Cognito credentials.</p>
