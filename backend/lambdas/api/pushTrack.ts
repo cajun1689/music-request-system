@@ -176,6 +176,27 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const lastPushed = eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.lastPushedTrackNorm
     ?? eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.lastMatchedTrackNorm;
   if (trackNorm && lastPushed && trackNorm === lastPushed) {
+    if (eventRecord.nowPlayingAutoEnabled) {
+      const slotId = `src-${PUSH_SOURCE_ID}`;
+      const existingSlots: NowPlayingSlot[] = eventRecord.nowPlayingSlots ?? [];
+      const slot = existingSlots.find((s) => s.id === slotId);
+      if (slot) {
+        const refreshed = existingSlots.map((s) =>
+          s.id === slotId ? { ...s, active: true, updatedAt: now } : s,
+        );
+        try {
+          await docClient.send(
+            new UpdateCommand({
+              TableName: env.eventsTableName,
+              Key: { eventId },
+              UpdateExpression: "SET #nps = :slots, updatedAt = :now",
+              ExpressionAttributeNames: { "#nps": "nowPlayingSlots" },
+              ExpressionAttributeValues: { ":slots": refreshed, ":now": now },
+            }),
+          );
+        } catch { /* non-fatal */ }
+      }
+    }
     return json(200, { matched: false, reason: "Duplicate track, already processed." });
   }
 
