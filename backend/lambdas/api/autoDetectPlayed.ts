@@ -255,6 +255,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       const existingSlots = eventRecord.nowPlayingSlots ?? [];
       const slotUpdates: NowPlayingSlot[] = [];
 
+      const SLOT_STALE_MS = 3 * 60 * 1000;
+      const nowMs = Date.now();
+
       for (const status of sourceStatuses) {
         const existing = existingSlots.find((s) => s.id === `src-${status.sourceId}`);
         if (status.currentTrack) {
@@ -270,14 +273,16 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
             active: true,
             updatedAt: new Date().toISOString(),
           });
+        } else if (existing && existing.active && existing.songTitle && existing.updatedAt
+            && (nowMs - new Date(existing.updatedAt).getTime()) < SLOT_STALE_MS) {
+          slotUpdates.push(existing);
         } else if (existing) {
-          slotUpdates.push({ ...existing, active: status.health === "live" });
+          slotUpdates.push({ ...existing, active: false });
         }
       }
 
-      const managedSlotIds = new Set(sourceStatuses.map((s) => `src-${s.sourceId}`));
       for (const existing of existingSlots) {
-        if (!managedSlotIds.has(existing.id) && !slotUpdates.some((s) => s.id === existing.id)) {
+        if (!slotUpdates.some((s) => s.id === existing.id)) {
           slotUpdates.push(existing);
         }
       }

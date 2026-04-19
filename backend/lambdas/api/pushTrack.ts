@@ -135,8 +135,19 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     event.headers?.["x-push-token"] ?? event.headers?.["X-Push-Token"] ?? "";
   if (!pushToken) return json(401, { error: "Missing x-push-token header" });
 
-  const input = parseBody<PushTrackInput>(event.body);
-  if (!input?.title?.trim()) return json(400, { error: "title is required" });
+  const rawInput = parseBody<PushTrackInput>(event.body);
+  if (!rawInput?.title?.trim()) return json(400, { error: "title is required" });
+
+  const input = { ...rawInput };
+  const looksLikeBpm = /^\d{2,3}\s*(bpm)?$/i.test((input.artist ?? "").trim());
+  const hasArtistInTitle = /^.+?\s+[-–—]\s+.+$/.test(input.title);
+  if (hasArtistInTitle && (!input.artist?.trim() || looksLikeBpm)) {
+    const m = input.title.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+    if (m) {
+      input.artist = m[1].trim();
+      input.title = m[2].trim();
+    }
+  }
 
   const eventResponse = await docClient.send(
     new GetCommand({ TableName: env.eventsTableName, Key: { eventId } }),
