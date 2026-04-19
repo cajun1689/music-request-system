@@ -967,55 +967,90 @@ export function DashboardPage() {
               </button>
               {autoMatchingMessage ? <p className="text-sm text-slate-300">{autoMatchingMessage}</p> : null}
             </div>
-            {sourceHealth.length ? (
-              <div className="mt-3 grid gap-2 md:grid-cols-3">
-                {sourceHealth.map((source) => {
-                  const badgeClass =
-                    source.health === "live"
-                      ? "bg-emerald-400/20 text-emerald-300"
-                      : source.health === "private"
-                        ? "bg-rose-400/20 text-rose-300"
-                        : source.health === "no_track_data"
-                          ? "bg-amber-400/20 text-amber-300"
-                          : "bg-slate-700 text-slate-300";
-                  return (
-                    <div key={source.sourceId} className="rounded border border-slate-700 bg-slate-900 p-2 text-xs">
-                      <p className="font-semibold text-slate-100">{source.sourceName}</p>
-                      <p className={`mt-1 inline-flex rounded px-2 py-0.5 ${badgeClass}`}>{source.health}</p>
-                      {source.currentTrack ? <p className="mt-1 text-slate-300">{source.currentTrack}</p> : null}
-                      {source.detail ? <p className="mt-1 text-slate-400">{source.detail}</p> : null}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
             {(() => {
-              const pushState = eventData?.autoMatchState?.["rekordbox-push"];
-              if (!pushState) return null;
-              const hasMatch = pushState.lastMatchedAt && pushState.lastMatchedTrackNorm;
-              const hasPush = pushState.lastPushedTrackNorm;
-              if (!hasMatch && !hasPush) return null;
+              const shownSourceIds = new Set(sourceHealth.map((s) => `src-${s.sourceId}`));
+              const bridgeSlots = (nowPlayingSlots ?? []).filter(
+                (s) => s.active && s.songTitle && !shownSourceIds.has(s.id),
+              );
+              const allCards: Array<{
+                key: string;
+                name: string;
+                badge: string;
+                badgeClass: string;
+                track?: string;
+                detail?: string;
+                source: "url" | "bridge";
+                updatedAt?: string;
+              }> = [];
+
+              for (const source of sourceHealth) {
+                const slot = nowPlayingSlots.find((s) => s.id === `src-${source.sourceId}` && s.active && s.songTitle);
+                const bridgeTrack = slot?.songTitle;
+                const hasLiveTrack = source.health === "live" && source.currentTrack;
+                const badge = hasLiveTrack ? "live" : bridgeTrack ? "bridge" : source.health;
+                const badgeClass = hasLiveTrack
+                  ? "bg-emerald-400/20 text-emerald-300"
+                  : bridgeTrack
+                    ? "bg-indigo-400/20 text-indigo-300"
+                    : source.health === "private"
+                      ? "bg-rose-400/20 text-rose-300"
+                      : source.health === "no_track_data"
+                        ? "bg-amber-400/20 text-amber-300"
+                        : "bg-slate-700 text-slate-300";
+                allCards.push({
+                  key: source.sourceId,
+                  name: source.sourceName,
+                  badge,
+                  badgeClass,
+                  track: hasLiveTrack ? source.currentTrack : bridgeTrack || undefined,
+                  detail: source.detail,
+                  source: bridgeTrack && !hasLiveTrack ? "bridge" : "url",
+                  updatedAt: slot?.updatedAt,
+                });
+              }
+
+              for (const slot of bridgeSlots) {
+                const ageMs = slot.updatedAt ? Date.now() - new Date(slot.updatedAt).getTime() : Infinity;
+                const stale = ageMs > 3 * 60 * 1000;
+                allCards.push({
+                  key: slot.id,
+                  name: slot.djName || "DJ Bridge",
+                  badge: stale ? "stale" : "bridge",
+                  badgeClass: stale ? "bg-amber-400/20 text-amber-300" : "bg-indigo-400/20 text-indigo-300",
+                  track: slot.songTitle,
+                  source: "bridge",
+                  updatedAt: slot.updatedAt,
+                });
+              }
+
+              if (!allCards.length) return null;
               return (
-                <div className="mt-3 rounded border border-indigo-500/40 bg-indigo-950/20 p-2 text-xs">
-                  <p className="font-semibold text-indigo-300">DJ Bridge (push)</p>
-                  {hasPush ? (
-                    <p className="mt-1 text-slate-400">
-                      Now playing: {pushState.lastPushedTrackNorm}
-                    </p>
-                  ) : null}
-                  {hasMatch ? (() => {
-                    const ago = Math.round(
-                      (Date.now() - new Date(pushState.lastMatchedAt!).getTime()) / 1000,
-                    );
-                    const agoLabel = ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)}m ago`;
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  {allCards.map((card) => {
+                    const agoMs = card.updatedAt ? Date.now() - new Date(card.updatedAt).getTime() : null;
+                    const agoLabel = agoMs != null
+                      ? agoMs < 60_000 ? `${Math.round(agoMs / 1000)}s ago` : `${Math.round(agoMs / 60_000)}m ago`
+                      : null;
                     return (
-                      <p className="mt-1 text-emerald-300">
-                        Last match: {pushState.lastMatchedTrackNorm} ({agoLabel})
-                      </p>
+                      <div
+                        key={card.key}
+                        className={`rounded border p-2 text-xs ${
+                          card.source === "bridge" ? "border-indigo-500/40 bg-indigo-950/20" : "border-slate-700 bg-slate-900"
+                        }`}
+                      >
+                        <p className="font-semibold text-slate-100">{card.name}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <span className={`inline-flex rounded px-2 py-0.5 ${card.badgeClass}`}>{card.badge}</span>
+                          {card.source === "bridge" ? (
+                            <span className="inline-flex rounded bg-indigo-500/20 px-1.5 py-0.5 text-indigo-300">via Bridge</span>
+                          ) : null}
+                          {agoLabel ? <span className="text-slate-500">{agoLabel}</span> : null}
+                        </div>
+                        {card.track ? <p className="mt-1 text-slate-300">{card.track}</p> : null}
+                        {card.detail ? <p className="mt-1 text-slate-400">{card.detail}</p> : null}
+                      </div>
                     );
-                  })() : (
-                    <p className="mt-1 text-slate-500">No request matches yet</p>
-                  )}
+                  })}
                 </div>
               );
             })()}
