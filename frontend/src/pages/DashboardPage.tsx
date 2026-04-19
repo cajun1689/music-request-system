@@ -663,29 +663,68 @@ export function DashboardPage() {
                   {nowPlayingSlots.filter((s) => s.active && s.songTitle).length ? (
                     nowPlayingSlots
                       .filter((s) => s.active && s.songTitle)
-                      .map((slot) => (
-                        <div key={slot.id} className="rounded-lg border border-emerald-500/30 bg-slate-950 p-3">
-                          <div className="flex items-start justify-between">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">{slot.djName}</p>
-                            <button
-                              className="rounded bg-rose-500/20 px-2 py-0.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/40"
-                              onClick={() => void disconnectDjSource(slot.id)}
-                              title={slot.id.startsWith("src-") ? "Remove from ticker and block future pushes" : "Clear this slot"}
-                            >
-                              {slot.id.startsWith("src-") ? "Disconnect" : "Clear"}
-                            </button>
+                      .map((slot) => {
+                        const ageMs = slot.updatedAt ? Date.now() - new Date(slot.updatedAt).getTime() : Infinity;
+                        const isStale = ageMs > 3 * 60 * 1000;
+                        const ageLabel = ageMs < 60_000
+                          ? "just now"
+                          : ageMs < 3600_000
+                            ? `${Math.floor(ageMs / 60_000)}m ago`
+                            : `${Math.floor(ageMs / 3600_000)}h ago`;
+                        return (
+                          <div
+                            key={slot.id}
+                            className={`rounded-lg border bg-slate-950 p-3 ${isStale ? "border-amber-500/30 opacity-60" : "border-emerald-500/30"}`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <p className={`text-xs font-semibold uppercase tracking-wide ${isStale ? "text-amber-300" : "text-emerald-300"}`}>{slot.djName}</p>
+                              <button
+                                className="rounded bg-rose-500/20 px-2 py-0.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/40"
+                                onClick={() => void disconnectDjSource(slot.id)}
+                                title={slot.id.startsWith("src-") ? "Remove from ticker and block future pushes" : "Clear this slot"}
+                              >
+                                {slot.id.startsWith("src-") ? "Disconnect" : "Clear"}
+                              </button>
+                            </div>
+                            <p className="mt-1 text-sm font-semibold text-slate-100">{slot.songTitle}</p>
+                            {slot.artistName ? <p className="text-xs text-slate-400">{slot.artistName}</p> : null}
+                            {isStale ? (
+                              <span className="mt-2 inline-block rounded bg-amber-400/20 px-2 py-0.5 text-xs text-amber-300">
+                                Stale · {ageLabel}
+                              </span>
+                            ) : (
+                              <span className="mt-2 inline-block rounded bg-emerald-400/20 px-2 py-0.5 text-xs text-emerald-300">
+                                Live · {ageLabel}
+                              </span>
+                            )}
                           </div>
-                          <p className="mt-1 text-sm font-semibold text-slate-100">{slot.songTitle}</p>
-                          {slot.artistName ? <p className="text-xs text-slate-400">{slot.artistName}</p> : null}
-                          <span className="mt-2 inline-block rounded bg-emerald-400/20 px-2 py-0.5 text-xs text-emerald-300">Live</span>
-                        </div>
-                      ))
+                        );
+                      })
                   ) : (
                     <p className="col-span-3 text-sm text-slate-400">
                       Auto is on — waiting for live sources to report tracks. Turn on Auto-Match below to start polling.
                     </p>
                   )}
                 </div>
+                {nowPlayingSlots.some((s) => s.active && s.songTitle && s.updatedAt && Date.now() - new Date(s.updatedAt).getTime() > 3 * 60 * 1000) ? (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      className="rounded bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/40"
+                      onClick={() => {
+                        const staleThreshold = Date.now() - 3 * 60 * 1000;
+                        const cleaned = nowPlayingSlots.map((s) =>
+                          s.active && s.updatedAt && new Date(s.updatedAt).getTime() < staleThreshold
+                            ? { ...s, songTitle: "", artistName: "", active: false, updatedAt: new Date().toISOString() }
+                            : s,
+                        );
+                        setNowPlayingSlots(cleaned);
+                        void saveNowPlayingSlots(cleaned);
+                      }}
+                    >
+                      Clear All Stale
+                    </button>
+                  </div>
+                ) : null}
                 {blockedPushSources.length ? (
                   <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-950/20 p-3">
                     <p className="text-xs font-semibold text-rose-300">Disconnected DJ Sources</p>
