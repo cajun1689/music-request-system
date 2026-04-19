@@ -379,22 +379,23 @@ export function DashboardPage() {
 
   async function disconnectDjSource(slotId: string) {
     if (!session || !eventId) return;
+    const isPushSource = slotId.startsWith("src-");
     const sourceId = slotId.replace(/^src-/, "");
-    const nextBlocked = [...new Set([...blockedPushSources, sourceId])];
+    const nextBlocked = isPushSource
+      ? [...new Set([...blockedPushSources, sourceId])]
+      : blockedPushSources;
     const nextSlots = nowPlayingSlots.map((s) =>
       s.id === slotId ? { ...s, songTitle: "", artistName: "", active: false, updatedAt: new Date().toISOString() } : s,
     );
-    setBlockedPushSources(nextBlocked);
+    if (isPushSource) setBlockedPushSources(nextBlocked);
     setNowPlayingSlots(nextSlots);
     try {
-      const updated = await api.updateEvent(
-        eventId,
-        { blockedPushSources: nextBlocked, nowPlayingSlots: nextSlots } as Partial<EventRecord>,
-        session.idToken,
-      );
+      const patch: Partial<EventRecord> = { nowPlayingSlots: nextSlots };
+      if (isPushSource) patch.blockedPushSources = nextBlocked;
+      const updated = await api.updateEvent(eventId, patch, session.idToken);
       setEventData(updated);
     } catch {
-      setBlockedPushSources(blockedPushSources);
+      if (isPushSource) setBlockedPushSources(blockedPushSources);
       setNowPlayingSlots(nowPlayingSlots);
     }
   }
@@ -666,15 +667,13 @@ export function DashboardPage() {
                         <div key={slot.id} className="rounded-lg border border-emerald-500/30 bg-slate-950 p-3">
                           <div className="flex items-start justify-between">
                             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">{slot.djName}</p>
-                            {slot.id.startsWith("src-") ? (
-                              <button
-                                className="rounded bg-rose-500/20 px-2 py-0.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/40"
-                                onClick={() => void disconnectDjSource(slot.id)}
-                                title="Remove this DJ from the ticker and block future pushes"
-                              >
-                                Disconnect
-                              </button>
-                            ) : null}
+                            <button
+                              className="rounded bg-rose-500/20 px-2 py-0.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/40"
+                              onClick={() => void disconnectDjSource(slot.id)}
+                              title={slot.id.startsWith("src-") ? "Remove from ticker and block future pushes" : "Clear this slot"}
+                            >
+                              {slot.id.startsWith("src-") ? "Disconnect" : "Clear"}
+                            </button>
                           </div>
                           <p className="mt-1 text-sm font-semibold text-slate-100">{slot.songTitle}</p>
                           {slot.artistName ? <p className="text-xs text-slate-400">{slot.artistName}</p> : null}
