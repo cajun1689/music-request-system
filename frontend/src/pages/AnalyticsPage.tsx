@@ -6,12 +6,65 @@ import type { EventRecord, RequestRecord } from "../types";
 import { toDisplayTitleCase } from "../utils/formatting";
 import { ALL_GENRES, GENRE_LABELS, normalizeGenreVotes } from "../utils/genreVotes";
 
-function bucketByInterval(requests: RequestRecord[], minutes: number) {
+type TimeRange = "day" | "week" | "month" | "all";
+
+const RANGE_LABELS: Record<TimeRange, string> = {
+  day: "Today",
+  week: "This Week",
+  month: "This Month",
+  all: "All Time",
+};
+
+function getRangeCutoff(range: TimeRange): Date | null {
+  if (range === "all") return null;
+  const now = new Date();
+  if (range === "day") {
+    now.setHours(0, 0, 0, 0);
+    return now;
+  }
+  if (range === "week") {
+    const day = now.getDay();
+    now.setDate(now.getDate() - day);
+    now.setHours(0, 0, 0, 0);
+    return now;
+  }
+  now.setDate(1);
+  now.setHours(0, 0, 0, 0);
+  return now;
+}
+
+function formatBucketLabel(d: Date, range: TimeRange): string {
+  if (range === "day") {
+    return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+  }
+  if (range === "week") {
+    return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+  }
+  if (range === "month") {
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+  const span = Date.now() - d.getTime();
+  if (span < 90 * 24 * 60 * 60 * 1000) {
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+  return `${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
+}
+
+function getBucketMs(range: TimeRange, spanMs: number): number {
+  if (range === "day") return 15 * 60 * 1000;
+  if (range === "week") return 24 * 60 * 60 * 1000;
+  if (range === "month") return 24 * 60 * 60 * 1000;
+  if (spanMs < 90 * 24 * 60 * 60 * 1000) return 7 * 24 * 60 * 60 * 1000;
+  return 30 * 24 * 60 * 60 * 1000;
+}
+
+function bucketByRange(requests: RequestRecord[], range: TimeRange) {
   if (!requests.length) return [];
   const sorted = [...requests].sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
   const start = new Date(sorted[0].submittedAt).getTime();
   const end = new Date(sorted[sorted.length - 1].submittedAt).getTime();
-  const bucketMs = minutes * 60 * 1000;
+  const spanMs = end - start;
+  const bucketMs = getBucketMs(range, spanMs);
   const buckets: { label: string; count: number }[] = [];
 
   for (let t = start; t <= end + bucketMs; t += bucketMs) {
@@ -20,21 +73,25 @@ function bucketByInterval(requests: RequestRecord[], minutes: number) {
       const ts = new Date(r.submittedAt).getTime();
       return ts >= t && ts < bucketEnd;
     }).length;
-    const d = new Date(t);
-    buckets.push({
-      label: `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`,
-      count,
-    });
+    buckets.push({ label: formatBucketLabel(new Date(t), range), count });
   }
   return buckets;
+}
+
+function getTimelineTitle(range: TimeRange): string {
+  if (range === "day") return "Request Timeline (15-min buckets)";
+  if (range === "week") return "Requests by Day";
+  if (range === "month") return "Requests by Day";
+  return "Request Timeline";
 }
 
 export function AnalyticsPage() {
   const { eventId } = useParams();
   useAuth();
   const [eventData, setEventData] = useState<EventRecord | null>(null);
-  const [requests, setRequests] = useState<RequestRecord[]>([]);
+  const [allRequests, setAllRequests] = useState<RequestRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<TimeRange>("all");
 
   useEffect(() => {
     if (!eventId) return;
@@ -42,10 +99,17 @@ export function AnalyticsPage() {
     Promise.all([api.getEvent(eventId), api.getRequests(eventId)])
       .then(([event, reqs]) => {
         setEventData(event);
-        setRequests(reqs);
+        setAllRequests(reqs);
       })
       .finally(() => setLoading(false));
   }, [eventId]);
+
+  const requests = useMemo(() => {
+    const cutoff = getRangeCutoff(range);
+    if (!cutoff) return allRequests;
+    const cutoffMs = cutoff.getTime();
+    return allRequests.filter((r) => new Date(r.submittedAt).getTime() >= cutoffMs);
+  }, [allRequests, range]);
 
   const stats = useMemo(() => {
     const total = requests.length;
@@ -103,7 +167,7 @@ export function AnalyticsPage() {
     };
   }, [requests]);
 
-  const timeline = useMemo(() => bucketByInterval(requests, 15), [requests]);
+  const timeline = useMemo(() => bucketByRange(requests, range), [requests, range]);
   const maxBucket = Math.max(...timeline.map((b) => b.count), 1);
 
   if (loading) {
@@ -116,19 +180,47 @@ export function AnalyticsPage() {
     <div className="min-h-screen bg-slate-950 p-6 text-slate-100">
       <title>{eventData ? `Analytics — ${eventData.name}` : "Analytics — Casper Requests"}</title>
       <div className="mx-auto max-w-5xl">
-        <header className="mb-6 flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <div>
-            <h1 className="text-2xl font-bold">Set Analytics</h1>
-            <p className="text-sm text-slate-400">{eventData?.name} — {eventData?.venueName} — {eventData?.date}</p>
+        <header className="mb-6 rounded-xl border border-slate-800 bg-slate-900 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">Set Analytics</h1>
+              <p className="text-sm text-slate-400">{eventData?.name} — {eventData?.venueName} — {eventData?.date}</p>
+            </div>
+            <div className="flex gap-2">
+              {eventId ? (
+                <Link className="rounded-md border border-slate-600 px-3 py-1.5 text-sm" to={`/dashboard/${eventId}`}>
+                  Dashboard
+                </Link>
+              ) : null}
+            </div>
           </div>
-          <div className="flex gap-2">
-            {eventId ? (
-              <Link className="rounded-md border border-slate-600 px-3 py-1.5 text-sm" to={`/dashboard/${eventId}`}>
-                Dashboard
-              </Link>
-            ) : null}
+          <div className="mt-3 flex gap-1 rounded-lg bg-slate-950 p-1">
+            {(["day", "week", "month", "all"] as TimeRange[]).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  range === r
+                    ? "bg-orange-500 text-white shadow"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {RANGE_LABELS[r]}
+              </button>
+            ))}
           </div>
         </header>
+
+        {requests.length === 0 && (
+          <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900 p-8 text-center">
+            <p className="text-lg font-medium text-slate-400">No requests {range === "all" ? "yet" : `for ${RANGE_LABELS[range].toLowerCase()}`}.</p>
+            {range !== "all" && (
+              <button onClick={() => setRange("all")} className="mt-2 text-sm text-orange-400 hover:text-orange-300">
+                View all time instead
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Summary Cards */}
         <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -152,7 +244,7 @@ export function AnalyticsPage() {
         {/* Request Timeline */}
         {timeline.length > 1 ? (
           <section className="mb-6 rounded-xl border border-slate-800 bg-slate-900 p-4">
-            <h2 className="mb-3 text-lg font-semibold">Request Timeline (15-min buckets)</h2>
+            <h2 className="mb-3 text-lg font-semibold">{getTimelineTitle(range)}</h2>
             <div className="flex items-end gap-1" style={{ height: 120 }}>
               {timeline.map((bucket) => (
                 <div key={bucket.label} className="flex flex-1 flex-col items-center gap-1">
