@@ -518,6 +518,16 @@ function readCurrentTrackFromLog(): TrackInfo | null {
   };
 }
 
+function splitArtistTitle(entry: { title: string; artist: string }): { title: string; artist: string } {
+  const looksLikeBpm = /^\d{2,3}\s*(bpm)?$/i.test(entry.artist.trim());
+  const hasDash = /^.+?\s+[-–—]\s+.+$/.test(entry.title);
+  if (hasDash && (!entry.artist.trim() || looksLikeBpm)) {
+    const m = entry.title.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+    if (m) return { artist: m[1].trim(), title: m[2].trim() };
+  }
+  return { title: entry.title, artist: entry.artist };
+}
+
 function readCurrentTrackFromSession(customPath?: string): TrackInfo | null {
   const sessDir = resolveSeratoSessionDir(customPath);
   if (!sessDir) return null;
@@ -535,16 +545,14 @@ function readCurrentTrackFromSession(customPath?: string): TrackInfo | null {
   const entries = parseSessionFile(latestFile);
   if (!entries.length) return null;
 
-  // Prefer the latest entry marked as "played" (actually played, not just loaded)
-  const playedEntries = entries.filter((e) => e.played);
-  const latest = playedEntries.length > 0
-    ? playedEntries[playedEntries.length - 1]
-    : entries[entries.length - 1];
+  const latest = entries[entries.length - 1];
   if (!latest.title) return null;
 
+  const { title, artist } = splitArtistTitle(latest);
+
   return {
-    title: latest.title,
-    artist: latest.artist,
+    title,
+    artist,
     album: latest.album || undefined,
     playedAt: latest.startTime
       ? new Date(latest.startTime * 1000).toISOString()
@@ -553,7 +561,16 @@ function readCurrentTrackFromSession(customPath?: string): TrackInfo | null {
 }
 
 export async function readCurrentSeratoTrack(customPath?: string): Promise<TrackInfo | null> {
+  const fromSession = readCurrentTrackFromSession(customPath);
   const fromLog = readCurrentTrackFromLog();
-  if (fromLog) return fromLog;
-  return readCurrentTrackFromSession(customPath);
+
+  if (!fromSession && !fromLog) return null;
+  if (!fromSession) return fromLog;
+  if (!fromLog) return fromSession;
+
+  const sessionTime = fromSession.playedAt ? new Date(fromSession.playedAt).getTime() : 0;
+  const logTime = fromLog.playedAt ? new Date(fromLog.playedAt).getTime() : 0;
+
+  if (sessionTime >= logTime) return fromSession;
+  return fromLog;
 }
