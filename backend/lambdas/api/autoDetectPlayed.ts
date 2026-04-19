@@ -161,6 +161,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   );
   const eventRecord = eventResponse.Item as EventRecord | undefined;
   if (!eventRecord) {
+    console.log("autoDetect: event not found", { eventId });
     return json(404, { error: "Event not found" });
   }
 
@@ -186,8 +187,15 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   );
   const candidates = (approved.Items ?? []) as RequestRecord[];
   if (!candidates.length) {
+    console.log("autoDetect: no approved requests", { eventId, sourceCount: sources.length });
     return json(200, { matched: false, reason: "No approved requests to match." });
   }
+
+  console.log("autoDetect: checking", {
+    eventId,
+    sources: sources.map((s) => s.id),
+    approvedCount: candidates.length,
+  });
 
   const checks: Array<{
     sourceId: string;
@@ -205,9 +213,15 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     currentTrack?: string;
   }> = [];
 
-  for (const source of sources) {
+  const fetchResults = await Promise.all(
+    sources.map(async (source) => ({
+      source,
+      fetched: await fetchPlaylist(source.url),
+    })),
+  );
+
+  for (const { source, fetched } of fetchResults) {
     const displayName = source.djName || source.name;
-    const fetched = await fetchPlaylist(source.url);
     sourceStatuses.push({
       sourceId: source.id,
       sourceName: displayName,
@@ -215,6 +229,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       detail: fetched.detail,
       currentTrack: fetched.currentTrack || undefined,
     });
+
+    console.log("autoDetect: source result", {
+      sourceId: source.id,
+      health: fetched.health,
+      currentTrack: fetched.currentTrack?.slice(0, 60) || "(none)",
+    });
+
     if (!fetched.ok) {
       continue;
     }
@@ -222,6 +243,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     const currentTrackNorm = normalize(fetched.currentTrack);
     const lastMatchedTrackNorm = eventRecord.autoMatchState?.[source.id]?.lastMatchedTrackNorm;
     if (currentTrackNorm && lastMatchedTrackNorm && currentTrackNorm === lastMatchedTrackNorm) {
+      console.log("autoDetect: skipping already-matched track", {
+        sourceId: source.id, track: currentTrackNorm.slice(0, 60),
+      });
       continue;
     }
 
@@ -247,28 +271,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   if (eventRecord.nowPlayingAutoEnabled) {
     try {
       const djBrand = eventRecord.djBrandName || "DJ";
-      const sourceMap: Record<string, string> = {};
-      for (const status of sourceStatuses) {
-        sourceMap[status.sourceId] = status.sourceName;
-      }
-
-      const existingSlots = eventRecord.nowPlayingSlots ?? [];
+      const existingSlots: NowPlayingSlot[] = eventRecord.nowPlayingSlots ?? [];
       const slotUpdates: NowPlayingSlot[] = [];
 
       const SLOT_STALE_MS = 3 * 60 * 1000;
       const nowMs = Date.now();
 
-      for (const status of sourceStatuses) {
-        const existing = existingSlots.find((s) => s.id === `src-${status.sourceId}`);
-        if (status.currentTrack) {
+      for (const src of sourceStatuses) {
+        const existing = existingSlots.find((s) => s.id === `src-${src.sourceId}`);
+        if (src.currentTrack) {
           const alreadyShowing = existing?.songTitle;
-          const rawChanged = !alreadyShowing || normalize(status.currentTrack) !== normalize(alreadyShowing);
+          const rawChanged = !alreadyShowing || normalize(src.currentTrack) !== normalize(alreadyShowing);
           const cleaned = rawChanged
-            ? await cleanTrackName(status.currentTrack, djBrand)
-            : existing?.songTitle ?? status.currentTrack;
+            ? await cleanTrackName(src.currentTrack, djBrand)
+            : existing?.songTitle ?? src.currentTrack;
           slotUpdates.push({
-            id: `src-${status.sourceId}`,
-            djName: status.sourceName,
+            id: `src-${src.sourceId}`,
+            djName: src.sourceName,
             songTitle: cleaned,
             active: true,
             updatedAt: new Date().toISOString(),
@@ -287,6 +306,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         }
       }
 
+      console.log("autoDetect: slot updates", {
+        existingCount: existingSlots.length,
+        updatedCount: slotUpdates.length,
+        activeSlots: slotUpdates.filter((s) => s.active).map((s) => ({ id: s.id, title: s.songTitle?.slice(0, 40) })),
+      });
+
       if (slotUpdates.length) {
         await docClient.send(
           new UpdateCommand({
@@ -298,12 +323,15 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           }),
         );
       }
-    } catch {
-      // Non-fatal: now-playing update failure shouldn't break auto-match
+    } catch (err) {
+      console.error("autoDetect: failed to update nowPlayingSlots", {
+        eventId, error: String(err),
+      });
     }
   }
 
   if (!checks.length) {
+    console.log("autoDetect: no matches", { eventId });
     return json(200, {
       matched: false,
       reason: "No confident matches found in live playlists.",
@@ -313,6 +341,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
   checks.sort((a, b) => b.score - a.score);
   const best = checks[0];
+
+  console.log("autoDetect: top candidates", {
+    eventId,
+    top: checks.slice(0, 3).map((c) => ({
+      song: c.request.songTitle, score: c.score, source: c.sourceId,
+    })),
+  });
+
   if (!best || best.score < 95) {
     return json(200, {
       matched: false,
@@ -328,6 +364,15 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       })),
     });
   }
+
+  console.log("autoDetect: MATCH", {
+    eventId,
+    sourceId: best.sourceId,
+    requestId: best.request.requestId,
+    song: best.request.songTitle,
+    score: best.score,
+    currentTrack: best.currentTrack?.slice(0, 60),
+  });
 
   const now = new Date().toISOString();
   try {
@@ -354,28 +399,42 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         },
       }),
     );
-  } catch {
-    // Keep auto-match functional even if event-state writes fail.
+  } catch (err) {
+    console.error("autoDetect: failed to update autoMatchState", {
+      eventId, sourceId: best.sourceId, error: String(err),
+    });
   }
 
-  const updated = await docClient.send(
-    new UpdateCommand({
-      TableName: env.requestsTableName,
-      Key: { eventId, requestId: best.request.requestId },
-      ConditionExpression: "attribute_exists(eventId) and attribute_exists(requestId)",
-      UpdateExpression: "SET #status = :status, reviewedAt = :reviewedAt, reviewedBy = :reviewedBy, playedAt = :playedAt",
-      ExpressionAttributeNames: {
-        "#status": "status",
-      },
-      ExpressionAttributeValues: {
-        ":status": "played",
-        ":reviewedAt": now,
-        ":reviewedBy": `auto:${best.sourceId}:${best.sourceName}`,
-        ":playedAt": now,
-      },
-      ReturnValues: "ALL_NEW",
-    }),
-  );
+  let updated;
+  try {
+    updated = await docClient.send(
+      new UpdateCommand({
+        TableName: env.requestsTableName,
+        Key: { eventId, requestId: best.request.requestId },
+        ConditionExpression: "attribute_exists(eventId) and attribute_exists(requestId)",
+        UpdateExpression: "SET #status = :status, reviewedAt = :reviewedAt, reviewedBy = :reviewedBy, playedAt = :playedAt",
+        ExpressionAttributeNames: {
+          "#status": "status",
+        },
+        ExpressionAttributeValues: {
+          ":status": "played",
+          ":reviewedAt": now,
+          ":reviewedBy": `auto:${best.sourceId}:${best.sourceName}`,
+          ":playedAt": now,
+        },
+        ReturnValues: "ALL_NEW",
+      }),
+    );
+  } catch (err) {
+    console.error("autoDetect: failed to mark request as played", {
+      requestId: best.request.requestId, error: String(err),
+    });
+    return json(200, {
+      matched: false,
+      reason: "Matched but failed to update request status.",
+      sourceStatuses,
+    });
+  }
 
   return json(200, {
     matched: true,

@@ -622,8 +622,8 @@
         Replaces the ticker with the fire sale message until the next song match.
       </p>
       <div style="display:flex; gap:6px;">
-        <button class="btn-fire-sale-on" id="btn-fire-sale-on" onclick="handleFireSale(true)">Activate</button>
-        <button class="btn-fire-sale-off" id="btn-fire-sale-off" onclick="handleFireSale(false)">Turn Off</button>
+        <button class="btn-fire-sale-on" id="btn-fire-sale-on">Activate</button>
+        <button class="btn-fire-sale-off" id="btn-fire-sale-off">Turn Off</button>
       </div>
     </div>
 
@@ -1663,7 +1663,9 @@
         requestsCache = requests || [];
         renderRequests(requestsCache);
       } catch (err) {
-        el("requests-list").innerHTML = '<div class="empty-state" style="color:#fca5a5;">Failed to load requests</div>';
+        var errMsg = err && err.message ? err.message : String(err);
+        el("requests-list").innerHTML = '<div class="empty-state" style="color:#fca5a5;">Failed to load requests: ' + errMsg + '</div>';
+        logActivity("Failed to load requests: " + errMsg, "error");
       }
     }
 
@@ -1708,13 +1710,18 @@
         var result = await bridge.toggleFireSale(active);
         fireSaleIsActive = result.fireSaleActive;
         updateFireSaleBadge();
+        showToast(active ? "Fire Sale activated!" : "Fire Sale turned off", active ? "success" : "info");
       } catch (err) {
         console.error("Fire sale error:", err);
+        showToast("Fire sale failed: " + (err.message || err), "error", 8000);
       } finally {
         onBtn.disabled = false;
         offBtn.disabled = false;
       }
     }
+
+    el("btn-fire-sale-on").addEventListener("click", function() { handleFireSale(true); });
+    el("btn-fire-sale-off").addEventListener("click", function() { handleFireSale(false); });
 
     function updateFireSaleBadge() {
       var badge = el("fire-sale-status");

@@ -91,21 +91,36 @@ export async function cleanTrackName(
       const cleaned = regexClean(trimmed);
       return cleaned || `${djBrandName} Unreleased Track`;
     }
-    const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: trimmed },
-      ],
-      max_tokens: 60,
-      temperature: 0,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    let response;
+    try {
+      response = await client.chat.completions.create(
+        {
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: trimmed },
+          ],
+          max_tokens: 60,
+          temperature: 0,
+        },
+        { signal: controller.signal },
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
     const result = response.choices[0]?.message?.content?.trim();
     if (!result || result === "UNKNOWN") {
+      console.log("cleanTrackName: AI returned UNKNOWN for", trimmed.slice(0, 60));
       return `${djBrandName} Unreleased Track`;
     }
     return result;
-  } catch {
+  } catch (err) {
+    console.error("cleanTrackName: AI call failed, falling back to regex", {
+      input: trimmed.slice(0, 60),
+      error: String(err),
+    });
     const cleaned = regexClean(trimmed);
     return cleaned || `${djBrandName} Unreleased Track`;
   }

@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import log from "./logger";
 import type { LibraryTrack, TrackInfo } from "./rekordbox-reader";
 
 const DEFAULT_SERATO_DIRS = [
@@ -416,9 +417,12 @@ function extractArtistTitle(filePath: string): { artist: string; title: string }
   };
 }
 
-function parseSeratoTimestamp(raw: string): Date {
+function parseSeratoTimestamp(raw: string): Date | null {
   const m = raw.match(/^(\d{4})(\d{2})(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
-  if (!m) return new Date();
+  if (!m) {
+    log.verbose("serato: failed to parse timestamp", { raw });
+    return null;
+  }
   return new Date(
     parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]),
     parseInt(m[4]), parseInt(m[5]), parseInt(m[6]),
@@ -445,6 +449,7 @@ function readRecentDeckLoads(logPath: string, tailBytes = 200_000): DeckLoadEntr
     if (!m) continue;
 
     const timestamp = parseSeratoTimestamp(m[1]);
+    if (!timestamp) continue;
     const filePath = m[2];
     const deck = parseInt(m[3]);
     const { artist, title } = extractArtistTitle(filePath);
@@ -457,27 +462,33 @@ function readRecentDeckLoads(logPath: string, tailBytes = 200_000): DeckLoadEntr
 
 function readCurrentTrackFromLog(): TrackInfo | null {
   const logFile = findSeratoLogFile();
-  if (!logFile) return null;
+  if (!logFile) {
+    log.verbose("serato-log: no log file found");
+    return null;
+  }
 
   try {
     const stat = fs.statSync(logFile);
-    if (Date.now() - stat.mtimeMs > STALE_LOG_MS) return null;
+    const ageMs = Date.now() - stat.mtimeMs;
+    if (ageMs > STALE_LOG_MS) {
+      log.verbose("serato-log: stale log file", { ageMin: Math.round(ageMs / 60_000) });
+      return null;
+    }
   } catch {
     return null;
   }
 
   const loads = readRecentDeckLoads(logFile);
-  if (!loads.length) return null;
+  if (!loads.length) {
+    log.verbose("serato-log: no deck loads found in log");
+    return null;
+  }
 
-  // Build per-deck state: the latest load for each deck
   const deckState = new Map<number, DeckLoadEntry>();
   for (const entry of loads) {
     deckState.set(entry.deck, entry);
   }
 
-  // If we have tracks on 2+ decks, the most recently loaded deck is the "prep" deck.
-  // The OTHER deck is likely what's currently playing (the DJ loaded a new track
-  // to prepare the next transition while the other deck outputs audio).
   if (deckState.size >= 2) {
     let latestDeck = 0;
     let latestTime = 0;
@@ -488,7 +499,6 @@ function readCurrentTrackFromLog(): TrackInfo | null {
       }
     }
 
-    // Find the "active" deck (the one NOT most recently loaded)
     let activeDeckEntry: DeckLoadEntry | null = null;
     let activeDeckTime = 0;
     for (const [deck, entry] of deckState) {
@@ -499,6 +509,11 @@ function readCurrentTrackFromLog(): TrackInfo | null {
     }
 
     if (activeDeckEntry && activeDeckEntry.title) {
+      log.verbose("serato-log: multi-deck heuristic", {
+        prepDeck: latestDeck,
+        activeDeck: activeDeckEntry.deck,
+        activeTrack: `${activeDeckEntry.artist} - ${activeDeckEntry.title}`,
+      });
       return {
         title: activeDeckEntry.title,
         artist: activeDeckEntry.artist,
@@ -507,10 +522,12 @@ function readCurrentTrackFromLog(): TrackInfo | null {
     }
   }
 
-  // Fallback: single deck or no multi-deck info
   const latest = loads[loads.length - 1];
   if (!latest.title) return null;
 
+  log.verbose("serato-log: single-deck fallback", {
+    track: `${latest.artist} - ${latest.title}`,
+  });
   return {
     title: latest.title,
     artist: latest.artist,
@@ -530,25 +547,46 @@ function splitArtistTitle(entry: { title: string; artist: string }): { title: st
 
 function readCurrentTrackFromSession(customPath?: string): TrackInfo | null {
   const sessDir = resolveSeratoSessionDir(customPath);
-  if (!sessDir) return null;
+  if (!sessDir) {
+    log.verbose("serato-session: no session directory found");
+    return null;
+  }
 
   const latestFile = findLatestSessionFile(sessDir);
-  if (!latestFile) return null;
+  if (!latestFile) {
+    log.verbose("serato-session: no session files found in", sessDir);
+    return null;
+  }
 
   try {
     const stat = fs.statSync(latestFile);
-    if (Date.now() - stat.mtimeMs > STALE_SESSION_MS) return null;
+    const ageMs = Date.now() - stat.mtimeMs;
+    if (ageMs > STALE_SESSION_MS) {
+      log.verbose("serato-session: stale session file", { ageMin: Math.round(ageMs / 60_000) });
+      return null;
+    }
   } catch {
     return null;
   }
 
   const entries = parseSessionFile(latestFile);
-  if (!entries.length) return null;
+  if (!entries.length) {
+    log.verbose("serato-session: no entries in session file");
+    return null;
+  }
 
   const latest = entries[entries.length - 1];
   if (!latest.title) return null;
 
   const { title, artist } = splitArtistTitle(latest);
+
+  log.verbose("serato-session: latest entry", {
+    track: `${artist} - ${title}`,
+    deck: latest.deck,
+    played: latest.played,
+    startTime: latest.startTime,
+    totalEntries: entries.length,
+  });
 
   return {
     title,
@@ -564,13 +602,31 @@ export async function readCurrentSeratoTrack(customPath?: string): Promise<Track
   const fromSession = readCurrentTrackFromSession(customPath);
   const fromLog = readCurrentTrackFromLog();
 
-  if (!fromSession && !fromLog) return null;
-  if (!fromSession) return fromLog;
-  if (!fromLog) return fromSession;
+  if (!fromSession && !fromLog) {
+    log.verbose("serato: no track data from either source");
+    return null;
+  }
+  if (!fromSession) {
+    log.verbose("serato: using log source (no session data)");
+    return fromLog;
+  }
+  if (!fromLog) {
+    log.verbose("serato: using session source (no log data)");
+    return fromSession;
+  }
 
   const sessionTime = fromSession.playedAt ? new Date(fromSession.playedAt).getTime() : 0;
   const logTime = fromLog.playedAt ? new Date(fromLog.playedAt).getTime() : 0;
+  const winner = sessionTime >= logTime ? "session" : "log";
+  const chosen = winner === "session" ? fromSession : fromLog;
 
-  if (sessionTime >= logTime) return fromSession;
-  return fromLog;
+  log.info("serato: cross-check", {
+    sessionTrack: `${fromSession.artist} - ${fromSession.title}`,
+    sessionTime: fromSession.playedAt,
+    logTrack: `${fromLog.artist} - ${fromLog.title}`,
+    logTime: fromLog.playedAt,
+    winner,
+  });
+
+  return chosen;
 }

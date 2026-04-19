@@ -144,6 +144,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   if (hasArtistInTitle && (!input.artist?.trim() || looksLikeBpm)) {
     const m = input.title.match(/^(.+?)\s+[-–—]\s+(.+)$/);
     if (m) {
+      console.log("pushTrack: split artist/title from combined field", {
+        raw: rawInput.title,
+        rawArtist: rawInput.artist,
+        artist: m[1].trim(),
+        title: m[2].trim(),
+      });
       input.artist = m[1].trim();
       input.title = m[2].trim();
     }
@@ -153,15 +159,20 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     new GetCommand({ TableName: env.eventsTableName, Key: { eventId } }),
   );
   const eventRecord = eventResponse.Item as EventRecord | undefined;
-  if (!eventRecord) return json(404, { error: "Event not found" });
+  if (!eventRecord) {
+    console.log("pushTrack: event not found", { eventId });
+    return json(404, { error: "Event not found" });
+  }
 
   if (!eventRecord.pushToken || eventRecord.pushToken !== pushToken) {
+    console.log("pushTrack: invalid push token", { eventId });
     return json(403, { error: "Invalid push token" });
   }
 
   const PUSH_SOURCE_ID = input.sourceId?.trim() || DEFAULT_PUSH_SOURCE_ID;
 
   if (eventRecord.blockedPushSources?.includes(PUSH_SOURCE_ID)) {
+    console.log("pushTrack: blocked source", { eventId, sourceId: PUSH_SOURCE_ID });
     return json(403, { error: "This source has been disconnected by the event admin." });
   }
 
@@ -176,6 +187,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const lastPushed = eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.lastPushedTrackNorm
     ?? eventRecord.autoMatchState?.[PUSH_SOURCE_ID]?.lastMatchedTrackNorm;
   if (trackNorm && lastPushed && trackNorm === lastPushed) {
+    console.log("pushTrack: duplicate track, refreshing slot", {
+      sourceId: PUSH_SOURCE_ID, trackNorm: trackNorm.slice(0, 60),
+    });
     if (eventRecord.nowPlayingAutoEnabled) {
       const slotId = `src-${PUSH_SOURCE_ID}`;
       const existingSlots: NowPlayingSlot[] = eventRecord.nowPlayingSlots ?? [];
@@ -194,7 +208,38 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
               ExpressionAttributeValues: { ":slots": refreshed, ":now": now },
             }),
           );
-        } catch { /* non-fatal */ }
+        } catch (err) {
+          console.error("pushTrack: failed to refresh slot on duplicate", {
+            sourceId: PUSH_SOURCE_ID, error: String(err),
+          });
+        }
+      } else {
+        console.log("pushTrack: duplicate but no existing slot found, creating one", { slotId });
+        try {
+          const djBrand = eventRecord.djBrandName || "DJ";
+          const rawDisplay = [input.title, input.artist].filter(Boolean).join(" - ");
+          const cleaned = await cleanTrackName(rawDisplay, djBrand);
+          const updatedSlots = [...existingSlots, {
+            id: slotId,
+            djName: sourceDjName,
+            songTitle: cleaned,
+            active: true,
+            updatedAt: now,
+          }];
+          await docClient.send(
+            new UpdateCommand({
+              TableName: env.eventsTableName,
+              Key: { eventId },
+              UpdateExpression: "SET #nps = :slots, updatedAt = :now",
+              ExpressionAttributeNames: { "#nps": "nowPlayingSlots" },
+              ExpressionAttributeValues: { ":slots": updatedSlots, ":now": now },
+            }),
+          );
+        } catch (err) {
+          console.error("pushTrack: failed to create slot on duplicate", {
+            sourceId: PUSH_SOURCE_ID, error: String(err),
+          });
+        }
       }
     }
     return json(200, { matched: false, reason: "Duplicate track, already processed." });
@@ -236,7 +281,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           },
         }),
       );
-    } catch { /* non-fatal */ }
+    } catch (err) {
+      console.error("pushTrack: failed to clear pendingPlayed from autoMatchState", {
+        sourceId: PUSH_SOURCE_ID, error: String(err),
+      });
+    }
   }
 
   console.log("pushTrack:", JSON.stringify({
@@ -294,8 +343,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         ExpressionAttributeValues: { ":tn": trackNorm, ":now": now },
       }),
     );
-  } catch {
-    // Non-fatal
+  } catch (err) {
+    console.error("pushTrack: failed to update autoMatchState", {
+      sourceId: PUSH_SOURCE_ID, error: String(err),
+    });
   }
 
   if (eventRecord.nowPlayingAutoEnabled) {
@@ -322,8 +373,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           ExpressionAttributeValues: { ":slots": updatedSlots, ":now": now },
         }),
       );
-    } catch {
-      // Non-fatal: now-playing update shouldn't break push flow
+    } catch (err) {
+      console.error("pushTrack: failed to update nowPlayingSlots", {
+        sourceId: PUSH_SOURCE_ID, error: String(err),
+      });
     }
   }
 
@@ -375,8 +428,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         ExpressionAttributeValues: { ":off": false, ":empty": "", ":now": now },
       }),
     );
-  } catch {
-    // Non-fatal
+  } catch (err) {
+    console.error("pushTrack: failed to reset fire sale", { error: String(err) });
   }
 
   const reviewedBy = `auto:${PUSH_SOURCE_ID}:${sourceDjName}`;
@@ -388,20 +441,26 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     score: Number(best.score.toFixed(2)),
   }));
 
-  await docClient.send(
-    new UpdateCommand({
-      TableName: env.requestsTableName,
-      Key: { eventId, requestId: best.request.requestId },
-      ConditionExpression: "attribute_exists(eventId) and attribute_exists(requestId)",
-      UpdateExpression:
-        "SET reviewedAt = :reviewedAt, reviewedBy = :reviewedBy",
-      ExpressionAttributeValues: {
-        ":reviewedAt": now,
-        ":reviewedBy": reviewedBy,
-      },
-      ReturnValues: "NONE",
-    }),
-  );
+  try {
+    await docClient.send(
+      new UpdateCommand({
+        TableName: env.requestsTableName,
+        Key: { eventId, requestId: best.request.requestId },
+        ConditionExpression: "attribute_exists(eventId) and attribute_exists(requestId)",
+        UpdateExpression:
+          "SET reviewedAt = :reviewedAt, reviewedBy = :reviewedBy",
+        ExpressionAttributeValues: {
+          ":reviewedAt": now,
+          ":reviewedBy": reviewedBy,
+        },
+        ReturnValues: "NONE",
+      }),
+    );
+  } catch (err) {
+    console.error("pushTrack: failed to set reviewedAt on matched request", {
+      requestId: best.request.requestId, error: String(err),
+    });
+  }
 
   try {
     await docClient.send(
@@ -424,8 +483,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         },
       }),
     );
-  } catch {
-    // Non-fatal
+  } catch (err) {
+    console.error("pushTrack: failed to update autoMatchState with match", {
+      sourceId: PUSH_SOURCE_ID, requestId: best.request.requestId, error: String(err),
+    });
   }
 
   return json(200, {
