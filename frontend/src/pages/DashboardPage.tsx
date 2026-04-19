@@ -82,7 +82,25 @@ export function DashboardPage() {
   const [tab, setTab] = useState<Tab>("pending");
   const { grouped, loading, applyLocalStatus, swapPositions, refresh } = useRequests(eventId || undefined, "dj");
 
-  const visible = useMemo(() => grouped[tab], [grouped, tab]);
+  const isShoutoutOnly = (req: { songTitle?: string; shoutout?: string }) =>
+    !req.songTitle?.trim() && !!req.shoutout;
+
+  const pendingShoutouts = useMemo(
+    () => grouped.pending.filter(isShoutoutOnly),
+    [grouped.pending],
+  );
+
+  const filteredGrouped = useMemo(
+    () => ({
+      pending: grouped.pending.filter((r) => !isShoutoutOnly(r)),
+      approved: grouped.approved.filter((r) => !isShoutoutOnly(r)),
+      played: grouped.played,
+      vetoed: grouped.vetoed,
+    }),
+    [grouped],
+  );
+
+  const visible = useMemo(() => filteredGrouped[tab], [filteredGrouped, tab]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const selectedRef = useRef<HTMLDivElement>(null);
 
@@ -267,9 +285,19 @@ export function DashboardPage() {
     }
   }
 
-  async function updateShoutout(requestId: string, approved: boolean) {
+  async function updateShoutout(requestId: string, approved: boolean, shoutoutOnly = false) {
     if (!session || !eventId) return;
-    await api.updateRequest(eventId, requestId, { shoutoutApproved: approved }, session.idToken);
+    if (shoutoutOnly) {
+      const patch: { shoutoutApproved: boolean; status?: "played" | "vetoed"; reviewedBy?: string } = {
+        shoutoutApproved: approved,
+        status: approved ? "played" : "vetoed",
+        reviewedBy: session.email,
+      };
+      applyLocalStatus(requestId, approved ? "played" : "vetoed");
+      await api.updateRequest(eventId, requestId, patch, session.idToken);
+    } else {
+      await api.updateRequest(eventId, requestId, { shoutoutApproved: approved }, session.idToken);
+    }
     await refresh();
   }
 
@@ -956,6 +984,43 @@ export function DashboardPage() {
           </div>
         </section>
 
+        {pendingShoutouts.length > 0 ? (
+          <section className="mb-5 rounded-xl border border-violet-500/30 bg-violet-950/20 p-4">
+            <h2 className="mb-3 text-lg font-semibold text-violet-200">
+              Shoutouts <span className="text-sm font-normal text-violet-400">({pendingShoutouts.length} pending)</span>
+            </h2>
+            <div className="grid gap-2">
+              {pendingShoutouts.map((req) => (
+                <div
+                  key={req.requestId}
+                  className="flex items-center gap-3 rounded-lg border border-violet-500/20 bg-slate-900/70 px-4 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-violet-200">"{req.shoutout}"</p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {req.requesterName?.trim() || "Guest"} · {new Date(req.submittedAt).toLocaleTimeString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      className="rounded-md bg-violet-500 px-3 py-1.5 text-xs font-semibold text-white"
+                      onClick={() => void updateShoutout(req.requestId, true, true)}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="rounded-md bg-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-200"
+                      onClick={() => void updateShoutout(req.requestId, false, true)}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <div className="mb-4 flex flex-wrap gap-2">
           {(["pending", "approved", "played", "vetoed"] as Tab[]).map((tabItem) => (
             <button
@@ -965,7 +1030,7 @@ export function DashboardPage() {
               }`}
               onClick={() => setTab(tabItem)}
             >
-              {tabItem} ({grouped[tabItem].length})
+              {tabItem} ({filteredGrouped[tabItem].length})
             </button>
           ))}
         </div>

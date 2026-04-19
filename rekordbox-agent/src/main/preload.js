@@ -15,7 +15,7 @@ try {
     syncLibrary: function () { return ipcRenderer.invoke("sync-library"); },
     fetchRequests: function (statusFilter) { return ipcRenderer.invoke("fetch-requests", statusFilter); },
     reviewRequest: function (requestId, status) { return ipcRenderer.invoke("review-request", requestId, status); },
-    approveShoutout: function (requestId, approved) { return ipcRenderer.invoke("approve-shoutout", requestId, approved); },
+    approveShoutout: function (requestId, approved, autoStatus) { return ipcRenderer.invoke("approve-shoutout", requestId, approved, autoStatus); },
     fetchGenreVotes: function () { return ipcRenderer.invoke("fetch-genre-votes"); },
     fetchEventStatus: function () { return ipcRenderer.invoke("fetch-event-status"); },
     toggleFireSale: function (active, message) { return ipcRenderer.invoke("toggle-fire-sale", active, message); },

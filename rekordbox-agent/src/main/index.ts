@@ -855,9 +855,9 @@ ipcMain.handle(
 
 ipcMain.handle(
   "approve-shoutout",
-  async (_e, requestId: string, approved: boolean) => {
-    log.info("Shoutout review:", requestId, "→", approved ? "approved" : "rejected");
-    const result = await approveShoutout(requestId, approved);
+  async (_e, requestId: string, approved: boolean, autoStatus?: string) => {
+    log.info("Shoutout review:", requestId, "→", approved ? "approved" : "rejected", autoStatus ?? "");
+    const result = await approveShoutout(requestId, approved, autoStatus as "played" | "vetoed" | undefined);
     return result;
   },
 );

@@ -576,6 +576,15 @@
       </div>
     </div>
 
+    <!-- Shoutouts Card -->
+    <div class="card" id="shoutouts-card" style="display:none; border-color: rgba(139,92,246,0.3);">
+      <div class="card-header">
+        <span class="card-title" style="color:#c4b5fd;">Shoutouts</span>
+        <span style="font-size:10px; color:rgba(139,92,246,0.6);" id="shoutouts-count"></span>
+      </div>
+      <div id="shoutouts-list" class="request-list"></div>
+    </div>
+
     <!-- Requests Card -->
     <div class="card" id="requests-card">
       <div class="card-header">
@@ -1347,16 +1356,109 @@
     var requestsCache = [];
     var requestsRefreshTimer = null;
 
+    function isShoutoutOnly(r) { return !r.songTitle && !!r.shoutout; }
+
     function updateTabCounts(requests) {
-      var pendingCount = requests.filter(function(r) { return r.status === "pending"; }).length;
-      var approvedCount = requests.filter(function(r) { return r.status === "approved"; }).length;
+      var songRequests = requests.filter(function(r) { return !isShoutoutOnly(r); });
+      var pendingCount = songRequests.filter(function(r) { return r.status === "pending"; }).length;
+      var approvedCount = songRequests.filter(function(r) { return r.status === "approved"; }).length;
       el("tab-pending").textContent = "Pending (" + pendingCount + ")";
       el("tab-approved").textContent = "Approved (" + approvedCount + ")";
     }
 
+    function renderShoutouts(requests) {
+      var pending = requests.filter(function(r) { return isShoutoutOnly(r) && r.status === "pending"; });
+      var card = el("shoutouts-card");
+      var list = el("shoutouts-list");
+      if (!pending.length) {
+        card.style.display = "none";
+        return;
+      }
+      card.style.display = "";
+      el("shoutouts-count").textContent = pending.length + " pending";
+      list.innerHTML = "";
+      pending.forEach(function(req) {
+        var item = document.createElement("div");
+        item.className = "request-item";
+        item.style.alignItems = "center";
+
+        var info = document.createElement("div");
+        info.className = "request-info";
+        info.style.flex = "1";
+
+        var text = document.createElement("div");
+        text.style.fontSize = "12px";
+        text.style.color = "#c4b5fd";
+        text.textContent = '\u201C' + req.shoutout + '\u201D';
+        info.appendChild(text);
+
+        var meta = document.createElement("div");
+        meta.className = "request-meta";
+        var parts = [];
+        if (req.requesterName) parts.push(req.requesterName);
+        if (req.submittedAt) parts.push(new Date(req.submittedAt).toLocaleTimeString());
+        meta.textContent = parts.join(" \u00B7 ");
+        info.appendChild(meta);
+
+        item.appendChild(info);
+
+        var actions = document.createElement("div");
+        actions.className = "request-actions";
+
+        var approveBtn = document.createElement("button");
+        approveBtn.className = "btn-approve";
+        approveBtn.textContent = "✓";
+        approveBtn.title = "Approve shoutout";
+        approveBtn.addEventListener("click", (function(rid) {
+          return function() {
+            approveBtn.disabled = true;
+            rejectBtn.disabled = true;
+            bridge.approveShoutout(rid, true, "played").then(function() {
+              item.style.opacity = "0.3";
+              item.style.transition = "opacity 0.3s";
+              showToast("Shoutout approved", "success");
+              setTimeout(function() { loadRequests(); }, 500);
+            }).catch(function(err) {
+              approveBtn.disabled = false;
+              rejectBtn.disabled = false;
+              showToast("Failed: " + (err.message || err), "error", 8000);
+            });
+          };
+        })(req.requestId));
+
+        var rejectBtn = document.createElement("button");
+        rejectBtn.className = "btn-veto";
+        rejectBtn.textContent = "✗";
+        rejectBtn.title = "Reject shoutout";
+        rejectBtn.addEventListener("click", (function(rid) {
+          return function() {
+            approveBtn.disabled = true;
+            rejectBtn.disabled = true;
+            bridge.approveShoutout(rid, false, "vetoed").then(function() {
+              item.style.opacity = "0.3";
+              item.style.transition = "opacity 0.3s";
+              showToast("Shoutout rejected", "info");
+              setTimeout(function() { loadRequests(); }, 500);
+            }).catch(function(err) {
+              approveBtn.disabled = false;
+              rejectBtn.disabled = false;
+              showToast("Failed: " + (err.message || err), "error", 8000);
+            });
+          };
+        })(req.requestId));
+
+        actions.appendChild(approveBtn);
+        actions.appendChild(rejectBtn);
+        item.appendChild(actions);
+        list.appendChild(item);
+      });
+    }
+
     function renderRequests(requests) {
+      renderShoutouts(requests);
       var list = el("requests-list");
-      var filtered = requests.filter(function(r) { return r.status === currentRequestTab; });
+      var songRequests = requests.filter(function(r) { return !isShoutoutOnly(r); });
+      var filtered = songRequests.filter(function(r) { return r.status === currentRequestTab; });
       el("requests-count").textContent = filtered.length + " " + currentRequestTab;
       updateTabCounts(requests);
 
@@ -1367,6 +1469,7 @@
 
       list.innerHTML = "";
       filtered.forEach(function(req) {
+        if (isShoutoutOnly(req)) return;
         var item = document.createElement("div");
         item.className = "request-item";
 

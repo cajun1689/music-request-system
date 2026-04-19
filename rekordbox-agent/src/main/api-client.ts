@@ -250,6 +250,7 @@ export async function reviewRequest(
 export async function approveShoutout(
   requestId: string,
   approved: boolean,
+  autoStatus?: "played" | "vetoed",
 ): Promise<Record<string, unknown>> {
   const config = getConfig();
   if (!config.eventId || !config.pushToken) {
@@ -259,13 +260,18 @@ export async function approveShoutout(
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}/events/${encodeURIComponent(config.eventId)}/review-request`;
 
+  const body: Record<string, unknown> = { requestId, shoutoutApproved: approved };
+  if (autoStatus) {
+    body.status = autoStatus;
+  }
+
   const response = await electronFetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-push-token": config.pushToken,
     },
-    body: JSON.stringify({ requestId, shoutoutApproved: approved }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
