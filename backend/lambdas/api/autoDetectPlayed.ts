@@ -275,17 +275,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         }
       }
 
-      const rekordboxPush = eventRecord.autoMatchState?.["rekordbox-push"];
-      const rekordboxSource = (eventRecord.livePlaylistSources ?? []).find((s) => s.id === "rekordbox");
-      const rkbSlot = existingSlots.find((s) => s.id === "src-rekordbox-push");
-      if (rekordboxPush?.lastMatchedTrackNorm && !slotUpdates.some((s) => s.id === "src-rekordbox-push")) {
-        slotUpdates.push({
-          id: "src-rekordbox-push",
-          djName: rekordboxSource?.djName || rekordboxSource?.name || "Rekordbox",
-          songTitle: rkbSlot?.songTitle || rekordboxPush.lastMatchedTrackNorm,
-          active: Boolean(rekordboxPush.lastMatchedAt),
-          updatedAt: rekordboxPush.lastMatchedAt || new Date().toISOString(),
-        });
+      const managedSlotIds = new Set(sourceStatuses.map((s) => `src-${s.sourceId}`));
+      for (const existing of existingSlots) {
+        if (!managedSlotIds.has(existing.id) && !slotUpdates.some((s) => s.id === existing.id)) {
+          slotUpdates.push(existing);
+        }
       }
 
       if (slotUpdates.length) {
