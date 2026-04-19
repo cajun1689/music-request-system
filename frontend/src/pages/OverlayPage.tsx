@@ -97,10 +97,11 @@ export function OverlayPage() {
     eventData.fireSaleActive && eventData.fireSaleMessage
       ? [eventData.fireSaleMessage]
       : [
+          ...promoItems,
           ...nowPlayingItems,
           ...shoutoutItems,
           ...standaloneShoutouts,
-          ...(hasRequests ? [cta, "COMING UP", ...promoItems, ...requestItems] : [cta, ...promoItems]),
+          ...(hasRequests ? [cta, "COMING UP", ...requestItems] : [cta]),
         ];
 
   return <ScrollingTicker items={tickerItems} accentColor={eventData.accentColor} />;
