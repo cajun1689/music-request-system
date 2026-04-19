@@ -1476,12 +1476,12 @@
         var info = document.createElement("div");
         info.className = "request-info";
 
-        var isShoutoutOnly = !req.songTitle && !!req.shoutout;
+        var reqIsShoutout = !req.songTitle && !!req.shoutout;
 
         var song = document.createElement("div");
         song.className = "request-song";
-        song.textContent = isShoutoutOnly ? "Shoutout" : (req.songTitle || "Unknown Song");
-        if (isShoutoutOnly) song.style.color = "#c4b5fd";
+        song.textContent = reqIsShoutout ? "Shoutout" : (req.songTitle || "Unknown Song");
+        if (reqIsShoutout) song.style.color = "#c4b5fd";
         if (req.tipAmount && req.tipAmount > 0) {
           var tip = document.createElement("span");
           tip.className = "request-tip";
@@ -1491,7 +1491,7 @@
 
         var artist = document.createElement("div");
         artist.className = "request-artist";
-        artist.textContent = isShoutoutOnly ? "" : (req.artistName || "Unknown Artist");
+        artist.textContent = reqIsShoutout ? "" : (req.artistName || "Unknown Artist");
 
         var meta = document.createElement("div");
         meta.className = "request-meta";
