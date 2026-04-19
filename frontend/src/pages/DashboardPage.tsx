@@ -629,53 +629,55 @@ export function DashboardPage() {
           </div>
           {showNowPlaying ? (
             nowPlayingAutoEnabled ? (
-              <div className="mt-3 grid gap-3 md:grid-cols-3">
-                {nowPlayingSlots.filter((s) => s.active && s.songTitle).length ? (
-                  nowPlayingSlots
-                    .filter((s) => s.active && s.songTitle)
-                    .map((slot) => (
-                      <div key={slot.id} className="rounded-lg border border-emerald-500/30 bg-slate-950 p-3">
-                        <div className="flex items-start justify-between">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">{slot.djName}</p>
-                          {slot.id.startsWith("src-") ? (
-                            <button
-                              className="rounded bg-rose-500/20 px-2 py-0.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/40"
-                              onClick={() => void disconnectDjSource(slot.id)}
-                              title="Remove this DJ from the ticker and block future pushes"
-                            >
-                              Disconnect
-                            </button>
-                          ) : null}
+              <>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  {nowPlayingSlots.filter((s) => s.active && s.songTitle).length ? (
+                    nowPlayingSlots
+                      .filter((s) => s.active && s.songTitle)
+                      .map((slot) => (
+                        <div key={slot.id} className="rounded-lg border border-emerald-500/30 bg-slate-950 p-3">
+                          <div className="flex items-start justify-between">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">{slot.djName}</p>
+                            {slot.id.startsWith("src-") ? (
+                              <button
+                                className="rounded bg-rose-500/20 px-2 py-0.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/40"
+                                onClick={() => void disconnectDjSource(slot.id)}
+                                title="Remove this DJ from the ticker and block future pushes"
+                              >
+                                Disconnect
+                              </button>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-sm font-semibold text-slate-100">{slot.songTitle}</p>
+                          {slot.artistName ? <p className="text-xs text-slate-400">{slot.artistName}</p> : null}
+                          <span className="mt-2 inline-block rounded bg-emerald-400/20 px-2 py-0.5 text-xs text-emerald-300">Live</span>
                         </div>
-                        <p className="mt-1 text-sm font-semibold text-slate-100">{slot.songTitle}</p>
-                        {slot.artistName ? <p className="text-xs text-slate-400">{slot.artistName}</p> : null}
-                        <span className="mt-2 inline-block rounded bg-emerald-400/20 px-2 py-0.5 text-xs text-emerald-300">Live</span>
-                      </div>
-                    ))
-                ) : (
-                  <p className="col-span-3 text-sm text-slate-400">
-                    Auto is on — waiting for live sources to report tracks. Turn on Auto-Match below to start polling.
-                  </p>
-                )}
-              </div>
-              {blockedPushSources.length ? (
-                <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-950/20 p-3">
-                  <p className="text-xs font-semibold text-rose-300">Disconnected DJ Sources</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {blockedPushSources.map((sourceId) => (
-                      <div key={sourceId} className="flex items-center gap-1.5 rounded border border-rose-500/30 bg-slate-950 px-2 py-1">
-                        <span className="text-xs text-slate-300">{sourceId}</span>
-                        <button
-                          className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/40"
-                          onClick={() => void unblockDjSource(sourceId)}
-                        >
-                          Reconnect
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                      ))
+                  ) : (
+                    <p className="col-span-3 text-sm text-slate-400">
+                      Auto is on — waiting for live sources to report tracks. Turn on Auto-Match below to start polling.
+                    </p>
+                  )}
                 </div>
-              ) : null}
+                {blockedPushSources.length ? (
+                  <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-950/20 p-3">
+                    <p className="text-xs font-semibold text-rose-300">Disconnected DJ Sources</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {blockedPushSources.map((sourceId) => (
+                        <div key={sourceId} className="flex items-center gap-1.5 rounded border border-rose-500/30 bg-slate-950 px-2 py-1">
+                          <span className="text-xs text-slate-300">{sourceId}</span>
+                          <button
+                            className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/40"
+                            onClick={() => void unblockDjSource(sourceId)}
+                          >
+                            Reconnect
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </>
             ) : (
               <>
                 <div className="mb-3 mt-3 flex items-center justify-end">
