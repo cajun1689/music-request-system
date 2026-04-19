@@ -258,7 +258,7 @@ export const api = {
   },
 
   resetRequests(eventId: string, token: string) {
-    return request<{ deletedCount: number; message: string }>(
+    return request<{ archivedCount: number; message: string }>(
       `/events/${eventId}/reset-requests`,
       { method: "POST" },
       token,

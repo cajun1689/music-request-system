@@ -563,7 +563,7 @@ export function DashboardPage() {
     }
     try {
       const response = await api.resetRequests(eventId, session.idToken);
-      setTickerMessage(`Queue cleared. Deleted ${response.deletedCount} requests.`);
+      setTickerMessage(`Queue cleared. Archived ${response.archivedCount} requests (analytics preserved).`);
       await refresh();
     } catch (error) {
       setTickerMessage((error as Error).message);

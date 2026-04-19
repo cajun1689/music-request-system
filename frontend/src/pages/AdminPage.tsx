@@ -329,7 +329,7 @@ export function AdminPage() {
     setSaving(true);
     try {
       const response = await api.resetRequests(eventData.eventId, session.idToken);
-      setMessage(`Queue reset complete. Deleted ${response.deletedCount} requests.`);
+      setMessage(`Queue reset complete. Archived ${response.archivedCount} requests (analytics preserved).`);
     } finally {
       setSaving(false);
     }

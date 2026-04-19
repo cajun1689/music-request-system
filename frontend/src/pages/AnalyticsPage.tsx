@@ -113,10 +113,12 @@ export function AnalyticsPage() {
 
   const stats = useMemo(() => {
     const total = requests.length;
-    const approved = requests.filter((r) => r.status === "approved" || r.status === "played").length;
-    const vetoed = requests.filter((r) => r.status === "vetoed").length;
-    const played = requests.filter((r) => r.status === "played").length;
-    const pending = requests.filter((r) => r.status === "pending").length;
+    const effectiveStatus = (r: RequestRecord) =>
+      r.status === "archived" ? (r.previousStatus ?? "pending") : r.status;
+    const approved = requests.filter((r) => { const s = effectiveStatus(r); return s === "approved" || s === "played"; }).length;
+    const vetoed = requests.filter((r) => effectiveStatus(r) === "vetoed").length;
+    const played = requests.filter((r) => effectiveStatus(r) === "played").length;
+    const pending = requests.filter((r) => effectiveStatus(r) === "pending").length;
 
     const tips = requests.filter((r) => r.tipAmount && r.tipAmount > 0);
     const totalTips = tips.reduce((sum, r) => sum + (r.tipAmount ?? 0), 0);

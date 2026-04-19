@@ -1,4 +1,4 @@
-export type RequestStatus = "pending" | "approved" | "vetoed" | "played";
+export type RequestStatus = "pending" | "approved" | "vetoed" | "played" | "archived";
 export type PaymentStatus = "unpaid" | "pending_verification" | "verified" | "rejected";
 export type GenreName = "hip_hop" | "country" | "edm" | "alternative_rock";
 
@@ -94,6 +94,8 @@ export interface RequestRecord {
   reviewedAt?: string;
   reviewedBy?: string;
   playedAt?: string;
+  previousStatus?: string;
+  archivedAt?: string;
 }
 
 export interface Session {
