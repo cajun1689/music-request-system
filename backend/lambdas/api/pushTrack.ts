@@ -150,6 +150,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
   const PUSH_SOURCE_ID = input.sourceId?.trim() || DEFAULT_PUSH_SOURCE_ID;
 
+  if (eventRecord.blockedPushSources?.includes(PUSH_SOURCE_ID)) {
+    return json(403, { error: "This source has been disconnected by the event admin." });
+  }
+
   const matchingSource = (eventRecord.livePlaylistSources ?? []).find(
     (s) => s.id === PUSH_SOURCE_ID || s.id === "rekordbox",
   );

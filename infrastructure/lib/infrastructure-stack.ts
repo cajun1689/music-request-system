@@ -274,6 +274,10 @@ export class InfrastructureStack extends Stack {
       "GetLibraryFn",
       "../../backend/lambdas/api/getLibrary.ts",
     );
+    const upvoteRequestFn = makeLambda(
+      "UpvoteRequestFn",
+      "../../backend/lambdas/api/upvoteRequest.ts",
+    );
     const deleteEventFn = makeLambda(
       "DeleteEventFn",
       "../../backend/lambdas/api/deleteEvent.ts",
@@ -321,7 +325,9 @@ export class InfrastructureStack extends Stack {
     eventsTable.grantReadData(getEventBySlugFn);
     eventsTable.grantReadWriteData(createEventFn);
     eventsTable.grantReadWriteData(updateEventFn);
+    eventsTable.grantReadData(createRequestFn);
     requestsTable.grantReadWriteData(createRequestFn);
+    requestsTable.grantReadWriteData(upvoteRequestFn);
     requestsTable.grantReadData(getRequestsFn);
     requestsTable.grantReadWriteData(updateRequestFn);
     requestsTable.grantReadWriteData(resetRequestsFn);
@@ -347,6 +353,7 @@ export class InfrastructureStack extends Stack {
     requestsTable.grantReadWriteData(deleteEventFn);
     eventsTable.grantReadWriteData(cleanupEventsFn);
     requestsTable.grantReadWriteData(cleanupEventsFn);
+    brandAssetsBucket.grantRead(createRequestFn);
     brandAssetsBucket.grantPut(uploadBrandAssetFn);
     brandAssetsBucket.grantPut(syncLibraryFn);
     brandAssetsBucket.grantRead(getLibraryFn);
@@ -540,6 +547,8 @@ export class InfrastructureStack extends Stack {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
+    const upvoteResource = requestByIdResource.addResource("upvote");
+    upvoteResource.addMethod("POST", new apigateway.LambdaIntegration(upvoteRequestFn));
     paypalOrderResource.addMethod("POST", new apigateway.LambdaIntegration(createPaypalOrderFn));
     paypalCaptureResource.addMethod("POST", new apigateway.LambdaIntegration(capturePaypalOrderFn));
     paypalWebhookResource.addMethod("POST", new apigateway.LambdaIntegration(paypalWebhookFn));

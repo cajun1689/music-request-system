@@ -22,8 +22,12 @@ export function useRequests(eventId: string | undefined, role: "dj" | "overlay")
   }, [refresh]);
 
   useWebSocket(eventId, role, (payload) => {
-    const parsed = payload as { type?: string; data?: RequestRecord };
+    const parsed = payload as { type?: string; action?: string; data?: RequestRecord };
     if (parsed.type === "request_updated" && parsed.data) {
+      if (parsed.action === "REMOVE") {
+        setRequests((prev) => prev.filter((entry) => entry.requestId !== parsed.data?.requestId));
+        return;
+      }
       setRequests((prev) => {
         const existing = prev.find((entry) => entry.requestId === parsed.data?.requestId);
         if (!existing) {

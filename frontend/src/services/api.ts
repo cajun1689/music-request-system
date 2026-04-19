@@ -153,6 +153,12 @@ export const api = {
     });
   },
 
+  upvoteRequest(eventId: string, requestId: string) {
+    return request<RequestRecord>(`/events/${eventId}/requests/${requestId}/upvote`, {
+      method: "POST",
+    });
+  },
+
   getRequests(eventId: string, status?: RequestStatus) {
     const query = status ? `?status=${status}` : "";
     return request<RequestRecord[]>(`/events/${eventId}/requests${query}`);
@@ -161,7 +167,7 @@ export const api = {
   updateRequest(
     eventId: string,
     requestId: string,
-    payload: { status?: RequestStatus; reviewedBy?: string; position?: number },
+    payload: { status?: RequestStatus; reviewedBy?: string; position?: number; shoutoutApproved?: boolean },
     token: string,
   ) {
     return request<RequestRecord>(

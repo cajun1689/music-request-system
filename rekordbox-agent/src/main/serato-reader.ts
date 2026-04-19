@@ -469,6 +469,45 @@ function readCurrentTrackFromLog(): TrackInfo | null {
   const loads = readRecentDeckLoads(logFile);
   if (!loads.length) return null;
 
+  // Build per-deck state: the latest load for each deck
+  const deckState = new Map<number, DeckLoadEntry>();
+  for (const entry of loads) {
+    deckState.set(entry.deck, entry);
+  }
+
+  // If we have tracks on 2+ decks, the most recently loaded deck is the "prep" deck.
+  // The OTHER deck is likely what's currently playing (the DJ loaded a new track
+  // to prepare the next transition while the other deck outputs audio).
+  if (deckState.size >= 2) {
+    let latestDeck = 0;
+    let latestTime = 0;
+    for (const [deck, entry] of deckState) {
+      if (entry.timestamp.getTime() > latestTime) {
+        latestTime = entry.timestamp.getTime();
+        latestDeck = deck;
+      }
+    }
+
+    // Find the "active" deck (the one NOT most recently loaded)
+    let activeDeckEntry: DeckLoadEntry | null = null;
+    let activeDeckTime = 0;
+    for (const [deck, entry] of deckState) {
+      if (deck !== latestDeck && entry.timestamp.getTime() > activeDeckTime) {
+        activeDeckTime = entry.timestamp.getTime();
+        activeDeckEntry = entry;
+      }
+    }
+
+    if (activeDeckEntry && activeDeckEntry.title) {
+      return {
+        title: activeDeckEntry.title,
+        artist: activeDeckEntry.artist,
+        playedAt: activeDeckEntry.timestamp.toISOString(),
+      };
+    }
+  }
+
+  // Fallback: single deck or no multi-deck info
   const latest = loads[loads.length - 1];
   if (!latest.title) return null;
 
@@ -496,7 +535,11 @@ function readCurrentTrackFromSession(customPath?: string): TrackInfo | null {
   const entries = parseSessionFile(latestFile);
   if (!entries.length) return null;
 
-  const latest = entries[entries.length - 1];
+  // Prefer the latest entry marked as "played" (actually played, not just loaded)
+  const playedEntries = entries.filter((e) => e.played);
+  const latest = playedEntries.length > 0
+    ? playedEntries[playedEntries.length - 1]
+    : entries[entries.length - 1];
   if (!latest.title) return null;
 
   return {

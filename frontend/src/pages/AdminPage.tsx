@@ -64,6 +64,9 @@ export function AdminPage() {
   const [seratoDjName, setSeratoDjName] = useState<string>("");
   const [serato2DjName, setSerato2DjName] = useState<string>("");
   const [rekordboxDjName, setRekordboxDjName] = useState<string>("");
+  const [autoApproveInput, setAutoApproveInput] = useState("");
+  const [blockListInput, setBlockListInput] = useState("");
+  const [libraryOnlyMode, setLibraryOnlyMode] = useState(false);
   const [allEvents, setAllEvents] = useState<EventSummary[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -121,8 +124,14 @@ export function AdminPage() {
         secondaryColor: eventData.secondaryColor ?? "#1e293b",
         accentColor: eventData.accentColor ?? "#f97316",
       });
+      setAutoApproveInput((eventData.autoApproveList ?? []).join(", "));
+      setBlockListInput((eventData.blockList ?? []).join(", "));
+      setLibraryOnlyMode(Boolean(eventData.libraryOnlyMode));
     } else {
       setEventDetails(emptyEventDetails);
+      setAutoApproveInput("");
+      setBlockListInput("");
+      setLibraryOnlyMode(false);
     }
 
     const sources =
@@ -813,6 +822,71 @@ export function AdminPage() {
                 Save Sources & Links
               </button>
             </div>
+            {/* Auto-Rules Section */}
+            <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
+              <h3 className="text-sm font-semibold">Auto-Approve / Auto-Veto Rules</h3>
+              <label className="block text-xs text-slate-400">
+                Auto-Approve (comma-separated songs/artists that always get approved)
+                <textarea
+                  className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                  rows={2}
+                  placeholder="Sweet Caroline, Mr. Brightside, Don't Stop Believin"
+                  value={autoApproveInput}
+                  onChange={(e) => setAutoApproveInput(e.target.value)}
+                />
+              </label>
+              <label className="block text-xs text-slate-400">
+                Blocklist (comma-separated songs/artists that auto-veto)
+                <textarea
+                  className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                  rows={2}
+                  placeholder="Freebird, Baby Shark"
+                  value={blockListInput}
+                  onChange={(e) => setBlockListInput(e.target.value)}
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={libraryOnlyMode}
+                  onChange={(e) => setLibraryOnlyMode(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-600 bg-slate-900"
+                />
+                Library-only mode (auto-veto anything not in synced library)
+              </label>
+              <button
+                type="button"
+                disabled={saving}
+                className="rounded-md bg-violet-400 px-3 py-1.5 text-sm font-semibold text-violet-950 disabled:opacity-60"
+                onClick={() => {
+                  if (!session || !eventData) return;
+                  setSaving(true);
+                  const autoApproveList = autoApproveInput
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  const blockList = blockListInput
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  api
+                    .updateEvent(
+                      eventData.eventId,
+                      { autoApproveList, blockList, libraryOnlyMode } as Partial<EventRecord>,
+                      session.idToken,
+                    )
+                    .then((updated) => {
+                      setEventData(updated);
+                      setMessage("Auto-rules saved.");
+                    })
+                    .catch((err) => setMessage(`Failed: ${(err as Error).message}`))
+                    .finally(() => setSaving(false));
+                }}
+              >
+                Save Auto-Rules
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={() => void onResetWeeklyQueue()}

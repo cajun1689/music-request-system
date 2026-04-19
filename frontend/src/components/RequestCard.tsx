@@ -18,6 +18,8 @@ export function RequestCard({
   onPlayed,
   onVerifyTip,
   onRejectTip,
+  onApproveShoutout,
+  onRejectShoutout,
 }: {
   request: RequestRecord;
   libraryMatch?: LibraryMatchInfo;
@@ -26,6 +28,8 @@ export function RequestCard({
   onPlayed?: (id: string) => void;
   onVerifyTip?: (id: string) => void;
   onRejectTip?: (id: string) => void;
+  onApproveShoutout?: (id: string) => void;
+  onRejectShoutout?: (id: string) => void;
 }) {
   const isAutoMatched = request.reviewedBy?.startsWith("auto:");
   const autoSourceLabel = isAutoMatched
@@ -45,15 +49,28 @@ export function RequestCard({
   const inLibrary = libraryMatch?.found;
   const bestTrack = libraryMatch?.bestTrack;
 
+  const isShoutoutOnly = !request.songTitle?.trim() && !!request.shoutout;
+
   return (
     <article className="rounded-xl border border-white/20 bg-slate-900/70 p-4">
-      <h3 className="text-lg font-semibold text-white">
-        {toDisplayTitleCase(request.songTitle)} <span className="text-slate-400">-</span> {toDisplayTitleCase(request.artistName)}
-      </h3>
+      {isShoutoutOnly ? (
+        <h3 className="text-lg font-semibold text-violet-300">
+          Shoutout
+        </h3>
+      ) : (
+        <h3 className="text-lg font-semibold text-white">
+          {toDisplayTitleCase(request.songTitle)} <span className="text-slate-400">-</span> {toDisplayTitleCase(request.artistName)}
+        </h3>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${paymentClass}`}>
           {paymentStatus.replace("_", " ")}
         </span>
+        {(request.upvotes ?? 0) > 0 ? (
+          <span className="rounded-full bg-amber-400/15 border border-amber-400/30 px-2 py-0.5 text-xs font-semibold text-amber-200">
+            {request.upvotes} upvote{request.upvotes === 1 ? "" : "s"}
+          </span>
+        ) : null}
         {typeof request.tipAmount === "number" ? (
           <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-200">
             Tip ${request.tipAmount.toFixed(2)}
@@ -88,6 +105,55 @@ export function RequestCard({
         Requested by {request.requesterName?.trim() ? request.requesterName : "Guest"}
       </p>
       {request.message ? <p className="mt-2 text-sm italic text-slate-300/90">"{request.message}"</p> : null}
+      {request.shoutout ? (
+        <div className="mt-2 rounded-lg border px-3 py-2 flex items-center justify-between gap-2"
+          style={{
+            background: request.shoutoutApproved === true
+              ? "rgba(139,92,246,0.12)"
+              : request.shoutoutApproved === false
+                ? "rgba(239,68,68,0.08)"
+                : "rgba(139,92,246,0.08)",
+            borderColor: request.shoutoutApproved === true
+              ? "rgba(139,92,246,0.35)"
+              : request.shoutoutApproved === false
+                ? "rgba(239,68,68,0.25)"
+                : "rgba(139,92,246,0.2)",
+          }}
+        >
+          <div className="min-w-0">
+            <p className="text-sm text-violet-300/90 truncate">
+              Shoutout: &ldquo;{request.shoutout}&rdquo;
+            </p>
+            {request.shoutoutApproved === true ? (
+              <span className="text-xs text-emerald-400 font-semibold">Approved — on ticker</span>
+            ) : request.shoutoutApproved === false ? (
+              <span className="text-xs text-rose-400 font-semibold">Rejected</span>
+            ) : (
+              <span className="text-xs text-amber-300 font-semibold">Pending review</span>
+            )}
+          </div>
+          {request.shoutoutApproved == null && (onApproveShoutout || onRejectShoutout) ? (
+            <div className="flex gap-1.5 flex-shrink-0">
+              {onApproveShoutout ? (
+                <button
+                  className="rounded-md bg-violet-500 px-2 py-1 text-xs font-semibold text-white"
+                  onClick={() => onApproveShoutout(request.requestId)}
+                >
+                  ✓
+                </button>
+              ) : null}
+              {onRejectShoutout ? (
+                <button
+                  className="rounded-md bg-slate-600 px-2 py-1 text-xs font-semibold text-slate-200"
+                  onClick={() => onRejectShoutout(request.requestId)}
+                >
+                  ✗
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {request.paymentReference ? (
         <p className="mt-1 text-xs text-slate-400">Payment reference: {request.paymentReference}</p>
       ) : null}

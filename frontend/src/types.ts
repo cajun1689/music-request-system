@@ -59,6 +59,10 @@ export interface EventRecord {
   nowPlayingSlots?: NowPlayingSlot[];
   nowPlayingAutoEnabled?: boolean;
   nowPlayingOnTicker?: boolean;
+  autoApproveList?: string[];
+  blockList?: string[];
+  blockedPushSources?: string[];
+  libraryOnlyMode?: boolean;
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
@@ -74,6 +78,9 @@ export interface RequestRecord {
   artistName: string;
   requesterName?: string;
   message?: string;
+  shoutout?: string;
+  shoutoutApproved?: boolean;
+  shoutoutApprovedAt?: string;
   status: RequestStatus;
   paymentStatus?: PaymentStatus;
   tipAmount?: number;
@@ -82,6 +89,7 @@ export interface RequestRecord {
   paymentVerifiedBy?: string;
   paidAt?: string;
   position?: number;
+  upvotes?: number;
   submittedAt: string;
   reviewedAt?: string;
   reviewedBy?: string;

@@ -10,6 +10,7 @@ interface ConfigSchema {
   softwareType: "rekordbox" | "serato" | "auto";
   sourceId: string;
   musicLibraryPath: string;
+  transitionDelaySec: number;
 }
 
 const store = new Store<ConfigSchema>({
@@ -23,6 +24,7 @@ const store = new Store<ConfigSchema>({
     softwareType: "auto",
     sourceId: "",
     musicLibraryPath: "",
+    transitionDelaySec: 45,
   },
 });
 
@@ -47,6 +49,7 @@ export function getConfig(): ConfigSchema {
     softwareType: store.get("softwareType"),
     sourceId: store.get("sourceId"),
     musicLibraryPath: store.get("musicLibraryPath"),
+    transitionDelaySec: store.get("transitionDelaySec"),
   };
 }
 

@@ -18,6 +18,7 @@ interface UpdateRequestInput {
   paymentReference?: string;
   tipAmount?: number;
   reviewedBy?: string;
+  shoutoutApproved?: boolean;
 }
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
@@ -34,7 +35,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       input.position === undefined &&
       input.paymentStatus === undefined &&
       input.paymentReference === undefined &&
-      input.tipAmount === undefined)
+      input.tipAmount === undefined &&
+      input.shoutoutApproved === undefined)
   ) {
     return json(400, { error: "At least one updatable field is required" });
   }
@@ -91,6 +93,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   if (input.status === "played") {
     expressionParts.push("playedAt = :playedAt");
     expressionValues[":playedAt"] = now;
+  }
+  if (typeof input.shoutoutApproved === "boolean") {
+    expressionParts.push("shoutoutApproved = :shoutoutApproved");
+    expressionValues[":shoutoutApproved"] = input.shoutoutApproved;
+    if (input.shoutoutApproved) {
+      expressionParts.push("shoutoutApprovedAt = :shoutoutApprovedAt");
+      expressionValues[":shoutoutApprovedAt"] = now;
+    }
   }
 
   const result = await docClient.send(

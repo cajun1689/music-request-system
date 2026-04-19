@@ -194,6 +194,8 @@ export interface RequestItem {
   artistName: string;
   requesterName?: string;
   message?: string;
+  shoutout?: string;
+  shoutoutApproved?: boolean;
   status: string;
   tipAmount?: number;
   submittedAt: string;
@@ -240,6 +242,35 @@ export async function reviewRequest(
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     throw new Error(`Review failed (${response.status}): ${text}`);
+  }
+
+  return (await response.json()) as Record<string, unknown>;
+}
+
+export async function approveShoutout(
+  requestId: string,
+  approved: boolean,
+): Promise<Record<string, unknown>> {
+  const config = getConfig();
+  if (!config.eventId || !config.pushToken) {
+    throw new Error("Event ID and Push Token must be configured.");
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/events/${encodeURIComponent(config.eventId)}/review-request`;
+
+  const response = await electronFetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-push-token": config.pushToken,
+    },
+    body: JSON.stringify({ requestId, shoutoutApproved: approved }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Shoutout review failed (${response.status}): ${text}`);
   }
 
   return (await response.json()) as Record<string, unknown>;

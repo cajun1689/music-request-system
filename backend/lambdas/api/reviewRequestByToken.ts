@@ -7,7 +7,8 @@ const ALLOWED_STATUSES: RequestStatus[] = ["approved", "vetoed", "played"];
 
 interface ReviewInput {
   requestId: string;
-  status: RequestStatus;
+  status?: RequestStatus;
+  shoutoutApproved?: boolean;
 }
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
@@ -22,8 +23,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   if (!input?.requestId?.trim()) {
     return json(400, { error: "requestId is required" });
   }
-  if (!input.status || !ALLOWED_STATUSES.includes(input.status)) {
-    return json(400, { error: "status must be 'approved', 'vetoed', or 'played'" });
+
+  const hasStatus = input.status && ALLOWED_STATUSES.includes(input.status);
+  const hasShoutout = typeof input.shoutoutApproved === "boolean";
+
+  if (!hasStatus && !hasShoutout) {
+    return json(400, { error: "status or shoutoutApproved is required" });
   }
 
   const eventResponse = await docClient.send(
@@ -37,17 +42,30 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   }
 
   const now = new Date().toISOString();
+  const exprParts: string[] = [];
+  const exprNames: Record<string, string> = {};
+  const exprValues: Record<string, unknown> = {};
 
-  const updateExpr = input.status === "played"
-    ? "SET #status = :status, reviewedAt = :reviewedAt, reviewedBy = :reviewedBy, playedAt = :playedAt"
-    : "SET #status = :status, reviewedAt = :reviewedAt, reviewedBy = :reviewedBy";
+  if (hasStatus) {
+    exprNames["#status"] = "status";
+    exprParts.push("#status = :status", "reviewedAt = :reviewedAt", "reviewedBy = :reviewedBy");
+    exprValues[":status"] = input.status;
+    exprValues[":reviewedAt"] = now;
+    exprValues[":reviewedBy"] = "dj-bridge";
+    if (input.status === "played") {
+      exprParts.push("playedAt = :playedAt");
+      exprValues[":playedAt"] = now;
+    }
+  }
 
-  const exprValues: Record<string, string> = {
-    ":status": input.status,
-    ":reviewedAt": now,
-    ":reviewedBy": "dj-bridge",
-  };
-  if (input.status === "played") exprValues[":playedAt"] = now;
+  if (hasShoutout) {
+    exprParts.push("shoutoutApproved = :shoutoutApproved");
+    exprValues[":shoutoutApproved"] = input.shoutoutApproved;
+    if (input.shoutoutApproved) {
+      exprParts.push("shoutoutApprovedAt = :shoutoutApprovedAt");
+      exprValues[":shoutoutApprovedAt"] = now;
+    }
+  }
 
   const result = await docClient.send(
     new UpdateCommand({
@@ -55,8 +73,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       Key: { eventId, requestId: input.requestId },
       ConditionExpression:
         "attribute_exists(eventId) and attribute_exists(requestId)",
-      UpdateExpression: updateExpr,
-      ExpressionAttributeNames: { "#status": "status" },
+      UpdateExpression: `SET ${exprParts.join(", ")}`,
+      ExpressionAttributeNames: Object.keys(exprNames).length ? exprNames : undefined,
       ExpressionAttributeValues: exprValues,
       ReturnValues: "ALL_NEW",
     }),

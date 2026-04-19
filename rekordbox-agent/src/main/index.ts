@@ -22,6 +22,7 @@ import {
   resolveSeratoSessionDir,
 } from "./serato-reader";
 import {
+  approveShoutout,
   drainQueue,
   enqueueTrack,
   fetchEvents,
@@ -54,6 +55,9 @@ let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastTrackKey = "";
+let lastPushedKey = "";
+let pendingTrack: TrackInfo | null = null;
+let pendingTrackSince = 0;
 let lastPollError = "";
 let isQuitting = false;
 
@@ -64,9 +68,12 @@ interface StatusPayload {
   activeSoftware: "rekordbox" | "serato" | null;
   dbPath: string | null;
   lastTrack: TrackInfo | null;
+  pendingTrack: TrackInfo | null;
+  pendingSeconds: number;
   lastResult: PushResult | null;
   error: string | null;
   queueSize: number;
+  transitionDelaySec: number;
   version: string;
   logsPath: string;
   launchAtLogin: boolean;
@@ -79,15 +86,24 @@ let status: StatusPayload = {
   activeSoftware: null,
   dbPath: null,
   lastTrack: null,
+  pendingTrack: null,
+  pendingSeconds: 0,
   lastResult: null,
   error: null,
   queueSize: 0,
+  transitionDelaySec: 45,
   version: "",
   logsPath: "",
   launchAtLogin: false,
 };
 
 function sendStatus(): void {
+  status.pendingTrack = pendingTrack;
+  status.pendingSeconds = pendingTrack && pendingTrackSince > 0
+    ? Math.round((Date.now() - pendingTrackSince) / 1000)
+    : 0;
+  const config = getConfig();
+  status.transitionDelaySec = config.transitionDelaySec ?? 45;
   mainWindow?.webContents.send("status-update", status);
   updateTrayMenu();
 }
@@ -114,7 +130,10 @@ function updateTrayTooltip(): void {
     parts[0] += ` (${status.activeSoftware})`;
   }
   if (status.lastTrack) {
-    parts.push(`${status.lastTrack.artist} – ${status.lastTrack.title}`);
+    parts.push(`♫ ${status.lastTrack.artist} – ${status.lastTrack.title}`);
+  }
+  if (status.pendingTrack) {
+    parts.push(`⏳ ${status.pendingTrack.artist} – ${status.pendingTrack.title}`);
   }
   if (status.error) {
     parts.push(`⚠ ${status.error}`);
@@ -296,6 +315,43 @@ async function pollOnce(): Promise<void> {
     }
 
     const key = trackKey(track);
+    const now = Date.now();
+
+    // Check if the pending track's transition delay has elapsed
+    const transitionDelayMs = (config.transitionDelaySec ?? 45) * 1000;
+    if (pendingTrack && pendingTrackSince > 0) {
+      const pendingKey = trackKey(pendingTrack);
+      const elapsed = now - pendingTrackSince;
+      if (elapsed >= transitionDelayMs && pendingKey !== lastPushedKey) {
+        log.info(`Transition delay elapsed, pushing:`, pendingTrack.artist, "–", pendingTrack.title);
+        try {
+          const result = await pushTrack(pendingTrack);
+          lastPushedKey = pendingKey;
+          status.lastResult = result;
+          status.lastTrack = pendingTrack;
+          status.connected = true;
+          status.queueSize = queueSize();
+
+          if (result.matched) {
+            log.info("Track matched request!", { score: result.confidenceScore });
+            showNotification(
+              "Request Matched!",
+              `"${pendingTrack.title}" by ${pendingTrack.artist} matched a request.`,
+            );
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          log.error("Pending push failed:", message);
+          status.error = `Push failed: ${message}`;
+          status.connected = false;
+          enqueueTrack(pendingTrack);
+          status.queueSize = queueSize();
+        }
+        pendingTrack = null;
+        pendingTrackSince = 0;
+      }
+    }
+
     if (key === lastTrackKey) {
       if (queueSize() > 0) {
         await drainQueue();
@@ -306,30 +362,69 @@ async function pollOnce(): Promise<void> {
     }
 
     lastTrackKey = key;
-    status.lastTrack = track;
     status.error = null;
-    log.info(`New track from ${sw}:`, track.artist, "–", track.title);
+    log.info(`New track detected from ${sw}:`, track.artist, "–", track.title);
 
-    try {
-      const result = await pushTrack(track);
-      status.lastResult = result;
-      status.connected = true;
-      status.queueSize = queueSize();
+    // First track of the session, or delay set to 0 — push immediately
+    if (!lastPushedKey || transitionDelayMs === 0) {
+      log.info("First track of session, pushing immediately");
+      status.lastTrack = track;
+      try {
+        const result = await pushTrack(track);
+        lastPushedKey = key;
+        status.lastResult = result;
+        status.connected = true;
+        status.queueSize = queueSize();
 
-      if (result.matched) {
-        log.info("Track matched request!", { score: result.confidenceScore });
-        showNotification(
-          "Request Matched!",
-          `"${track.title}" by ${track.artist} matched a request.`,
-        );
+        if (result.matched) {
+          log.info("Track matched request!", { score: result.confidenceScore });
+          showNotification(
+            "Request Matched!",
+            `"${track.title}" by ${track.artist} matched a request.`,
+          );
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log.error("Push failed:", message);
+        status.error = `Push failed: ${message}`;
+        status.connected = false;
+        enqueueTrack(track);
+        status.queueSize = queueSize();
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      log.error("Push failed:", message);
-      status.error = `Push failed: ${message}`;
-      status.connected = false;
-      enqueueTrack(track);
-      status.queueSize = queueSize();
+    } else {
+      // If there's already a pending track, push it now (loading a third track
+      // means the DJ has transitioned to the pending one)
+      if (pendingTrack) {
+        const prevPendingKey = trackKey(pendingTrack);
+        if (prevPendingKey !== lastPushedKey) {
+          log.info("New track loaded — flushing pending track:", pendingTrack.artist, "–", pendingTrack.title);
+          try {
+            const result = await pushTrack(pendingTrack);
+            lastPushedKey = prevPendingKey;
+            status.lastResult = result;
+            status.connected = true;
+            status.queueSize = queueSize();
+            if (result.matched) {
+              log.info("Track matched request!", { score: result.confidenceScore });
+              showNotification(
+                "Request Matched!",
+                `"${pendingTrack.title}" by ${pendingTrack.artist} matched a request.`,
+              );
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            log.error("Flush pending failed:", message);
+            enqueueTrack(pendingTrack);
+            status.queueSize = queueSize();
+          }
+        }
+      }
+
+      // Queue the new track with transition delay
+      log.info(`Track queued with ${transitionDelayMs / 1000}s transition delay`);
+      pendingTrack = track;
+      pendingTrackSince = now;
+      status.lastTrack = track;
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -593,6 +688,39 @@ ipcMain.handle("poll-now", async () => {
   return status;
 });
 
+ipcMain.handle("push-pending-now", async () => {
+  if (!pendingTrack) {
+    return { error: "No pending track" };
+  }
+  const track = pendingTrack;
+  const key = trackKey(track);
+  log.info("Manual push-pending-now:", track.artist, "–", track.title);
+  try {
+    const result = await pushTrack(track);
+    lastPushedKey = key;
+    status.lastResult = result;
+    status.lastTrack = track;
+    status.connected = true;
+    status.queueSize = queueSize();
+    pendingTrack = null;
+    pendingTrackSince = 0;
+    if (result.matched) {
+      showNotification(
+        "Request Matched!",
+        `"${track.title}" by ${track.artist} matched a request.`,
+      );
+    }
+    sendStatus();
+    return result;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error("Push pending failed:", message);
+    status.error = `Push failed: ${message}`;
+    sendStatus();
+    throw err;
+  }
+});
+
 ipcMain.handle("toggle-launch-at-login", () => {
   toggleLaunchAtLogin();
   return status.launchAtLogin;
@@ -721,6 +849,15 @@ ipcMain.handle(
   async (_e, requestId: string, newStatus: "approved" | "vetoed" | "played") => {
     log.info("Review request:", requestId, "→", newStatus);
     const result = await reviewRequest(requestId, newStatus);
+    return result;
+  },
+);
+
+ipcMain.handle(
+  "approve-shoutout",
+  async (_e, requestId: string, approved: boolean) => {
+    log.info("Shoutout review:", requestId, "→", approved ? "approved" : "rejected");
+    const result = await approveShoutout(requestId, approved);
     return result;
   },
 );

@@ -1,14 +1,18 @@
-import { PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { randomUUID } from "node:crypto";
-import type { RequestRecord } from "../shared/types";
+import type { EventRecord, RequestRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
+
+const s3 = new S3Client({});
 
 interface CreateRequestInput {
   songTitle: string;
   artistName: string;
   requesterName?: string;
   message?: string;
+  shoutout?: string;
   tipAmount?: number;
   venmoHandle?: string;
   paymentReference?: string;
@@ -56,52 +60,115 @@ function isDuplicate(
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   const input = parseBody<CreateRequestInput>(event.body);
-  if (!eventId || !input?.songTitle || !input?.artistName) {
-    return json(400, { error: "eventId, songTitle and artistName are required" });
+  const isShoutoutOnly = !input?.songTitle?.trim() && !input?.artistName?.trim() && !!input?.shoutout?.trim();
+
+  if (!eventId || (!isShoutoutOnly && (!input?.songTitle || !input?.artistName))) {
+    return json(400, { error: "eventId and (songTitle + artistName) or shoutout are required" });
   }
 
-  const songTitle = toTitleCase(input.songTitle);
-  const artistName = toTitleCase(input.artistName);
+  const songTitle = input?.songTitle ? toTitleCase(input.songTitle) : "";
+  const artistName = input?.artistName ? toTitleCase(input.artistName) : "";
 
-  const [pendingResult, approvedResult] = await Promise.all([
-    docClient.send(
-      new QueryCommand({
-        TableName: env.requestsTableName,
-        IndexName: "eventId-status-index",
-        KeyConditionExpression: "eventId = :eid AND #s = :status",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: { ":eid": eventId, ":status": "pending" },
-      }),
-    ),
-    docClient.send(
-      new QueryCommand({
-        TableName: env.requestsTableName,
-        IndexName: "eventId-status-index",
-        KeyConditionExpression: "eventId = :eid AND #s = :status",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: { ":eid": eventId, ":status": "approved" },
-      }),
-    ),
-  ]);
+  if (!isShoutoutOnly) {
+    const [pendingResult, approvedResult] = await Promise.all([
+      docClient.send(
+        new QueryCommand({
+          TableName: env.requestsTableName,
+          IndexName: "eventId-status-index",
+          KeyConditionExpression: "eventId = :eid AND #s = :status",
+          ExpressionAttributeNames: { "#s": "status" },
+          ExpressionAttributeValues: { ":eid": eventId, ":status": "pending" },
+        }),
+      ),
+      docClient.send(
+        new QueryCommand({
+          TableName: env.requestsTableName,
+          IndexName: "eventId-status-index",
+          KeyConditionExpression: "eventId = :eid AND #s = :status",
+          ExpressionAttributeNames: { "#s": "status" },
+          ExpressionAttributeValues: { ":eid": eventId, ":status": "approved" },
+        }),
+      ),
+    ]);
 
-  const activeRequests = [
-    ...(pendingResult.Items ?? []),
-    ...(approvedResult.Items ?? []),
-  ] as RequestRecord[];
+    const activeRequests = [
+      ...(pendingResult.Items ?? []),
+      ...(approvedResult.Items ?? []),
+    ] as RequestRecord[];
 
-  const duplicate = activeRequests.find((req) =>
-    isDuplicate({ songTitle, artistName }, req),
+    const duplicate = activeRequests.find((req) =>
+      isDuplicate({ songTitle, artistName }, req),
+    );
+
+    if (duplicate) {
+      return json(409, {
+        error: "A similar song has already been requested",
+        existingRequest: {
+          songTitle: duplicate.songTitle,
+          artistName: duplicate.artistName,
+          status: duplicate.status,
+        },
+      });
+    }
+  }
+
+  const eventResult = await docClient.send(
+    new GetCommand({
+      TableName: env.eventsTableName,
+      Key: { eventId },
+    }),
   );
+  const eventRecord = eventResult.Item as EventRecord | undefined;
 
-  if (duplicate) {
-    return json(409, {
-      error: "A similar song has already been requested",
-      existingRequest: {
-        songTitle: duplicate.songTitle,
-        artistName: duplicate.artistName,
-        status: duplicate.status,
-      },
-    });
+  let autoStatus: "pending" | "approved" | "vetoed" = "pending";
+  let autoReviewedBy: string | undefined;
+  const norm = normalize(songTitle) + normalize(artistName);
+
+  if (!isShoutoutOnly) {
+    if (eventRecord?.blockList?.length) {
+      const blocked = eventRecord.blockList.some(
+        (entry) => norm.includes(normalize(entry)),
+      );
+      if (blocked) {
+        autoStatus = "vetoed";
+        autoReviewedBy = "auto:blocklist";
+      }
+    }
+
+    if (autoStatus === "pending" && eventRecord?.libraryOnlyMode) {
+      let inLibrary = false;
+      try {
+        const libResponse = await s3.send(
+          new GetObjectCommand({
+            Bucket: env.brandAssetsBucketName,
+            Key: `libraries/${eventId}.json`,
+          }),
+        );
+        const body = await libResponse.Body?.transformToString();
+        if (body) {
+          const lib = JSON.parse(body) as { tracks: Array<{ titleNorm: string; artistNorm: string }> };
+          inLibrary = lib.tracks.some(
+            (t) => similarity(songTitle, t.titleNorm) >= 0.85 || similarity(artistName, t.artistNorm) >= 0.75,
+          );
+        }
+      } catch {
+        inLibrary = true;
+      }
+      if (!inLibrary) {
+        autoStatus = "vetoed";
+        autoReviewedBy = "auto:library-only";
+      }
+    }
+
+    if (autoStatus === "pending" && eventRecord?.autoApproveList?.length) {
+      const autoApproved = eventRecord.autoApproveList.some(
+        (entry) => norm.includes(normalize(entry)),
+      );
+      if (autoApproved) {
+        autoStatus = "approved";
+        autoReviewedBy = "auto:auto-approve";
+      }
+    }
   }
 
   const requestRecord: RequestRecord = {
@@ -111,12 +178,16 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     artistName,
     requesterName: input.requesterName,
     message: input.message,
-    status: "pending",
+    shoutout: input.shoutout || undefined,
+    status: autoStatus,
     paymentStatus: input.paymentStatus ?? (input.tipAmount ? "pending_verification" : "unpaid"),
     tipAmount: typeof input.tipAmount === "number" ? Number(input.tipAmount.toFixed(2)) : undefined,
     venmoHandle: input.venmoHandle?.replace("@", ""),
     paymentReference: input.paymentReference,
     position: Date.now(),
+    upvotes: 0,
+    reviewedBy: autoReviewedBy,
+    reviewedAt: autoReviewedBy ? new Date().toISOString() : undefined,
     submittedAt: new Date().toISOString(),
   };
 

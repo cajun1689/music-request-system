@@ -20,6 +20,8 @@ interface UpdateEventInput {
   fireSaleMessage?: string;
   venmoHandle?: string;
   pushToken?: string;
+  blockedPushSources?: string[];
+  nowPlayingSlots?: EventRecord["nowPlayingSlots"];
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;

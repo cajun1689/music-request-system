@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { RequestCard } from "../components/RequestCard";
 import { useAuth } from "../context/AuthContext";
@@ -61,6 +61,7 @@ export function DashboardPage() {
   const [tickerMessage, setTickerMessage] = useState("");
   const [nowPlayingAutoEnabled, setNowPlayingAutoEnabled] = useState(false);
   const [nowPlayingOnTicker, setNowPlayingOnTicker] = useState(false);
+  const [blockedPushSources, setBlockedPushSources] = useState<string[]>([]);
   const [sourceHealth, setSourceHealth] = useState<
     Array<{
       sourceId: string;
@@ -82,6 +83,59 @@ export function DashboardPage() {
   const { grouped, loading, applyLocalStatus, swapPositions, refresh } = useRequests(eventId || undefined, "dj");
 
   const visible = useMemo(() => grouped[tab], [grouped, tab]);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const selectedRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [tab]);
+
+  const handleKeyAction = useCallback(
+    (key: string) => {
+      if (!session || !eventId) return;
+      const req = visible[selectedIndex];
+      if (!req) return;
+
+      if (key === "a" && tab === "pending") {
+        void updateStatus(req.requestId, "approved");
+        setSelectedIndex((prev) => Math.min(prev, visible.length - 2));
+      } else if (key === "v" && (tab === "pending" || tab === "approved")) {
+        void updateStatus(req.requestId, "vetoed");
+        setSelectedIndex((prev) => Math.min(prev, visible.length - 2));
+      } else if (key === "p" && tab === "approved") {
+        void updateStatus(req.requestId, "played");
+        setSelectedIndex((prev) => Math.min(prev, visible.length - 2));
+      }
+    },
+    [session, eventId, tab, visible, selectedIndex],
+  );
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      if (e.key === "ArrowDown" || e.key === "j") {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.min(prev + 1, visible.length - 1));
+      } else if (e.key === "ArrowUp" || e.key === "k") {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.max(prev - 1, 0));
+      } else if (e.key === "a") {
+        handleKeyAction("a");
+      } else if (e.key === "v") {
+        handleKeyAction("v");
+      } else if (e.key === "p") {
+        handleKeyAction("p");
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [visible.length, handleKeyAction]);
+
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedIndex]);
 
   function normalizeForLibrary(s: string): string {
     return s.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
@@ -138,6 +192,7 @@ export function DashboardPage() {
         setFireSaleMessage(evt.fireSaleMessage ?? "");
         setNowPlayingAutoEnabled(Boolean(evt.nowPlayingAutoEnabled));
         setNowPlayingOnTicker(Boolean(evt.nowPlayingOnTicker));
+        setBlockedPushSources(evt.blockedPushSources ?? []);
       })
       .catch(() => {
         setEventData(null);
@@ -147,6 +202,7 @@ export function DashboardPage() {
         setFireSaleMessage("");
         setNowPlayingAutoEnabled(false);
         setNowPlayingOnTicker(false);
+        setBlockedPushSources([]);
       });
 
     void api
@@ -209,6 +265,12 @@ export function DashboardPage() {
     } catch {
       swapPositions(current.requestId, targetPos, target.requestId, currentPos);
     }
+  }
+
+  async function updateShoutout(requestId: string, approved: boolean) {
+    if (!session || !eventId) return;
+    await api.updateRequest(eventId, requestId, { shoutoutApproved: approved }, session.idToken);
+    await refresh();
   }
 
   async function updatePayment(requestId: string, paymentStatus: "verified" | "rejected") {
@@ -284,6 +346,44 @@ export function DashboardPage() {
       await api.updateEvent(eventId, { nowPlayingOnTicker: next } as Partial<EventRecord>, session.idToken);
     } catch {
       setNowPlayingOnTicker(!next);
+    }
+  }
+
+  async function disconnectDjSource(slotId: string) {
+    if (!session || !eventId) return;
+    const sourceId = slotId.replace(/^src-/, "");
+    const nextBlocked = [...new Set([...blockedPushSources, sourceId])];
+    const nextSlots = nowPlayingSlots.map((s) =>
+      s.id === slotId ? { ...s, songTitle: "", artistName: "", active: false, updatedAt: new Date().toISOString() } : s,
+    );
+    setBlockedPushSources(nextBlocked);
+    setNowPlayingSlots(nextSlots);
+    try {
+      const updated = await api.updateEvent(
+        eventId,
+        { blockedPushSources: nextBlocked, nowPlayingSlots: nextSlots } as Partial<EventRecord>,
+        session.idToken,
+      );
+      setEventData(updated);
+    } catch {
+      setBlockedPushSources(blockedPushSources);
+      setNowPlayingSlots(nowPlayingSlots);
+    }
+  }
+
+  async function unblockDjSource(sourceId: string) {
+    if (!session || !eventId) return;
+    const nextBlocked = blockedPushSources.filter((s) => s !== sourceId);
+    setBlockedPushSources(nextBlocked);
+    try {
+      const updated = await api.updateEvent(
+        eventId,
+        { blockedPushSources: nextBlocked } as Partial<EventRecord>,
+        session.idToken,
+      );
+      setEventData(updated);
+    } catch {
+      setBlockedPushSources(blockedPushSources);
     }
   }
 
@@ -485,6 +585,11 @@ export function DashboardPage() {
                   Open {source.name}
                 </a>
               ))}
+            {eventId ? (
+              <Link className="rounded-md border border-violet-500/60 px-3 py-1.5 text-sm text-violet-300" to={`/analytics/${eventId}`}>
+                Analytics
+              </Link>
+            ) : null}
             <Link className="rounded-md border border-slate-600 px-3 py-1.5 text-sm" to="/admin">
               Admin
             </Link>
@@ -530,7 +635,18 @@ export function DashboardPage() {
                     .filter((s) => s.active && s.songTitle)
                     .map((slot) => (
                       <div key={slot.id} className="rounded-lg border border-emerald-500/30 bg-slate-950 p-3">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">{slot.djName}</p>
+                        <div className="flex items-start justify-between">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">{slot.djName}</p>
+                          {slot.id.startsWith("src-") ? (
+                            <button
+                              className="rounded bg-rose-500/20 px-2 py-0.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/40"
+                              onClick={() => void disconnectDjSource(slot.id)}
+                              title="Remove this DJ from the ticker and block future pushes"
+                            >
+                              Disconnect
+                            </button>
+                          ) : null}
+                        </div>
                         <p className="mt-1 text-sm font-semibold text-slate-100">{slot.songTitle}</p>
                         {slot.artistName ? <p className="text-xs text-slate-400">{slot.artistName}</p> : null}
                         <span className="mt-2 inline-block rounded bg-emerald-400/20 px-2 py-0.5 text-xs text-emerald-300">Live</span>
@@ -542,6 +658,24 @@ export function DashboardPage() {
                   </p>
                 )}
               </div>
+              {blockedPushSources.length ? (
+                <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-950/20 p-3">
+                  <p className="text-xs font-semibold text-rose-300">Disconnected DJ Sources</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {blockedPushSources.map((sourceId) => (
+                      <div key={sourceId} className="flex items-center gap-1.5 rounded border border-rose-500/30 bg-slate-950 px-2 py-1">
+                        <span className="text-xs text-slate-300">{sourceId}</span>
+                        <button
+                          className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/40"
+                          onClick={() => void unblockDjSource(sourceId)}
+                        >
+                          Reconnect
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             ) : (
               <>
                 <div className="mb-3 mt-3 flex items-center justify-end">
@@ -836,9 +970,29 @@ export function DashboardPage() {
 
         {loading ? <p>Loading requests...</p> : null}
 
+        <div className="mb-2 flex items-center gap-3 text-xs text-slate-500">
+          <span>Shortcuts:</span>
+          <kbd className="rounded bg-slate-800 px-1.5 py-0.5 font-mono">↑↓</kbd> navigate
+          {tab === "pending" ? (
+            <>
+              <kbd className="rounded bg-slate-800 px-1.5 py-0.5 font-mono">A</kbd> approve
+              <kbd className="rounded bg-slate-800 px-1.5 py-0.5 font-mono">V</kbd> veto
+            </>
+          ) : null}
+          {tab === "approved" ? (
+            <>
+              <kbd className="rounded bg-slate-800 px-1.5 py-0.5 font-mono">P</kbd> played
+              <kbd className="rounded bg-slate-800 px-1.5 py-0.5 font-mono">V</kbd> veto
+            </>
+          ) : null}
+        </div>
         <div className="grid gap-3">
           {visible.map((request, index) => (
-            <div key={request.requestId} className="space-y-2">
+            <div
+              key={request.requestId}
+              ref={index === selectedIndex ? selectedRef : undefined}
+              className={`space-y-2 rounded-lg transition-all ${index === selectedIndex ? "ring-2 ring-orange-400/80 ring-offset-1 ring-offset-slate-950" : ""}`}
+            >
               <RequestCard
                 request={request}
                 libraryMatch={findLibraryMatch(request.songTitle, request.artistName)}
@@ -854,6 +1008,16 @@ export function DashboardPage() {
                   (request.paymentStatus ?? "unpaid") === "pending_verification" ||
                   (request.paymentStatus ?? "unpaid") === "verified"
                     ? (id) => void updatePayment(id, "rejected")
+                    : undefined
+                }
+                onApproveShoutout={
+                  request.shoutout && request.shoutoutApproved == null
+                    ? (id) => void updateShoutout(id, true)
+                    : undefined
+                }
+                onRejectShoutout={
+                  request.shoutout && request.shoutoutApproved == null
+                    ? (id) => void updateShoutout(id, false)
                     : undefined
                 }
               />
