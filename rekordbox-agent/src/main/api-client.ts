@@ -45,6 +45,43 @@ async function electronFetch(
   }
 }
 
+export interface PingResult {
+  status: "active" | "blocked" | "reconnected";
+  sourceId: string;
+  sourceName?: string;
+  lastPushedAt?: string | null;
+  message: string;
+}
+
+export async function testConnection(forceReconnect = false): Promise<PingResult> {
+  const config = getConfig();
+  if (!config.eventId || !config.pushToken) {
+    throw new Error("Event ID and Push Token must be configured.");
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/events/${encodeURIComponent(config.eventId)}/ping-source`;
+
+  const response = await electronFetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-push-token": config.pushToken,
+    },
+    body: JSON.stringify({
+      sourceId: config.sourceId || undefined,
+      forceReconnect,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Connection test failed (${response.status}): ${text}`);
+  }
+
+  return (await response.json()) as PingResult;
+}
+
 export async function fetchEvents(): Promise<EventSummary[]> {
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}/events`;

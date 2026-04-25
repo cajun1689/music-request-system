@@ -19,6 +19,7 @@ try {
     fetchGenreVotes: function () { return ipcRenderer.invoke("fetch-genre-votes"); },
     fetchEventStatus: function () { return ipcRenderer.invoke("fetch-event-status"); },
     toggleFireSale: function (active, message) { return ipcRenderer.invoke("toggle-fire-sale", active, message); },
+    testConnection: function (forceReconnect) { return ipcRenderer.invoke("test-connection", forceReconnect); },
     pollNow: function () { return ipcRenderer.invoke("poll-now"); },
     pushPendingNow: function () { return ipcRenderer.invoke("push-pending-now"); },
     fetchEvents: function () { return ipcRenderer.invoke("fetch-events"); },

@@ -34,6 +34,7 @@ import {
   pushTrack,
   reviewRequest,
   syncLibrary,
+  testConnection,
   queueSize,
   type PushResult,
 } from "./api-client";
@@ -892,6 +893,18 @@ ipcMain.handle("toggle-fire-sale", async (_e, active: boolean, message?: string)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.error("Fire sale toggle failed:", msg);
+    throw err;
+  }
+});
+
+ipcMain.handle("test-connection", async (_e, forceReconnect?: boolean) => {
+  try {
+    const result = await testConnection(Boolean(forceReconnect));
+    log.info("Connection test result:", JSON.stringify(result));
+    return result;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.error("Connection test failed:", msg);
     throw err;
   }
 });

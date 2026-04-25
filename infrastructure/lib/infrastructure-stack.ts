@@ -255,6 +255,10 @@ export class InfrastructureStack extends Stack {
       "PushTrackFn",
       "../../backend/lambdas/api/pushTrack.ts",
     );
+    const pingSourceFn = makeLambda(
+      "PingSourceFn",
+      "../../backend/lambdas/api/pingSource.ts",
+    );
 
     const reviewRequestByTokenFn = makeLambda(
       "ReviewRequestByTokenFn",
@@ -339,6 +343,7 @@ export class InfrastructureStack extends Stack {
     eventsTable.grantReadWriteData(autoDetectPlayedFn);
     eventsTable.grantReadWriteData(pushTrackFn);
     requestsTable.grantReadWriteData(pushTrackFn);
+    eventsTable.grantReadWriteData(pingSourceFn);
     eventsTable.grantReadData(reviewRequestByTokenFn);
     requestsTable.grantReadWriteData(reviewRequestByTokenFn);
     eventsTable.grantReadWriteData(toggleFireSaleByTokenFn);
@@ -537,6 +542,8 @@ export class InfrastructureStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
     pushTrackResource.addMethod("POST", new apigateway.LambdaIntegration(pushTrackFn));
+    const pingSourceResource = eventByIdResource.addResource("ping-source");
+    pingSourceResource.addMethod("POST", new apigateway.LambdaIntegration(pingSourceFn));
     reviewRequestResource.addMethod("POST", new apigateway.LambdaIntegration(reviewRequestByTokenFn));
     const fireSaleResource = eventByIdResource.addResource("fire-sale");
     fireSaleResource.addMethod("POST", new apigateway.LambdaIntegration(toggleFireSaleByTokenFn));

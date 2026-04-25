@@ -656,28 +656,93 @@ export function DashboardPage() {
               {showNowPlaying ? "Hide" : "Show"}
             </button>
           </div>
-          {blockedPushSources.length ? (
-            <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-950/20 p-3">
-              <p className="text-xs font-semibold text-rose-300">Disconnected DJ Sources</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {blockedPushSources.map((sourceId) => {
-                  const matchingSource = eventData?.livePlaylistSources?.find((s) => s.id === sourceId);
-                  const displayName = matchingSource?.djName || matchingSource?.name || sourceId;
-                  return (
-                    <div key={sourceId} className="flex items-center gap-1.5 rounded border border-rose-500/30 bg-slate-950 px-2 py-1">
-                      <span className="text-xs text-slate-300">{displayName}</span>
-                      <button
-                        className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/40"
-                        onClick={() => void unblockDjSource(sourceId)}
-                      >
-                        Reconnect
-                      </button>
-                    </div>
-                  );
-                })}
+          {(() => {
+            const allSources = eventData?.livePlaylistSources ?? [];
+            const pushSources = allSources.filter((s) => s.type === "rekordbox" || s.type === "serato");
+            if (!pushSources.length && !blockedPushSources.length) return null;
+
+            const knownSourceIds = new Set(pushSources.map((s) => s.id));
+            const orphanBlocked = blockedPushSources.filter((id) => !knownSourceIds.has(id));
+
+            const sourceRows = [
+              ...pushSources.map((source) => {
+                const isBlocked = blockedPushSources.includes(source.id);
+                const matchState = eventData?.autoMatchState?.[source.id];
+                const slot = nowPlayingSlots.find((s) => s.id === `src-${source.id}` && s.active && s.songTitle);
+                const lastPushAt = matchState?.lastMatchedAt;
+                const ageMs = lastPushAt ? Date.now() - new Date(lastPushAt).getTime() : null;
+                const status = isBlocked ? "blocked" as const
+                  : slot ? "active" as const
+                  : lastPushAt ? "stale" as const
+                  : "offline" as const;
+                return { id: source.id, name: source.djName || source.name, status, ageMs, lastPushAt, track: slot?.songTitle };
+              }),
+              ...orphanBlocked.map((id) => ({
+                id, name: id, status: "blocked" as const, ageMs: null, lastPushAt: undefined as string | undefined, track: undefined as string | undefined,
+              })),
+            ];
+
+            return (
+              <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
+                <p className="text-xs font-semibold text-slate-300">DJ Bridge Sources</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {sourceRows.map((src) => {
+                    const statusColors = {
+                      active: "border-emerald-500/40 bg-emerald-950/20",
+                      stale: "border-amber-500/30 bg-amber-950/10",
+                      blocked: "border-rose-500/30 bg-rose-950/20",
+                      offline: "border-slate-700 bg-slate-900",
+                    };
+                    const badgeColors = {
+                      active: "bg-emerald-400/20 text-emerald-300",
+                      stale: "bg-amber-400/20 text-amber-300",
+                      blocked: "bg-rose-400/20 text-rose-300",
+                      offline: "bg-slate-700 text-slate-400",
+                    };
+                    const ageLabel = src.ageMs != null
+                      ? src.ageMs < 60_000 ? "just now"
+                        : src.ageMs < 3600_000 ? `${Math.floor(src.ageMs / 60_000)}m ago`
+                        : `${Math.floor(src.ageMs / 3600_000)}h ago`
+                      : null;
+
+                    return (
+                      <div key={src.id} className={`rounded-lg border p-2.5 ${statusColors[src.status]}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-slate-100 truncate">{src.name}</p>
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${badgeColors[src.status]}`}>
+                                {src.status}
+                              </span>
+                              {ageLabel ? <span className="text-xs text-slate-500">{ageLabel}</span> : null}
+                            </div>
+                            {src.track ? <p className="mt-1 text-xs text-slate-300 truncate">{src.track}</p> : null}
+                          </div>
+                          <div className="flex-shrink-0">
+                            {src.status === "blocked" ? (
+                              <button
+                                className="rounded bg-emerald-500/20 px-2 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/40"
+                                onClick={() => void unblockDjSource(src.id)}
+                              >
+                                Reconnect
+                              </button>
+                            ) : src.status === "active" ? (
+                              <button
+                                className="rounded bg-rose-500/20 px-2 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/40"
+                                onClick={() => void disconnectDjSource(`src-${src.id}`)}
+                              >
+                                Disconnect
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ) : null}
+            );
+          })()}
           {showNowPlaying ? (
             nowPlayingAutoEnabled ? (
               <>

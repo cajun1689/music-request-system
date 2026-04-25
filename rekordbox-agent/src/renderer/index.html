@@ -573,7 +573,9 @@
       <div class="btn-row">
         <button class="btn secondary" id="btn-poll">Poll Now</button>
         <button class="btn secondary" id="btn-find-db">Detect Source</button>
+        <button class="btn" id="btn-test-conn" style="background:var(--green); color:#064e3b;">Test Connection</button>
       </div>
+      <div id="conn-result-box" style="display:none; margin-top:8px; padding:8px 10px; border-radius:6px; font-size:12px; font-weight:600;"></div>
     </div>
 
     <!-- Shoutouts Card -->
@@ -1161,6 +1163,70 @@
       } finally {
         btn.disabled = false;
         btn.textContent = "Poll Now";
+      }
+    });
+
+    el("btn-test-conn").addEventListener("click", async () => {
+      var btn = el("btn-test-conn");
+      var resultBox = el("conn-result-box");
+      btn.disabled = true;
+      btn.textContent = "Testing…";
+      resultBox.style.display = "none";
+      logActivity("Testing connection…");
+      try {
+        var result = await bridge.testConnection(false);
+        resultBox.style.display = "";
+        if (result.status === "active") {
+          resultBox.style.background = "rgba(34,197,94,0.1)";
+          resultBox.style.border = "1px solid rgba(34,197,94,0.3)";
+          resultBox.style.color = "var(--green)";
+          resultBox.innerHTML = "✓ Connected — " + (result.sourceName || result.sourceId) + "<br><span style='font-weight:400; font-size:11px;'>" + result.message + "</span>";
+          showToast("Connection OK: " + (result.sourceName || result.sourceId), "success");
+        } else if (result.status === "blocked") {
+          resultBox.style.background = "rgba(239,68,68,0.1)";
+          resultBox.style.border = "1px solid rgba(239,68,68,0.3)";
+          resultBox.style.color = "#fca5a5";
+          resultBox.innerHTML = "✗ Disconnected by admin<br><span style='font-weight:400; font-size:11px;'>This source has been blocked. Click below to force reconnect.</span>" +
+            "<br><button class='btn' id='btn-force-reconnect' style='margin-top:6px; background:#f59e0b; color:#451a03; font-size:11px; padding:5px 12px;'>Force Reconnect</button>";
+          el("btn-force-reconnect").addEventListener("click", async function() {
+            var frBtn = el("btn-force-reconnect");
+            frBtn.disabled = true;
+            frBtn.textContent = "Reconnecting…";
+            try {
+              var frResult = await bridge.testConnection(true);
+              if (frResult.status === "reconnected") {
+                resultBox.style.background = "rgba(34,197,94,0.1)";
+                resultBox.style.border = "1px solid rgba(34,197,94,0.3)";
+                resultBox.style.color = "var(--green)";
+                resultBox.innerHTML = "✓ Reconnected! " + frResult.message;
+                showToast("Successfully reconnected!", "success");
+              } else {
+                showToast("Reconnect returned: " + frResult.status, "info");
+              }
+            } catch (frErr) {
+              showToast("Reconnect failed: " + (frErr.message || frErr), "error", 8000);
+              frBtn.disabled = false;
+              frBtn.textContent = "Force Reconnect";
+            }
+          });
+          showToast("Source is blocked — use Force Reconnect", "error", 8000);
+        } else if (result.status === "reconnected") {
+          resultBox.style.background = "rgba(34,197,94,0.1)";
+          resultBox.style.border = "1px solid rgba(34,197,94,0.3)";
+          resultBox.style.color = "var(--green)";
+          resultBox.innerHTML = "✓ Reconnected! " + result.message;
+          showToast("Reconnected: " + (result.sourceName || result.sourceId), "success");
+        }
+      } catch (err) {
+        resultBox.style.display = "";
+        resultBox.style.background = "rgba(239,68,68,0.1)";
+        resultBox.style.border = "1px solid rgba(239,68,68,0.3)";
+        resultBox.style.color = "#fca5a5";
+        resultBox.innerHTML = "✗ Connection failed<br><span style='font-weight:400; font-size:11px;'>" + (err.message || err) + "</span>";
+        showToast("Connection test failed: " + (err.message || err), "error", 8000);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Test Connection";
       }
     });
 
