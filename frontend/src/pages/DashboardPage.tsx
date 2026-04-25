@@ -656,6 +656,28 @@ export function DashboardPage() {
               {showNowPlaying ? "Hide" : "Show"}
             </button>
           </div>
+          {blockedPushSources.length ? (
+            <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-950/20 p-3">
+              <p className="text-xs font-semibold text-rose-300">Disconnected DJ Sources</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {blockedPushSources.map((sourceId) => {
+                  const matchingSource = eventData?.livePlaylistSources?.find((s) => s.id === sourceId);
+                  const displayName = matchingSource?.djName || matchingSource?.name || sourceId;
+                  return (
+                    <div key={sourceId} className="flex items-center gap-1.5 rounded border border-rose-500/30 bg-slate-950 px-2 py-1">
+                      <span className="text-xs text-slate-300">{displayName}</span>
+                      <button
+                        className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/40"
+                        onClick={() => void unblockDjSource(sourceId)}
+                      >
+                        Reconnect
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           {showNowPlaying ? (
             nowPlayingAutoEnabled ? (
               <>
@@ -723,24 +745,6 @@ export function DashboardPage() {
                     >
                       Clear All Stale
                     </button>
-                  </div>
-                ) : null}
-                {blockedPushSources.length ? (
-                  <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-950/20 p-3">
-                    <p className="text-xs font-semibold text-rose-300">Disconnected DJ Sources</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {blockedPushSources.map((sourceId) => (
-                        <div key={sourceId} className="flex items-center gap-1.5 rounded border border-rose-500/30 bg-slate-950 px-2 py-1">
-                          <span className="text-xs text-slate-300">{sourceId}</span>
-                          <button
-                            className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/40"
-                            onClick={() => void unblockDjSource(sourceId)}
-                          >
-                            Reconnect
-                          </button>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 ) : null}
               </>
