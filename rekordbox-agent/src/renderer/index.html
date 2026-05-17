@@ -1570,6 +1570,20 @@
         info.appendChild(artist);
         info.appendChild(meta);
 
+        if (req.message && String(req.message).trim()) {
+          var messageEl = document.createElement("div");
+          messageEl.style.marginTop = "4px";
+          messageEl.style.fontSize = "11px";
+          messageEl.style.fontStyle = "italic";
+          messageEl.style.color = "var(--text-muted, #9ca3af)";
+          messageEl.style.padding = "3px 6px";
+          messageEl.style.borderLeft = "2px solid rgba(148,163,184,0.4)";
+          messageEl.style.background = "rgba(148,163,184,0.08)";
+          messageEl.style.borderRadius = "3px";
+          messageEl.textContent = '\u201C' + String(req.message).trim() + '\u201D';
+          info.appendChild(messageEl);
+        }
+
         if (req.shoutout) {
           var shoutoutEl = document.createElement("div");
           shoutoutEl.style.marginTop = "4px";
