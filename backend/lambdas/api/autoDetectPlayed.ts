@@ -183,28 +183,40 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     return json(200, { matched: false, reason: "No active live playlist sources configured." });
   }
 
-  const approved = await docClient.send(
-    new QueryCommand({
-      TableName: env.requestsTableName,
-      IndexName: "eventId-status-index",
-      KeyConditionExpression: "eventId = :eventId and #status = :status",
-      ExpressionAttributeNames: { "#status": "status" },
-      ExpressionAttributeValues: {
-        ":eventId": eventId,
-        ":status": "approved",
-      },
-    }),
-  );
-  const candidates = (approved.Items ?? []) as RequestRecord[];
+  const [approvedResp, pendingResp] = await Promise.all([
+    docClient.send(
+      new QueryCommand({
+        TableName: env.requestsTableName,
+        IndexName: "eventId-status-index",
+        KeyConditionExpression: "eventId = :eventId and #status = :status",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: { ":eventId": eventId, ":status": "approved" },
+      }),
+    ),
+    docClient.send(
+      new QueryCommand({
+        TableName: env.requestsTableName,
+        IndexName: "eventId-status-index",
+        KeyConditionExpression: "eventId = :eventId and #status = :status",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: { ":eventId": eventId, ":status": "pending" },
+      }),
+    ),
+  ]);
+  const candidates = [
+    ...((approvedResp.Items ?? []) as RequestRecord[]),
+    ...((pendingResp.Items ?? []) as RequestRecord[]),
+  ];
   if (!candidates.length) {
-    console.log("autoDetect: no approved requests", { eventId, sourceCount: sources.length });
-    return json(200, { matched: false, reason: "No approved requests to match." });
+    console.log("autoDetect: no matchable requests", { eventId, sourceCount: sources.length });
+    return json(200, { matched: false, reason: "No pending or approved requests to match." });
   }
 
   console.log("autoDetect: checking", {
     eventId,
     sources: sources.map((s) => s.id),
-    approvedCount: candidates.length,
+    approvedCount: approvedResp.Items?.length ?? 0,
+    pendingCount: pendingResp.Items?.length ?? 0,
   });
 
   const checks: Array<{

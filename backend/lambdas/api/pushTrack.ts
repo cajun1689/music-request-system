@@ -346,17 +346,34 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     coreArtist: input.artist ? normalize(stripDjPoolTags(input.artist)) : undefined,
   }));
 
-  const approved = await docClient.send(
-    new QueryCommand({
-      TableName: env.requestsTableName,
-      IndexName: "eventId-status-index",
-      KeyConditionExpression: "eventId = :eventId and #status = :status",
-      ExpressionAttributeNames: { "#status": "status" },
-      ExpressionAttributeValues: { ":eventId": eventId, ":status": "approved" },
-    }),
-  );
-  const candidates = (approved.Items ?? []) as RequestRecord[];
-  console.log("approved candidates:", candidates.length);
+  const [approvedResp, pendingResp] = await Promise.all([
+    docClient.send(
+      new QueryCommand({
+        TableName: env.requestsTableName,
+        IndexName: "eventId-status-index",
+        KeyConditionExpression: "eventId = :eventId and #status = :status",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: { ":eventId": eventId, ":status": "approved" },
+      }),
+    ),
+    docClient.send(
+      new QueryCommand({
+        TableName: env.requestsTableName,
+        IndexName: "eventId-status-index",
+        KeyConditionExpression: "eventId = :eventId and #status = :status",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: { ":eventId": eventId, ":status": "pending" },
+      }),
+    ),
+  ]);
+  const candidates = [
+    ...((approvedResp.Items ?? []) as RequestRecord[]),
+    ...((pendingResp.Items ?? []) as RequestRecord[]),
+  ];
+  console.log("match candidates:", {
+    approved: approvedResp.Items?.length ?? 0,
+    pending: pendingResp.Items?.length ?? 0,
+  });
 
   try {
     if (!eventRecord.autoMatchState) {
@@ -486,12 +503,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   }
 
   const reviewedBy = `auto:${PUSH_SOURCE_ID}:${sourceDjName}`;
+  const matchedWasPending = best.request.status === "pending";
 
   console.log("MATCH (deferred played):", JSON.stringify({
     requestId: best.request.requestId,
     requestSong: best.request.songTitle,
     requestArtist: best.request.artistName,
     score: Number(best.score.toFixed(2)),
+    matchedWasPending,
   }));
 
   try {
@@ -500,11 +519,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         TableName: env.requestsTableName,
         Key: { eventId, requestId: best.request.requestId },
         ConditionExpression: "attribute_exists(eventId) and attribute_exists(requestId)",
-        UpdateExpression:
-          "SET reviewedAt = :reviewedAt, reviewedBy = :reviewedBy",
+        UpdateExpression: matchedWasPending
+          ? "SET reviewedAt = :reviewedAt, reviewedBy = :reviewedBy, #status = :approvedStatus"
+          : "SET reviewedAt = :reviewedAt, reviewedBy = :reviewedBy",
+        ExpressionAttributeNames: matchedWasPending ? { "#status": "status" } : undefined,
         ExpressionAttributeValues: {
           ":reviewedAt": now,
           ":reviewedBy": reviewedBy,
+          ...(matchedWasPending ? { ":approvedStatus": "approved" } : {}),
         },
         ReturnValues: "NONE",
       }),
