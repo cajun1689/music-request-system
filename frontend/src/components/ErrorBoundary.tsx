@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Sentry } from "../sentry";
 
 type Props = {
   children: ReactNode;
@@ -23,8 +24,12 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // Keep console logging enabled for quick debugging in production.
     console.error("App runtime error:", error, info.componentStack);
+    try {
+      Sentry.captureException(error, { contexts: { react: { componentStack: info.componentStack ?? "" } } });
+    } catch {
+      /* ignore Sentry failures */
+    }
   }
 
   render() {

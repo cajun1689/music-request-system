@@ -6,6 +6,7 @@ import { useRequests } from "../hooks/useRequests";
 import { api } from "../services/api";
 import type { EventRecord, LivePlaylistSource, NowPlayingSlot } from "../types";
 import { ALL_GENRES, GENRE_LABELS, GENRE_VOTE_THRESHOLD, normalizeGenreVotes } from "../utils/genreVotes";
+import { comparePriority } from "../utils/priority";
 
 type Tab = "pending" | "approved" | "played" | "vetoed";
 const FIRE_SALE_MESSAGE = "🔥🔥🔥 FIRE SALE 🔥🔥🔥  $1 SHOTS 🥃🥃  Bartender's Choice - Until The End Of This Song";
@@ -245,9 +246,7 @@ export function DashboardPage() {
     if (!session || !eventId) {
       return;
     }
-    const list = [...grouped.approved].sort(
-      (a, b) => Number(a.position ?? Number.MAX_SAFE_INTEGER) - Number(b.position ?? Number.MAX_SAFE_INTEGER),
-    );
+    const list = [...grouped.approved].sort(comparePriority);
     const idx = list.findIndex((entry) => entry.requestId === requestId);
     if (idx < 0) {
       return;

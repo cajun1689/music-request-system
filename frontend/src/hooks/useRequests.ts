@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
 import type { RequestRecord, RequestStatus } from "../types";
+import { comparePriority } from "../utils/priority";
 import { useWebSocket } from "./useWebSocket";
 
 export function useRequests(eventId: string | undefined, role: "dj" | "overlay") {
@@ -45,7 +46,7 @@ export function useRequests(eventId: string | undefined, role: "dj" | "overlay")
       pending: requests.filter((req) => req.status === "pending"),
       approved: requests
         .filter((req) => req.status === "approved")
-        .sort((a, b) => Number(a.position ?? Number.MAX_SAFE_INTEGER) - Number(b.position ?? Number.MAX_SAFE_INTEGER)),
+        .sort(comparePriority),
       vetoed: requests.filter((req) => req.status === "vetoed"),
       played: requests.filter((req) => req.status === "played"),
     }),

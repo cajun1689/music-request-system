@@ -5,7 +5,10 @@ import { Toaster } from "sonner";
 import App from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { initSentry } from "./sentry";
 import "./index.css";
+
+initSentry();
 
 // amazon-cognito-identity-js expects Node-like globals in some code paths.
 if (typeof window !== "undefined") {

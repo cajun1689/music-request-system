@@ -8,6 +8,7 @@ import { api } from "../services/api";
 import type { EventRecord, GenreName, RequestRecord } from "../types";
 import { toDisplayTitleCase } from "../utils/formatting";
 import { GENRE_LABELS, GENRE_VOTE_THRESHOLD, getAvailableGenres, normalizeGenreVotes } from "../utils/genreVotes";
+import { comparePriority } from "../utils/priority";
 
 interface LibraryTrack {
   title: string;
@@ -102,7 +103,7 @@ export function RequestPage() {
     setLiveQueue(
       all
         .filter((r) => r.status === "approved")
-        .sort((a, b) => Number(a.position ?? Number.MAX_SAFE_INTEGER) - Number(b.position ?? Number.MAX_SAFE_INTEGER)),
+        .sort(comparePriority),
     );
   }, [eventId]);
 
@@ -163,7 +164,7 @@ export function RequestPage() {
       }
       const approved = all
         .filter((item) => item.status === "approved")
-        .sort((a, b) => Number(a.position ?? Number.MAX_SAFE_INTEGER) - Number(b.position ?? Number.MAX_SAFE_INTEGER));
+        .sort(comparePriority);
       const idx = approved.findIndex((item) => item.requestId === trackedId);
       setSongsAway(idx >= 0 ? idx + 1 : null);
     };
@@ -188,7 +189,7 @@ export function RequestPage() {
         const next = exists
           ? prev.map((r) => (r.requestId === updated.requestId ? updated : r))
           : [...prev, updated];
-        return next.sort((a, b) => Number(a.position ?? Number.MAX_SAFE_INTEGER) - Number(b.position ?? Number.MAX_SAFE_INTEGER));
+        return next.sort(comparePriority);
       }
       return prev.filter((r) => r.requestId !== updated.requestId);
     });
@@ -212,7 +213,7 @@ export function RequestPage() {
         const all = await api.getRequests(eventId!);
         const approved = all
           .filter((item) => item.status === "approved")
-          .sort((a, b) => Number(a.position ?? Number.MAX_SAFE_INTEGER) - Number(b.position ?? Number.MAX_SAFE_INTEGER));
+          .sort(comparePriority);
         const idx = approved.findIndex((item) => item.requestId === trackedId);
         setSongsAway(idx >= 0 ? idx + 1 : null);
       })();

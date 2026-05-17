@@ -52,6 +52,7 @@ jobs:
           PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           PAYPAL_ENVIRONMENT: ${{ secrets.PAYPAL_ENVIRONMENT }}
           PAYPAL_WEBHOOK_ID: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+          ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
 
       - name: CDK deploy
         run: npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
@@ -61,6 +62,7 @@ jobs:
           PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           PAYPAL_ENVIRONMENT: ${{ secrets.PAYPAL_ENVIRONMENT }}
           PAYPAL_WEBHOOK_ID: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+          ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
 
       - name: Extract stack outputs
         id: outputs

@@ -151,6 +151,57 @@ export function AnalyticsPage() {
 
     const totalUpvotes = requests.reduce((sum, r) => sum + (r.upvotes ?? 0), 0);
 
+    const vetoedCounts: Record<string, { title: string; artist: string; count: number; upvotes: number }> = {};
+    const neverPlayedCounts: Record<
+      string,
+      { title: string; artist: string; count: number; upvotes: number; tipTotal: number }
+    > = {};
+    for (const req of requests) {
+      const status = effectiveStatus(req);
+      const key = `${req.songTitle.toLowerCase().trim()}|${req.artistName.toLowerCase().trim()}`;
+      if (!key.replace("|", "")) continue;
+
+      if (status === "vetoed") {
+        if (!vetoedCounts[key]) {
+          vetoedCounts[key] = { title: req.songTitle, artist: req.artistName, count: 0, upvotes: 0 };
+        }
+        vetoedCounts[key].count++;
+        vetoedCounts[key].upvotes += req.upvotes ?? 0;
+        continue;
+      }
+
+      if (status === "played" || status === "vetoed") continue;
+      if (!neverPlayedCounts[key]) {
+        neverPlayedCounts[key] = {
+          title: req.songTitle,
+          artist: req.artistName,
+          count: 0,
+          upvotes: 0,
+          tipTotal: 0,
+        };
+      }
+      neverPlayedCounts[key].count++;
+      neverPlayedCounts[key].upvotes += req.upvotes ?? 0;
+      neverPlayedCounts[key].tipTotal += req.tipAmount ?? 0;
+    }
+
+    const topVetoed = Object.values(vetoedCounts)
+      .sort((a, b) => b.count - a.count || b.upvotes - a.upvotes)
+      .slice(0, 10);
+
+    const playedKeys = new Set(
+      requests
+        .filter((r) => effectiveStatus(r) === "played")
+        .map((r) => `${r.songTitle.toLowerCase().trim()}|${r.artistName.toLowerCase().trim()}`),
+    );
+    const topNeverPlayed = Object.values(neverPlayedCounts)
+      .filter((entry) => !playedKeys.has(`${entry.title.toLowerCase().trim()}|${entry.artist.toLowerCase().trim()}`))
+      .sort(
+        (a, b) =>
+          b.count + b.upvotes - (a.count + a.upvotes) || b.tipTotal - a.tipTotal,
+      )
+      .slice(0, 10);
+
     return {
       total,
       approved,
@@ -165,6 +216,8 @@ export function AnalyticsPage() {
       tipCount: tips.length,
       topSongs,
       topArtists,
+      topVetoed,
+      topNeverPlayed,
       totalUpvotes,
     };
   }, [requests]);
@@ -295,6 +348,65 @@ export function AnalyticsPage() {
             </div>
           </section>
         </div>
+
+        {/* Actionable insights: vetoed + never-played */}
+        {(stats.topVetoed.length > 0 || stats.topNeverPlayed.length > 0) ? (
+          <div className="mb-6 grid gap-6 lg:grid-cols-2">
+            <section className="rounded-xl border border-rose-500/30 bg-slate-900 p-4">
+              <div className="mb-1 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-rose-200">Most Vetoed</h2>
+                <span className="text-xs text-slate-500">Add to blocklist?</span>
+              </div>
+              <p className="mb-3 text-xs text-slate-400">
+                Songs guests keep requesting that you keep saying no to. Add the worst offenders to the auto-veto blocklist.
+              </p>
+              <div className="space-y-2">
+                {stats.topVetoed.map((song, idx) => (
+                  <div key={`veto-${song.title}-${song.artist}`} className="flex items-center gap-3">
+                    <span className="w-6 text-right text-sm font-bold text-slate-500">{idx + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{toDisplayTitleCase(song.title)}</p>
+                      <p className="truncate text-xs text-slate-400">{toDisplayTitleCase(song.artist)}</p>
+                    </div>
+                    <span className="text-sm font-bold text-rose-300">{song.count}x</span>
+                  </div>
+                ))}
+                {stats.topVetoed.length === 0 ? (
+                  <p className="text-sm text-slate-500">No vetoed requests in this range.</p>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-amber-500/30 bg-slate-900 p-4">
+              <div className="mb-1 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-amber-200">Approved but Never Played</h2>
+                <span className="text-xs text-slate-500">Worth circling back?</span>
+              </div>
+              <p className="mb-3 text-xs text-slate-400">
+                Requests that were approved (or pending) but never got marked played — including any tips. Quick wins to make guests happy next set.
+              </p>
+              <div className="space-y-2">
+                {stats.topNeverPlayed.map((song, idx) => (
+                  <div key={`np-${song.title}-${song.artist}`} className="flex items-center gap-3">
+                    <span className="w-6 text-right text-sm font-bold text-slate-500">{idx + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{toDisplayTitleCase(song.title)}</p>
+                      <p className="truncate text-xs text-slate-400">
+                        {toDisplayTitleCase(song.artist)}
+                        {song.upvotes > 0 ? <span className="ml-2 text-amber-300/80">· {song.upvotes} upvote{song.upvotes === 1 ? "" : "s"}</span> : null}
+                        {song.tipTotal > 0 ? <span className="ml-2 text-emerald-300/80">· ${song.tipTotal.toFixed(2)} tipped</span> : null}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold text-amber-300">{song.count}x</span>
+                  </div>
+                ))}
+                {stats.topNeverPlayed.length === 0 ? (
+                  <p className="text-sm text-slate-500">Every request found its moment. Nice work.</p>
+                ) : null}
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         {/* Genre Vote Results */}
         {genreData && genreData.total > 0 ? (
