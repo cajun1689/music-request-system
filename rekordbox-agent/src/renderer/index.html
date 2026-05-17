@@ -1438,7 +1438,9 @@
     }
 
     function renderShoutouts(requests) {
-      var pending = requests.filter(function(r) { return isShoutoutOnly(r) && r.status === "pending"; });
+      var pending = requests.filter(function(r) {
+        return isShoutoutOnly(r) && r.status === "pending" && r.shoutoutApproved !== true;
+      });
       var card = el("shoutouts-card");
       var list = el("shoutouts-list");
       if (!pending.length) {

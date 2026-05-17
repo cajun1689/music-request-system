@@ -88,7 +88,7 @@ export function DashboardPage() {
     !req.songTitle?.trim() && !!req.shoutout;
 
   const pendingShoutouts = useMemo(
-    () => grouped.pending.filter(isShoutoutOnly),
+    () => grouped.pending.filter((r) => isShoutoutOnly(r) && r.shoutoutApproved !== true),
     [grouped.pending],
   );
 

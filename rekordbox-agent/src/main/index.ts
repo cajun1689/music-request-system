@@ -514,7 +514,12 @@ async function pollRequestsOnce(): Promise<void> {
     const all = await fetchRequests();
     if (!Array.isArray(all)) return;
 
-    const pending = all.filter((r) => r.status === "pending");
+    const pending = all.filter((r) => {
+      if (r.status !== "pending") return false;
+      const isShoutoutOnly = !!r.shoutout && !r.songTitle;
+      if (isShoutoutOnly && r.shoutoutApproved === true) return false;
+      return true;
+    });
     const flagged = all.filter(
       (r) =>
         !!r.shoutout &&
