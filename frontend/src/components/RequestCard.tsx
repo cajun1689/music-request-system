@@ -108,23 +108,41 @@ export function RequestCard({
       {request.shoutout ? (
         <div className="mt-2 rounded-lg border px-3 py-2 flex items-center justify-between gap-2"
           style={{
-            background: request.shoutoutApproved === true
-              ? "rgba(139,92,246,0.12)"
-              : request.shoutoutApproved === false
-                ? "rgba(239,68,68,0.08)"
-                : "rgba(139,92,246,0.08)",
-            borderColor: request.shoutoutApproved === true
-              ? "rgba(139,92,246,0.35)"
-              : request.shoutoutApproved === false
-                ? "rgba(239,68,68,0.25)"
-                : "rgba(139,92,246,0.2)",
+            background: request.shoutoutFlagSeverity === "block"
+              ? "rgba(239,68,68,0.15)"
+              : request.shoutoutFlagSeverity === "warn"
+                ? "rgba(245,158,11,0.10)"
+                : request.shoutoutApproved === true
+                  ? "rgba(139,92,246,0.12)"
+                  : request.shoutoutApproved === false
+                    ? "rgba(239,68,68,0.08)"
+                    : "rgba(139,92,246,0.08)",
+            borderColor: request.shoutoutFlagSeverity === "block"
+              ? "rgba(239,68,68,0.5)"
+              : request.shoutoutFlagSeverity === "warn"
+                ? "rgba(245,158,11,0.4)"
+                : request.shoutoutApproved === true
+                  ? "rgba(139,92,246,0.35)"
+                  : request.shoutoutApproved === false
+                    ? "rgba(239,68,68,0.25)"
+                    : "rgba(139,92,246,0.2)",
           }}
         >
           <div className="min-w-0">
             <p className="text-sm text-violet-300/90 truncate">
               Shoutout: &ldquo;{request.shoutout}&rdquo;
             </p>
-            {request.shoutoutApproved === true ? (
+            {request.shoutoutFlagSeverity === "block" ? (
+              <span className="text-xs text-rose-300 font-semibold">
+                AI: Blocked — {request.shoutoutFlagReason || "policy violation"}
+                {request.shoutoutFlagCategories?.length ? ` (${request.shoutoutFlagCategories.join(", ")})` : ""}
+              </span>
+            ) : request.shoutoutFlagSeverity === "warn" ? (
+              <span className="text-xs text-amber-300 font-semibold">
+                AI flag: {request.shoutoutFlagReason || "review before approving"}
+                {request.shoutoutFlagCategories?.length ? ` (${request.shoutoutFlagCategories.join(", ")})` : ""}
+              </span>
+            ) : request.shoutoutApproved === true ? (
               <span className="text-xs text-emerald-400 font-semibold">Approved — on ticker</span>
             ) : request.shoutoutApproved === false ? (
               <span className="text-xs text-rose-400 font-semibold">Rejected</span>

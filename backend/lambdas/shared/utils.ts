@@ -2,7 +2,9 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
 const dbClient = new DynamoDBClient({});
-export const docClient = DynamoDBDocumentClient.from(dbClient);
+export const docClient = DynamoDBDocumentClient.from(dbClient, {
+  marshallOptions: { removeUndefinedValues: true, convertClassInstanceToMap: true },
+});
 
 export const env = {
   eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",

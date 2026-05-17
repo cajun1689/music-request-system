@@ -22,6 +22,7 @@ import {
   aws_s3 as s3,
   aws_s3_deployment as s3deploy,
   aws_sns as sns,
+  aws_sns_subscriptions as snsSubscriptions,
   aws_events as events,
   aws_events_targets as targets,
   aws_ssm as ssm,
@@ -303,8 +304,10 @@ export class InfrastructureStack extends Stack {
     );
     openaiApiKeyParam.grantRead(autoDetectPlayedFn);
     openaiApiKeyParam.grantRead(pushTrackFn);
+    openaiApiKeyParam.grantRead(createRequestFn);
     autoDetectPlayedFn.addEnvironment("OPENAI_API_KEY_SSM_PARAM", "/music-request/openai-api-key");
     pushTrackFn.addEnvironment("OPENAI_API_KEY_SSM_PARAM", "/music-request/openai-api-key");
+    createRequestFn.addEnvironment("OPENAI_API_KEY_SSM_PARAM", "/music-request/openai-api-key");
 
     const paypalWebhookFn = makeLambda(
       "PaypalWebhookFn",
@@ -580,11 +583,29 @@ export class InfrastructureStack extends Stack {
       displayName: "Casper Requests Alarms",
     });
 
+    const alarmEmail = process.env.ALARM_EMAIL?.trim();
+    if (alarmEmail) {
+      alarmTopic.addSubscription(new snsSubscriptions.EmailSubscription(alarmEmail));
+    }
+
     const criticalFunctions = {
       CreateRequest: createRequestFn,
       PushTrack: pushTrackFn,
       CapturePaypalOrder: capturePaypalOrderFn,
+      PaypalWebhook: paypalWebhookFn,
       RequestStream: requestStreamFn,
+      UpdateRequest: updateRequestFn,
+      UpdateEvent: updateEventFn,
+      ReviewRequestByToken: reviewRequestByTokenFn,
+      AutoDetectPlayed: autoDetectPlayedFn,
+      DetectPlayed: detectPlayedFn,
+      PingSource: pingSourceFn,
+      UpvoteRequest: upvoteRequestFn,
+      ResetRequests: resetRequestsFn,
+      SyncLibrary: syncLibraryFn,
+      WsConnect: wsConnectFn,
+      WsDisconnect: wsDisconnectFn,
+      WsSubscribe: wsSubscribeFn,
     };
     for (const [label, fn] of Object.entries(criticalFunctions)) {
       const alarm = new cloudwatch.Alarm(this, `${label}ErrorAlarm`, {
@@ -593,6 +614,24 @@ export class InfrastructureStack extends Stack {
         evaluationPeriods: 1,
         comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
         alarmDescription: `${label} Lambda errors >= 1 in 5 min`,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      });
+      alarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
+    }
+
+    // Throttling indicates capacity issues — different signal from errors.
+    const throttleFunctions = {
+      CreateRequest: createRequestFn,
+      PushTrack: pushTrackFn,
+      RequestStream: requestStreamFn,
+    };
+    for (const [label, fn] of Object.entries(throttleFunctions)) {
+      const alarm = new cloudwatch.Alarm(this, `${label}ThrottleAlarm`, {
+        metric: fn.metricThrottles({ period: Duration.minutes(5) }),
+        threshold: 5,
+        evaluationPeriods: 1,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        alarmDescription: `${label} Lambda throttles >= 5 in 5 min`,
         treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
       });
       alarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
@@ -607,6 +646,29 @@ export class InfrastructureStack extends Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
     api5xxAlarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
+
+    const api4xxAlarm = new cloudwatch.Alarm(this, "RestApi4xxAlarm", {
+      metric: restApi.metricClientError({ period: Duration.minutes(5) }),
+      threshold: 50,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      alarmDescription: "REST API 4xx surge — possible client/regression issue (>=50 in 5 min)",
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    api4xxAlarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
+
+    // DynamoDB throttle alarms
+    for (const [label, table] of Object.entries({ Events: eventsTable, Requests: requestsTable })) {
+      const alarm = new cloudwatch.Alarm(this, `${label}TableThrottleAlarm`, {
+        metric: table.metric("ThrottledRequests", { period: Duration.minutes(5), statistic: "Sum" }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        alarmDescription: `${label} table throttled requests >= 1 in 5 min`,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      });
+      alarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
+    }
 
     new CfnOutput(this, "AlarmTopicArn", { value: alarmTopic.topicArn });
 

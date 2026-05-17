@@ -81,6 +81,11 @@ export interface RequestRecord {
   shoutout?: string;
   shoutoutApproved?: boolean;
   shoutoutApprovedAt?: string;
+  shoutoutFlagged?: boolean;
+  shoutoutFlagSeverity?: "ok" | "warn" | "block";
+  shoutoutFlagCategories?: string[];
+  shoutoutFlagReason?: string;
+  shoutoutModeratedAt?: string;
   status: RequestStatus;
   paymentStatus?: PaymentStatus;
   tipAmount?: number;

@@ -2,6 +2,7 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { randomUUID } from "node:crypto";
+import { moderateShoutout } from "../shared/moderateShoutout";
 import type { EventRecord, RequestRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
 
@@ -171,6 +172,40 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
   }
 
+  const shoutoutText = input.shoutout?.trim() || undefined;
+
+  let shoutoutFlagged: boolean | undefined;
+  let shoutoutFlagSeverity: "ok" | "warn" | "block" | undefined;
+  let shoutoutFlagCategories: string[] | undefined;
+  let shoutoutFlagReason: string | undefined;
+  let shoutoutModeratedAt: string | undefined;
+  let shoutoutAutoApproved: boolean | undefined;
+
+  if (shoutoutText) {
+    try {
+      const mod = await moderateShoutout(shoutoutText, {
+        djBrandName: eventRecord?.djBrandName,
+        venueName: eventRecord?.venueName,
+      });
+      shoutoutFlagged = mod.flagged;
+      shoutoutFlagSeverity = mod.severity;
+      shoutoutFlagCategories = mod.categories.length ? mod.categories : undefined;
+      shoutoutFlagReason = mod.reason || undefined;
+      shoutoutModeratedAt = new Date().toISOString();
+      if (mod.severity === "block") {
+        shoutoutAutoApproved = false;
+      }
+      console.log("createRequest: shoutout moderated", {
+        eventId,
+        severity: mod.severity,
+        flagged: mod.flagged,
+        categories: mod.categories,
+      });
+    } catch (err) {
+      console.error("createRequest: moderation failed (open)", String(err));
+    }
+  }
+
   const requestRecord: RequestRecord = {
     eventId,
     requestId: randomUUID(),
@@ -178,7 +213,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     artistName,
     requesterName: input.requesterName,
     message: input.message,
-    shoutout: input.shoutout || undefined,
+    shoutout: shoutoutText,
     status: autoStatus,
     paymentStatus: input.paymentStatus ?? (input.tipAmount ? "pending_verification" : "unpaid"),
     tipAmount: typeof input.tipAmount === "number" ? Number(input.tipAmount.toFixed(2)) : undefined,
@@ -189,6 +224,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     reviewedBy: autoReviewedBy,
     reviewedAt: autoReviewedBy ? new Date().toISOString() : undefined,
     submittedAt: new Date().toISOString(),
+    shoutoutFlagged,
+    shoutoutFlagSeverity,
+    shoutoutFlagCategories,
+    shoutoutFlagReason,
+    shoutoutModeratedAt,
+    shoutoutApproved: shoutoutAutoApproved,
+    shoutoutApprovedAt: shoutoutAutoApproved === false ? new Date().toISOString() : undefined,
   };
 
   await docClient.send(
