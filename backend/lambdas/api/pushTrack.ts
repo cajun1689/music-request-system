@@ -14,6 +14,7 @@ const REMIX_WORDS = ["remix", "mix", "edit", "version", "vip", "bootleg", "rewor
 
 const DJ_POOL_TAGS = [
   "dirty", "clean", "explicit", "radio edit",
+  "cln",
   "quick hit", "quick hitter", "short edit",
   "intro", "outro", "intro edit", "outro edit",
   "instrumental", "acapella", "acap",
@@ -29,10 +30,15 @@ const DJ_POOL_RE = new RegExp(
 function normalize(raw: string): string {
   return raw
     .normalize("NFKD")
+    .replace(/_/g, " ")
     .replace(/[^\w\s]/g, " ")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function squash(raw: string): string {
+  return normalize(raw).replace(/\s+/g, "");
 }
 
 function stripDjPoolTags(raw: string): string {
@@ -92,11 +98,31 @@ function scoreMatch(request: RequestRecord, playedTitle: string, playedArtist?: 
   if (playedTitleNorm === requestTitleNorm) score += 100;
   else if (playedCore === requestCore) score += 80;
 
+  const playedCoreSquashed = squash(playedCore);
+  const requestCoreSquashed = squash(requestCore);
+  if (
+    requestCoreSquashed.length >= 6
+    && playedCoreSquashed
+    && playedCoreSquashed.includes(requestCoreSquashed)
+    && playedCore !== requestCore
+  ) {
+    score += 55;
+  }
+
   const playedCoreTokens = coreTokens(playedTitle);
   const requestCoreTokens = coreTokens(requestTitle);
 
   if (containsAllTokens(playedCoreTokens, requestCoreTokens)) score += 40;
   else if (containsAllTokens(requestCoreTokens, playedCoreTokens)) score += 30;
+
+  const requestTokenList = [...requestCoreTokens];
+  if (
+    requestTokenList.length === 1
+    && requestTokenList[0].length >= 4
+    && playedCoreTokens.has(requestTokenList[0])
+  ) {
+    score += 15;
+  }
 
   score += jaccard(playedCoreTokens, requestCoreTokens) * 40;
 

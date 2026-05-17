@@ -9,6 +9,7 @@ const REMIX_WORDS = ["remix", "mix", "edit", "version", "vip", "bootleg", "rewor
 function normalize(raw: string): string {
   return raw
     .normalize("NFKD")
+    .replace(/_/g, " ")
     .replace(/[^\w\s]/g, " ")
     .toLowerCase()
     .replace(/\s+/g, " ")

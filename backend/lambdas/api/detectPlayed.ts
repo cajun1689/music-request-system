@@ -15,10 +15,15 @@ const REMIX_WORDS = ["remix", "mix", "edit", "version", "vip", "bootleg", "rewor
 function normalize(raw: string): string {
   return raw
     .normalize("NFKD")
+    .replace(/_/g, " ")
     .replace(/[^\w\s]/g, " ")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function squash(raw: string): string {
+  return normalize(raw).replace(/\s+/g, "");
 }
 
 function coreTitle(raw: string): string {
@@ -35,6 +40,11 @@ function remixTag(raw: string): string {
 
 function tokens(value: string): Set<string> {
   return new Set(normalize(value).split(" ").filter(Boolean));
+}
+
+function containsAllTokens(haystack: Set<string>, needle: Set<string>): boolean {
+  if (!needle.size) return false;
+  return [...needle].every((token) => haystack.has(token));
 }
 
 function jaccard(a: Set<string>, b: Set<string>): number {
@@ -59,7 +69,34 @@ function scoreMatch(request: RequestRecord, playedTitle: string, playedArtist?: 
   if (coreTitle(playedTitle) === coreTitle(requestTitle)) {
     score += 50;
   }
-  score += jaccard(tokens(playedTitle), tokens(requestTitle)) * 40;
+  const playedCore = coreTitle(playedTitle);
+  const requestCore = coreTitle(requestTitle);
+  const playedCoreSquashed = squash(playedCore);
+  const requestCoreSquashed = squash(requestCore);
+  if (
+    requestCoreSquashed.length >= 6
+    && playedCoreSquashed
+    && playedCoreSquashed.includes(requestCoreSquashed)
+    && playedCore !== requestCore
+  ) {
+    score += 55;
+  }
+
+  const playedTokens = tokens(playedCore);
+  const requestTokens = tokens(requestCore);
+  if (containsAllTokens(playedTokens, requestTokens)) {
+    score += 40;
+  }
+  const requestTokenList = [...requestTokens];
+  if (
+    requestTokenList.length === 1
+    && requestTokenList[0].length >= 4
+    && playedTokens.has(requestTokenList[0])
+  ) {
+    score += 15;
+  }
+
+  score += jaccard(playedTokens, requestTokens) * 40;
 
   const playedRemix = remixTag(playedTitle);
   const requestRemix = remixTag(requestTitle);
