@@ -41,7 +41,7 @@ export function OverlayPage() {
 
   const genreTickerItem = buildGenreTickerItem(eventData);
   const promoItems = [...(genreTickerItem ? [genreTickerItem] : []), ...activeTickerText(eventData.tickerPromotions)];
-  const SHOUTOUT_TTL_MS = 5 * 60 * 1000;
+  const SHOUTOUT_TTL_MS = 30 * 60 * 1000;
   const now = Date.now();
 
   function isShoutoutLive(req: { shoutoutApproved?: boolean; shoutoutApprovedAt?: string; submittedAt: string }) {

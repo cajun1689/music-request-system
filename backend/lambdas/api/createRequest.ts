@@ -182,6 +182,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   let shoutoutAutoApproved: boolean | undefined;
 
   if (shoutoutText) {
+    shoutoutAutoApproved = true;
     try {
       const mod = await moderateShoutout(shoutoutText, {
         djBrandName: eventRecord?.djBrandName,
@@ -192,7 +193,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       shoutoutFlagCategories = mod.categories.length ? mod.categories : undefined;
       shoutoutFlagReason = mod.reason || undefined;
       shoutoutModeratedAt = new Date().toISOString();
-      if (mod.severity === "block") {
+      if (mod.severity === "block" || mod.severity === "warn") {
         shoutoutAutoApproved = false;
       }
       console.log("createRequest: shoutout moderated", {
@@ -200,9 +201,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         severity: mod.severity,
         flagged: mod.flagged,
         categories: mod.categories,
+        autoApproved: shoutoutAutoApproved,
       });
     } catch (err) {
-      console.error("createRequest: moderation failed (open)", String(err));
+      console.error("createRequest: moderation failed (failing open, auto-approving)", String(err));
     }
   }
 
@@ -230,7 +232,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     shoutoutFlagReason,
     shoutoutModeratedAt,
     shoutoutApproved: shoutoutAutoApproved,
-    shoutoutApprovedAt: shoutoutAutoApproved === false ? new Date().toISOString() : undefined,
+    shoutoutApprovedAt: shoutoutAutoApproved === true ? new Date().toISOString() : undefined,
   };
 
   await docClient.send(
