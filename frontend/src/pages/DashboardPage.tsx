@@ -4,9 +4,10 @@ import { RequestCard } from "../components/RequestCard";
 import { useAuth } from "../context/AuthContext";
 import { useRequests } from "../hooks/useRequests";
 import { api } from "../services/api";
-import type { EventRecord, LivePlaylistSource, NowPlayingSlot } from "../types";
+import type { EventRecord, LivePlaylistSource, NowPlayingSlot, TickerPromotion } from "../types";
 import { ALL_GENRES, GENRE_LABELS, GENRE_VOTE_THRESHOLD, normalizeGenreVotes } from "../utils/genreVotes";
 import { comparePriority } from "../utils/priority";
+import { normalizeTickerPromotions } from "../utils/tickerPromotions";
 
 type Tab = "pending" | "approved" | "played" | "vetoed";
 const FIRE_SALE_MESSAGE = "🔥🔥🔥 FIRE SALE 🔥🔥🔥  $1 SHOTS 🥃🥃  Bartender's Choice - Until The End Of This Song";
@@ -56,7 +57,7 @@ export function DashboardPage() {
   const [autoMatchingBusy, setAutoMatchingBusy] = useState(false);
   const [autoMatchingMessage, setAutoMatchingMessage] = useState("");
   const [promotionInput, setPromotionInput] = useState("");
-  const [tickerPromotions, setTickerPromotions] = useState<string[]>([]);
+  const [tickerPromotions, setTickerPromotions] = useState<TickerPromotion[]>([]);
   const [fireSaleActive, setFireSaleActive] = useState(false);
   const [fireSaleMessage, setFireSaleMessage] = useState("");
   const [tickerMessage, setTickerMessage] = useState("");
@@ -206,7 +207,7 @@ export function DashboardPage() {
       .then((evt) => {
         setEventData(evt);
         setNowPlayingSlots(evt.nowPlayingSlots?.length ? evt.nowPlayingSlots : defaultNowPlayingSlots());
-        setTickerPromotions(evt.tickerPromotions ?? []);
+        setTickerPromotions(normalizeTickerPromotions(evt.tickerPromotions));
         setFireSaleActive(Boolean(evt.fireSaleActive));
         setFireSaleMessage(evt.fireSaleMessage ?? "");
         setNowPlayingAutoEnabled(Boolean(evt.nowPlayingAutoEnabled));
@@ -457,7 +458,7 @@ export function DashboardPage() {
       setSourceHealth(result.sourceStatuses ?? []);
       const latestEvent = await api.getEvent(eventId);
       setEventData(latestEvent);
-      setTickerPromotions(latestEvent.tickerPromotions ?? []);
+      setTickerPromotions(normalizeTickerPromotions(latestEvent.tickerPromotions));
       setFireSaleActive(Boolean(latestEvent.fireSaleActive));
       setFireSaleMessage(latestEvent.fireSaleMessage ?? "");
       if (latestEvent.nowPlayingAutoEnabled && latestEvent.nowPlayingSlots?.length) {
@@ -494,7 +495,11 @@ export function DashboardPage() {
     return () => window.clearInterval(interval);
   }, [autoMatchingEnabled, session, eventId]);
 
-  async function saveTickerSettings(nextPromotions: string[], nextFireSaleActive: boolean, nextFireSaleMessage: string) {
+  async function saveTickerSettings(
+    nextPromotions: TickerPromotion[],
+    nextFireSaleActive: boolean,
+    nextFireSaleMessage: string,
+  ) {
     if (!session || !eventId) {
       return;
     }
@@ -509,7 +514,7 @@ export function DashboardPage() {
         session.idToken,
       );
       setEventData(updated);
-      setTickerPromotions(updated.tickerPromotions ?? nextPromotions);
+      setTickerPromotions(normalizeTickerPromotions(updated.tickerPromotions ?? nextPromotions));
       setFireSaleActive(Boolean(updated.fireSaleActive));
       setFireSaleMessage(updated.fireSaleMessage ?? nextFireSaleMessage);
       setTickerMessage("Ticker settings saved.");
@@ -523,7 +528,7 @@ export function DashboardPage() {
     if (!value) {
       return;
     }
-    const nextPromotions = [...tickerPromotions, value];
+    const nextPromotions: TickerPromotion[] = [...tickerPromotions, { text: value, active: true }];
     setTickerPromotions(nextPromotions);
     setPromotionInput("");
     await saveTickerSettings(nextPromotions, fireSaleActive, fireSaleMessage);
@@ -531,6 +536,14 @@ export function DashboardPage() {
 
   async function removePromotion(index: number) {
     const nextPromotions = tickerPromotions.filter((_, idx) => idx !== index);
+    setTickerPromotions(nextPromotions);
+    await saveTickerSettings(nextPromotions, fireSaleActive, fireSaleMessage);
+  }
+
+  async function togglePromotionActive(index: number) {
+    const nextPromotions = tickerPromotions.map((promo, idx) =>
+      idx === index ? { ...promo, active: !promo.active } : promo,
+    );
     setTickerPromotions(nextPromotions);
     await saveTickerSettings(nextPromotions, fireSaleActive, fireSaleMessage);
   }
@@ -892,11 +905,51 @@ export function DashboardPage() {
           {tickerPromotions.length ? (
             <div className="mt-3 grid gap-2">
               {tickerPromotions.map((promotion, idx) => (
-                <div key={`${promotion}-${idx}`} className="flex items-center gap-2 rounded border border-slate-700 bg-slate-950 p-2">
-                  <p className="flex-1 text-sm text-slate-200">{promotion}</p>
+                <div
+                  key={`${promotion.text}-${idx}`}
+                  className={`flex items-center gap-2 rounded border p-2 transition-colors ${
+                    promotion.active
+                      ? "border-slate-700 bg-slate-950"
+                      : "border-slate-800 bg-slate-950/50"
+                  }`}
+                >
+                  <span
+                    className={`inline-flex h-2 w-2 flex-shrink-0 rounded-full ${
+                      promotion.active ? "bg-emerald-400" : "bg-slate-600"
+                    }`}
+                    aria-hidden
+                  />
+                  <p
+                    className={`flex-1 text-sm ${
+                      promotion.active ? "text-slate-200" : "text-slate-500 line-through"
+                    }`}
+                  >
+                    {promotion.text}
+                  </p>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      promotion.active
+                        ? "bg-emerald-500/15 text-emerald-300 border border-emerald-400/40"
+                        : "bg-slate-700/40 text-slate-400 border border-slate-600/40"
+                    }`}
+                  >
+                    {promotion.active ? "On ticker" : "Off ticker"}
+                  </span>
+                  <button
+                    className={`rounded px-2 py-1 text-xs font-semibold ${
+                      promotion.active
+                        ? "bg-slate-600 text-slate-100 hover:bg-slate-500"
+                        : "bg-emerald-500 text-emerald-950 hover:bg-emerald-400"
+                    }`}
+                    onClick={() => void togglePromotionActive(idx)}
+                    title={promotion.active ? "Pause this promo (keeps it saved)" : "Turn this promo back on"}
+                  >
+                    {promotion.active ? "Pause" : "Activate"}
+                  </button>
                   <button
                     className="rounded bg-rose-400 px-2 py-1 text-xs font-semibold text-rose-950"
                     onClick={() => void removePromotion(idx)}
+                    title="Delete this promo entirely"
                   >
                     Remove
                   </button>

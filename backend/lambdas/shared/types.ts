@@ -35,6 +35,11 @@ export interface AutoMatchSourceState {
   pendingPlayedReviewedBy?: string;
 }
 
+export interface TickerPromotion {
+  text: string;
+  active: boolean;
+}
+
 export interface EventRecord {
   eventId: string;
   name: string;
@@ -49,7 +54,7 @@ export interface EventRecord {
   rekordboxLiveUrl?: string;
   livePlaylistSources?: LivePlaylistSource[];
   autoMatchState?: Record<string, AutoMatchSourceState>;
-  tickerPromotions?: string[];
+  tickerPromotions?: Array<string | TickerPromotion>;
   fireSaleActive?: boolean;
   fireSaleMessage?: string;
   venmoHandle?: string;

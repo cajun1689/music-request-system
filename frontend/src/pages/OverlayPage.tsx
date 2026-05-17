@@ -6,6 +6,7 @@ import { api } from "../services/api";
 import type { EventRecord } from "../types";
 import { toDisplayTitleCase } from "../utils/formatting";
 import { buildGenreTickerItem } from "../utils/genreVotes";
+import { activeTickerText } from "../utils/tickerPromotions";
 
 export function OverlayPage() {
   const { eventId } = useParams();
@@ -39,7 +40,7 @@ export function OverlayPage() {
   }
 
   const genreTickerItem = buildGenreTickerItem(eventData);
-  const promoItems = [...(genreTickerItem ? [genreTickerItem] : []), ...(eventData.tickerPromotions ?? [])];
+  const promoItems = [...(genreTickerItem ? [genreTickerItem] : []), ...activeTickerText(eventData.tickerPromotions)];
   const SHOUTOUT_TTL_MS = 5 * 60 * 1000;
   const now = Date.now();
 

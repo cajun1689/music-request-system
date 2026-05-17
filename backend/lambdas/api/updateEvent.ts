@@ -15,7 +15,7 @@ interface UpdateEventInput {
   seratoLiveUrl?: string;
   rekordboxLiveUrl?: string;
   livePlaylistSources?: EventRecord["livePlaylistSources"];
-  tickerPromotions?: string[];
+  tickerPromotions?: EventRecord["tickerPromotions"];
   fireSaleActive?: boolean;
   fireSaleMessage?: string;
   venmoHandle?: string;
