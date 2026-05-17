@@ -932,6 +932,11 @@
     }
 
     if (bridge) bridge.onStatusUpdate(updateUI);
+    if (bridge && bridge.onRequestsUpdated) {
+      bridge.onRequestsUpdated(function () {
+        try { loadRequests && loadRequests(); } catch (e) { /* renderer not ready */ }
+      });
+    }
 
     let cachedEvents = [];
 
@@ -1458,6 +1463,30 @@
         text.textContent = '\u201C' + req.shoutout + '\u201D';
         info.appendChild(text);
 
+        if (req.shoutoutFlagSeverity === "block" || req.shoutoutFlagSeverity === "warn") {
+          var flagEl = document.createElement("div");
+          flagEl.style.marginTop = "3px";
+          flagEl.style.fontSize = "10px";
+          flagEl.style.fontWeight = "700";
+          flagEl.style.padding = "2px 6px";
+          flagEl.style.borderRadius = "3px";
+          if (req.shoutoutFlagSeverity === "block") {
+            flagEl.style.background = "rgba(239,68,68,0.18)";
+            flagEl.style.color = "#fca5a5";
+            flagEl.style.border = "1px solid rgba(239,68,68,0.4)";
+            flagEl.textContent = "AI: BLOCKED — " + (req.shoutoutFlagReason || "policy violation");
+          } else {
+            flagEl.style.background = "rgba(245,158,11,0.15)";
+            flagEl.style.color = "#fcd34d";
+            flagEl.style.border = "1px solid rgba(245,158,11,0.4)";
+            flagEl.textContent = "AI flag: " + (req.shoutoutFlagReason || "review before approving");
+          }
+          if (Array.isArray(req.shoutoutFlagCategories) && req.shoutoutFlagCategories.length) {
+            flagEl.textContent += " (" + req.shoutoutFlagCategories.join(", ") + ")";
+          }
+          info.appendChild(flagEl);
+        }
+
         var meta = document.createElement("div");
         meta.className = "request-meta";
         var parts = [];
@@ -1601,6 +1630,26 @@
           shoutoutText.style.color = "#c4b5fd";
           shoutoutText.textContent = '\u201C' + req.shoutout + '\u201D';
           shoutoutEl.appendChild(shoutoutText);
+
+          if (req.shoutoutFlagSeverity === "block" || req.shoutoutFlagSeverity === "warn") {
+            var inlineFlag = document.createElement("span");
+            inlineFlag.style.fontSize = "9px";
+            inlineFlag.style.fontWeight = "700";
+            inlineFlag.style.padding = "1px 5px";
+            inlineFlag.style.borderRadius = "3px";
+            if (req.shoutoutFlagSeverity === "block") {
+              inlineFlag.style.background = "rgba(239,68,68,0.25)";
+              inlineFlag.style.color = "#fca5a5";
+              inlineFlag.textContent = "BLOCKED";
+              inlineFlag.title = req.shoutoutFlagReason || "Blocked by AI moderation";
+            } else {
+              inlineFlag.style.background = "rgba(245,158,11,0.2)";
+              inlineFlag.style.color = "#fcd34d";
+              inlineFlag.textContent = "FLAGGED";
+              inlineFlag.title = req.shoutoutFlagReason || "Flagged by AI moderation";
+            }
+            shoutoutEl.appendChild(inlineFlag);
+          }
 
           if (req.shoutoutApproved === true) {
             var badge = document.createElement("span");

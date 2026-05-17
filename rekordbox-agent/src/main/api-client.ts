@@ -233,6 +233,10 @@ export interface RequestItem {
   message?: string;
   shoutout?: string;
   shoutoutApproved?: boolean;
+  shoutoutFlagged?: boolean;
+  shoutoutFlagSeverity?: "ok" | "warn" | "block";
+  shoutoutFlagCategories?: string[];
+  shoutoutFlagReason?: string;
   status: string;
   tipAmount?: number;
   submittedAt: string;

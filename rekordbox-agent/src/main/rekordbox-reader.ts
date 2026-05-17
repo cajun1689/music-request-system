@@ -34,7 +34,12 @@ export function getRekordboxKey(): string {
 
 function findOptionsJson(): string | null {
   const candidates = [
+    // Rekordbox 7 default
+    path.join(os.homedir(), "Library", "Application Support", "Pioneer", "rekordbox7", "options.json"),
+    path.join(os.homedir(), "Library", "Application Support", "Pioneer", "rekordbox7Agent", "storage", "options.json"),
+    // Rekordbox 6 (and earlier 7 betas)
     path.join(os.homedir(), "Library", "Application Support", "Pioneer", "rekordboxAgent", "storage", "options.json"),
+    path.join(os.homedir(), "Library", "Application Support", "Pioneer", "rekordbox", "options.json"),
     path.join(os.homedir(), "Library", "Pioneer", "rekordboxAgent", "storage", "options.json"),
   ];
   for (const p of candidates) {
@@ -43,13 +48,31 @@ function findOptionsJson(): string | null {
   return null;
 }
 
+export type RekordboxMajorVersion = 7 | 6 | 5 | null;
+
+export function detectRekordboxVersion(): RekordboxMajorVersion {
+  const rb7 = path.join(os.homedir(), "Library", "Application Support", "Pioneer", "rekordbox7");
+  if (fs.existsSync(rb7)) return 7;
+  const rb6Agent = path.join(os.homedir(), "Library", "Application Support", "Pioneer", "rekordboxAgent");
+  const rb6Db = path.join(os.homedir(), "Library", "Pioneer", "rekordbox", "master.db");
+  if (fs.existsSync(rb6Agent) || fs.existsSync(rb6Db)) return 6;
+  return null;
+}
+
 function extractDbPath(optionsPath: string): string | null {
   try {
     const content = JSON.parse(fs.readFileSync(optionsPath, "utf8"));
-    const dbPath: string | undefined = content?.options?.find?.(
-      (opt: { name?: string; val?: string }) => opt.name === "db-path",
-    )?.val;
-    if (dbPath && fs.existsSync(dbPath)) return dbPath;
+    const opts: Array<{ name?: string; val?: string }> = Array.isArray(content?.options) ? content.options : [];
+    const optionDbPath = opts.find((opt) => opt.name === "db-path")?.val;
+    if (optionDbPath && fs.existsSync(optionDbPath)) return optionDbPath;
+
+    const optionMasterDb = opts.find((opt) => opt.name === "masterDbDirectory" || opt.name === "master-db-path")?.val;
+    if (optionMasterDb) {
+      const candidate = optionMasterDb.endsWith(".db")
+        ? optionMasterDb
+        : path.join(optionMasterDb, "master.db");
+      if (fs.existsSync(candidate)) return candidate;
+    }
 
     const defaultDbDir = path.join(os.homedir(), "Library", "Pioneer", "rekordbox");
     const masterDb = path.join(defaultDbDir, "master.db");
@@ -62,6 +85,8 @@ function extractDbPath(optionsPath: string): string | null {
 
 function findDbPathFallback(): string | null {
   const candidates = [
+    // Rekordbox 7 may use rekordbox7 directory in some installs
+    path.join(os.homedir(), "Library", "Pioneer", "rekordbox7", "master.db"),
     path.join(os.homedir(), "Library", "Pioneer", "rekordbox", "master.db"),
     path.join(os.homedir(), "Library", "Pioneer", "rekordbox", "datafile.edb"),
   ];
@@ -149,6 +174,18 @@ export async function readRekordboxLibrary(dbPath: string, sqlcipherKey?: string
   }
 }
 
+// History rows older than this aren't current — they're from a previous DJ session.
+const HISTORY_FRESH_MS = 30 * 60 * 1000;
+
+function parseRekordboxTimestamp(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const direct = Date.parse(value);
+  if (!Number.isNaN(direct)) return direct;
+  const withSpace = value.replace(" ", "T");
+  const parsed = Date.parse(withSpace + (withSpace.endsWith("Z") ? "" : "Z"));
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 export async function readCurrentTrack(dbPath: string, sqlcipherKey?: string): Promise<TrackInfo | null> {
   let lastError: unknown;
 
@@ -165,6 +202,11 @@ export async function readCurrentTrack(dbPath: string, sqlcipherKey?: string): P
       } | undefined;
 
       if (!row) return null;
+
+      const ts = parseRekordboxTimestamp(row.playedAt);
+      if (ts && Date.now() - ts > HISTORY_FRESH_MS) {
+        return null;
+      }
 
       return {
         title: row.title ?? "",

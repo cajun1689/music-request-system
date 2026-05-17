@@ -11,6 +11,7 @@ import * as path from "path";
 import log, { setLogWindow } from "./logger";
 import { getConfig, setConfig } from "./config-store";
 import {
+  detectRekordboxVersion,
   readCurrentTrack,
   readRekordboxLibrary,
   resolveDbPath,
@@ -37,6 +38,7 @@ import {
   testConnection,
   queueSize,
   type PushResult,
+  type RequestItem,
 } from "./api-client";
 import {
   initAutoUpdater,
@@ -55,12 +57,16 @@ process.on("unhandledRejection", (reason) => {
 let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let requestsPollTimer: ReturnType<typeof setInterval> | null = null;
 let lastTrackKey = "";
 let lastPushedKey = "";
 let pendingTrack: TrackInfo | null = null;
 let pendingTrackSince = 0;
 let lastPollError = "";
 let isQuitting = false;
+let pendingRequestIds = new Set<string>();
+let flaggedShoutoutIds = new Set<string>();
+let requestsPollerInitialized = false;
 
 interface StatusPayload {
   connected: boolean;
@@ -78,6 +84,9 @@ interface StatusPayload {
   version: string;
   logsPath: string;
   launchAtLogin: boolean;
+  pendingRequestsCount: number;
+  flaggedShoutoutsCount: number;
+  rekordboxVersion: number | null;
 }
 
 let status: StatusPayload = {
@@ -96,6 +105,9 @@ let status: StatusPayload = {
   version: "",
   logsPath: "",
   launchAtLogin: false,
+  pendingRequestsCount: 0,
+  flaggedShoutoutsCount: 0,
+  rekordboxVersion: null,
 };
 
 function sendStatus(): void {
@@ -130,6 +142,12 @@ function updateTrayTooltip(): void {
   if (status.activeSoftware) {
     parts[0] += ` (${status.activeSoftware})`;
   }
+  if (status.pendingRequestsCount > 0) {
+    parts.push(`📥 ${status.pendingRequestsCount} pending request${status.pendingRequestsCount === 1 ? "" : "s"}`);
+  }
+  if (status.flaggedShoutoutsCount > 0) {
+    parts.push(`⚠️ ${status.flaggedShoutoutsCount} flagged shoutout${status.flaggedShoutoutsCount === 1 ? "" : "s"}`);
+  }
   if (status.lastTrack) {
     parts.push(`♫ ${status.lastTrack.artist} – ${status.lastTrack.title}`);
   }
@@ -142,6 +160,18 @@ function updateTrayTooltip(): void {
   tray.setToolTip(parts.join("\n"));
 }
 
+function updateTrayTitle(): void {
+  if (!tray) return;
+  if (typeof tray.setTitle !== "function") return;
+  if (status.pendingRequestsCount > 0) {
+    tray.setTitle(` ${status.pendingRequestsCount}`);
+  } else if (status.flaggedShoutoutsCount > 0) {
+    tray.setTitle(` ⚠️`);
+  } else {
+    tray.setTitle("");
+  }
+}
+
 function updateTrayMenu(): void {
   buildTrayMenu();
 }
@@ -151,6 +181,7 @@ let cachedContextMenu: Electron.Menu | null = null;
 function buildTrayMenu(): void {
   if (!tray) return;
   updateTrayTooltip();
+  updateTrayTitle();
 
   const trackLabel = status.lastTrack
     ? `♫ ${status.lastTrack.artist} – ${status.lastTrack.title}`
@@ -162,14 +193,28 @@ function buildTrayMenu(): void {
       ? "● Error"
       : "○ Idle";
 
+  const pendingLabel =
+    status.pendingRequestsCount > 0
+      ? `📥 ${status.pendingRequestsCount} pending request${status.pendingRequestsCount === 1 ? "" : "s"}`
+      : "📥 No pending requests";
+  const flaggedLabel =
+    status.flaggedShoutoutsCount > 0
+      ? `⚠️ ${status.flaggedShoutoutsCount} flagged shoutout${status.flaggedShoutoutsCount === 1 ? "" : "s"}`
+      : null;
+
   cachedContextMenu = Menu.buildFromTemplate([
     { label: statusLabel, enabled: false },
     { label: trackLabel, enabled: false },
     { type: "separator" },
+    { label: pendingLabel, enabled: false },
+    ...(flaggedLabel ? [{ label: flaggedLabel, enabled: false } as Electron.MenuItemConstructorOptions] : []),
+    { type: "separator" },
     { label: "Show Window", click: showWindow },
     { type: "separator" },
     {
-      label: `Software: ${status.activeSoftware ?? status.softwareType}`,
+      label: `Software: ${status.activeSoftware ?? status.softwareType}${
+        status.activeSoftware === "rekordbox" && status.rekordboxVersion ? ` v${status.rekordboxVersion}` : ""
+      }`,
       enabled: false,
     },
     {
@@ -459,6 +504,88 @@ function stopPolling(): void {
   }
 }
 
+const REQUESTS_POLL_MS = 8_000;
+
+async function pollRequestsOnce(): Promise<void> {
+  const config = getConfig();
+  if (!config.eventId || !config.pushToken) return;
+
+  try {
+    const all = await fetchRequests();
+    if (!Array.isArray(all)) return;
+
+    const pending = all.filter((r) => r.status === "pending");
+    const flagged = all.filter(
+      (r) =>
+        !!r.shoutout &&
+        (r.shoutoutFlagSeverity === "warn" || r.shoutoutFlagSeverity === "block") &&
+        r.shoutoutApproved !== false &&
+        r.shoutoutApproved !== true,
+    );
+
+    const newPendingIds = new Set(pending.map((r) => r.requestId));
+    const incoming = pending.filter((r) => !pendingRequestIds.has(r.requestId));
+
+    if (incoming.length > 0 && requestsPollerInitialized) {
+      const first = incoming[0];
+      const summary = first.shoutout && !first.songTitle
+        ? `Shoutout from ${first.requesterName || "Guest"}`
+        : `${first.songTitle || "Unknown"}${first.artistName ? " — " + first.artistName : ""}`;
+      showNotification(
+        incoming.length > 1 ? `${incoming.length} new requests` : "New request",
+        incoming.length > 1 ? `Latest: ${summary}` : summary,
+      );
+    }
+
+    pendingRequestIds = newPendingIds;
+    const newFlaggedIds = new Set(flagged.map((r) => r.requestId));
+    const newlyFlagged = flagged.filter((r) => !flaggedShoutoutIds.has(r.requestId));
+    if (newlyFlagged.length > 0 && requestsPollerInitialized) {
+      const first = newlyFlagged[0];
+      showNotification(
+        newlyFlagged.length > 1 ? `${newlyFlagged.length} flagged shoutouts` : "Flagged shoutout",
+        first.shoutoutFlagReason || "Review before approving",
+      );
+    }
+    flaggedShoutoutIds = newFlaggedIds;
+
+    const changed =
+      status.pendingRequestsCount !== pending.length ||
+      status.flaggedShoutoutsCount !== flagged.length;
+
+    status.pendingRequestsCount = pending.length;
+    status.flaggedShoutoutsCount = flagged.length;
+    requestsPollerInitialized = true;
+
+    if (changed) {
+      mainWindow?.webContents.send("requests-updated", {
+        pending: pending.length,
+        flagged: flagged.length,
+      });
+      sendStatus();
+    } else {
+      updateTrayTitle();
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn("Requests poll failed:", msg);
+  }
+}
+
+function startRequestsPolling(): void {
+  stopRequestsPolling();
+  log.info("Starting requests poll, interval:", REQUESTS_POLL_MS, "ms");
+  void pollRequestsOnce();
+  requestsPollTimer = setInterval(() => void pollRequestsOnce(), REQUESTS_POLL_MS);
+}
+
+function stopRequestsPolling(): void {
+  if (requestsPollTimer) {
+    clearInterval(requestsPollTimer);
+    requestsPollTimer = null;
+  }
+}
+
 function positionWindowTopRight(): void {
   if (!mainWindow) return;
   const { screen } = require("electron");
@@ -552,6 +679,10 @@ app.on("ready", () => {
   status.version = app.getVersion();
   status.logsPath = app.getPath("logs");
   status.launchAtLogin = app.getLoginItemSettings().openAtLogin;
+  status.rekordboxVersion = detectRekordboxVersion();
+  if (status.rekordboxVersion) {
+    log.info("Detected Rekordbox v" + status.rekordboxVersion);
+  }
 
   const iconPath = trayIconPath();
   let icon: Electron.NativeImage;
@@ -582,6 +713,9 @@ app.on("ready", () => {
   status.softwareType = config.softwareType;
   if (config.mode === "auto") {
     startPolling();
+  }
+  if (config.eventId && config.pushToken) {
+    startRequestsPolling();
   }
 
   log.info("App ready. Mode:", config.mode, "Software:", config.softwareType);
@@ -620,6 +754,17 @@ ipcMain.handle(
       startPolling();
     } else {
       stopPolling();
+    }
+
+    if (config.eventId && config.pushToken) {
+      requestsPollerInitialized = false;
+      pendingRequestIds = new Set();
+      flaggedShoutoutIds = new Set();
+      startRequestsPolling();
+    } else {
+      stopRequestsPolling();
+      status.pendingRequestsCount = 0;
+      status.flaggedShoutoutsCount = 0;
     }
     sendStatus();
     return config;

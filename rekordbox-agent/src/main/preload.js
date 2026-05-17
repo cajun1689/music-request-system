@@ -45,6 +45,11 @@ try {
       ipcRenderer.on("main-log", handler);
       return function () { ipcRenderer.removeListener("main-log", handler); };
     },
+    onRequestsUpdated: function (callback) {
+      var handler = function (_event, data) { callback(data); };
+      ipcRenderer.on("requests-updated", handler);
+      return function () { ipcRenderer.removeListener("requests-updated", handler); };
+    },
   });
 
   contextBridge.exposeInMainWorld("_preloadOk", true);
