@@ -29,10 +29,12 @@ export interface LivePlaylistSource {
 
 export interface AutoMatchSourceState {
   lastPushedTrackNorm?: string;
+  lastPushedAt?: string;
   lastMatchedTrackNorm?: string;
   lastMatchedAt?: string;
   pendingPlayedRequestId?: string;
   pendingPlayedReviewedBy?: string;
+  pendingPlayedMatchedAt?: string;
 }
 
 export interface TickerPromotion {

@@ -1,6 +1,7 @@
 import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { cleanTrackName } from "../shared/cleanTrackName";
+import { finalizeStalePendingPlayed } from "../shared/finalizePendingPlayed";
 import type { EventRecord, LivePlaylistSource, NowPlayingSlot, RequestRecord } from "../shared/types";
 import { docClient, env, json } from "../shared/utils";
 
@@ -164,6 +165,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   if (!eventRecord) {
     console.log("autoDetect: event not found", { eventId });
     return json(404, { error: "Event not found" });
+  }
+
+  // Flush stale pending-played matches even if no live playlist source is configured.
+  // This is what keeps Bridge-pushed matches from sitting in the queue forever.
+  try {
+    await finalizeStalePendingPlayed(eventRecord, { reason: "autoDetectPlayed" });
+  } catch (err) {
+    console.warn("autoDetect: finalizeStalePendingPlayed failed", String(err));
   }
 
   const sources =

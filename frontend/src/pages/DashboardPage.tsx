@@ -676,21 +676,38 @@ export function DashboardPage() {
             const knownSourceIds = new Set(pushSources.map((s) => s.id));
             const orphanBlocked = blockedPushSources.filter((id) => !knownSourceIds.has(id));
 
+            const FRESH_PUSH_MS = 60_000;
             const sourceRows = [
               ...pushSources.map((source) => {
                 const isBlocked = blockedPushSources.includes(source.id);
                 const matchState = eventData?.autoMatchState?.[source.id];
                 const slot = nowPlayingSlots.find((s) => s.id === `src-${source.id}` && s.active && s.songTitle);
-                const lastPushAt = matchState?.lastMatchedAt;
+                const lastPushAt = matchState?.lastPushedAt ?? matchState?.lastMatchedAt;
+                const lastMatchedAt = matchState?.lastMatchedAt;
                 const ageMs = lastPushAt ? Date.now() - new Date(lastPushAt).getTime() : null;
+                const matchAgeMs = lastMatchedAt ? Date.now() - new Date(lastMatchedAt).getTime() : null;
                 const status = isBlocked ? "blocked" as const
-                  : slot ? "active" as const
+                  : ageMs != null && ageMs < FRESH_PUSH_MS ? "active" as const
                   : lastPushAt ? "stale" as const
                   : "offline" as const;
-                return { id: source.id, name: source.djName || source.name, status, ageMs, lastPushAt, track: slot?.songTitle };
+                return {
+                  id: source.id,
+                  name: source.djName || source.name,
+                  status,
+                  ageMs,
+                  matchAgeMs,
+                  lastPushAt,
+                  track: slot?.songTitle,
+                };
               }),
               ...orphanBlocked.map((id) => ({
-                id, name: id, status: "blocked" as const, ageMs: null, lastPushAt: undefined as string | undefined, track: undefined as string | undefined,
+                id,
+                name: id,
+                status: "blocked" as const,
+                ageMs: null,
+                matchAgeMs: null,
+                lastPushAt: undefined as string | undefined,
+                track: undefined as string | undefined,
               })),
             ];
 
@@ -711,11 +728,13 @@ export function DashboardPage() {
                       blocked: "bg-rose-400/20 text-rose-300",
                       offline: "bg-slate-700 text-slate-400",
                     };
-                    const ageLabel = src.ageMs != null
-                      ? src.ageMs < 60_000 ? "just now"
-                        : src.ageMs < 3600_000 ? `${Math.floor(src.ageMs / 60_000)}m ago`
-                        : `${Math.floor(src.ageMs / 3600_000)}h ago`
-                      : null;
+                    const formatAge = (ms: number | null | undefined) =>
+                      ms == null ? null
+                        : ms < 60_000 ? "just now"
+                        : ms < 3600_000 ? `${Math.floor(ms / 60_000)}m ago`
+                        : `${Math.floor(ms / 3600_000)}h ago`;
+                    const ageLabel = formatAge(src.ageMs);
+                    const matchAgeLabel = formatAge(src.matchAgeMs);
 
                     return (
                       <div key={src.id} className={`rounded-lg border p-2.5 ${statusColors[src.status]}`}>
@@ -726,8 +745,17 @@ export function DashboardPage() {
                               <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${badgeColors[src.status]}`}>
                                 {src.status}
                               </span>
-                              {ageLabel ? <span className="text-xs text-slate-500">{ageLabel}</span> : null}
+                              {ageLabel ? (
+                                <span className="text-xs text-slate-400" title={src.lastPushAt ? new Date(src.lastPushAt).toLocaleString() : ""}>
+                                  Last push: {ageLabel}
+                                </span>
+                              ) : src.status !== "blocked" ? (
+                                <span className="text-xs text-slate-500">No pushes yet</span>
+                              ) : null}
                             </div>
+                            {matchAgeLabel ? (
+                              <p className="mt-0.5 text-[10px] text-slate-500">Last match: {matchAgeLabel}</p>
+                            ) : null}
                             {src.track ? <p className="mt-1 text-xs text-slate-300 truncate">{src.track}</p> : null}
                           </div>
                           <div className="flex-shrink-0">
@@ -738,10 +766,11 @@ export function DashboardPage() {
                               >
                                 Reconnect
                               </button>
-                            ) : src.status === "active" ? (
+                            ) : src.status !== "offline" ? (
                               <button
                                 className="rounded bg-rose-500/20 px-2 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/40"
                                 onClick={() => void disconnectDjSource(`src-${src.id}`)}
+                                title="Stop accepting pushes from this source"
                               >
                                 Disconnect
                               </button>

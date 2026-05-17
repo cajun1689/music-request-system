@@ -297,6 +297,18 @@ export class InfrastructureStack extends Stack {
       targets: [new targets.LambdaFunction(cleanupEventsFn)],
     });
 
+    const sweepPendingPlayedFn = makeLambda(
+      "SweepPendingPlayedFn",
+      "../../backend/lambdas/scheduled/sweepPendingPlayed.ts",
+    );
+    eventsTable.grantReadWriteData(sweepPendingPlayedFn);
+    requestsTable.grantReadWriteData(sweepPendingPlayedFn);
+
+    new events.Rule(this, "SweepPendingPlayedSchedule", {
+      schedule: events.Schedule.rate(Duration.minutes(2)),
+      targets: [new targets.LambdaFunction(sweepPendingPlayedFn)],
+    });
+
     const openaiApiKeyParam = ssm.StringParameter.fromSecureStringParameterAttributes(
       this,
       "OpenAIApiKeyParam",
@@ -603,6 +615,7 @@ export class InfrastructureStack extends Stack {
       UpvoteRequest: upvoteRequestFn,
       ResetRequests: resetRequestsFn,
       SyncLibrary: syncLibraryFn,
+      SweepPendingPlayed: sweepPendingPlayedFn,
       WsConnect: wsConnectFn,
       WsDisconnect: wsDisconnectFn,
       WsSubscribe: wsSubscribeFn,

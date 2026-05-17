@@ -1,6 +1,7 @@
 import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { cleanTrackName } from "../shared/cleanTrackName";
+import { finalizeStalePendingPlayed } from "../shared/finalizePendingPlayed";
 import type { EventRecord, NowPlayingSlot, RequestRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
 
@@ -202,6 +203,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     return json(403, { error: "This source has been disconnected by the event admin." });
   }
 
+  // Finalise any stale pending matches across all sources before we do anything else.
+  // This catches cases where a DJ stops pushing tracks before the next song change.
+  try {
+    await finalizeStalePendingPlayed(eventRecord, { reason: "pushTrack" });
+  } catch (err) {
+    console.warn("pushTrack: finalizeStalePendingPlayed failed", String(err));
+  }
+
   const matchingSource = (eventRecord.livePlaylistSources ?? []).find(
     (s) => s.id === PUSH_SOURCE_ID || s.id === "rekordbox",
   );
@@ -216,6 +225,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     console.log("pushTrack: duplicate track, refreshing slot", {
       sourceId: PUSH_SOURCE_ID, trackNorm: trackNorm.slice(0, 60),
     });
+    try {
+      await docClient.send(
+        new UpdateCommand({
+          TableName: env.eventsTableName,
+          Key: { eventId },
+          UpdateExpression: "SET #ams.#sid.#lpa = :now, updatedAt = :now",
+          ExpressionAttributeNames: {
+            "#ams": "autoMatchState",
+            "#sid": PUSH_SOURCE_ID,
+            "#lpa": "lastPushedAt",
+          },
+          ExpressionAttributeValues: { ":now": now },
+        }),
+      );
+    } catch (err) {
+      console.warn("pushTrack: failed to refresh lastPushedAt on duplicate", String(err));
+    }
     if (eventRecord.nowPlayingAutoEnabled) {
       const slotId = `src-${PUSH_SOURCE_ID}`;
       const existingSlots: NowPlayingSlot[] = eventRecord.nowPlayingSlots ?? [];
@@ -360,11 +386,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         TableName: env.eventsTableName,
         Key: { eventId },
         UpdateExpression:
-          "SET #ams.#sid.#lptn = :tn, updatedAt = :now",
+          "SET #ams.#sid.#lptn = :tn, #ams.#sid.#lpa = :now, updatedAt = :now",
         ExpressionAttributeNames: {
           "#ams": "autoMatchState",
           "#sid": PUSH_SOURCE_ID,
           "#lptn": "lastPushedTrackNorm",
+          "#lpa": "lastPushedAt",
         },
         ExpressionAttributeValues: { ":tn": trackNorm, ":now": now },
       }),
@@ -494,7 +521,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         TableName: env.eventsTableName,
         Key: { eventId },
         UpdateExpression:
-          "SET #ams.#sid.#lmtn = :tn, #ams.#sid.#lma = :now, #ams.#sid.#ppri = :rid, #ams.#sid.#pprb = :rb",
+          "SET #ams.#sid.#lmtn = :tn, #ams.#sid.#lma = :now, #ams.#sid.#ppri = :rid, #ams.#sid.#pprb = :rb, #ams.#sid.#ppma = :now",
         ExpressionAttributeNames: {
           "#ams": "autoMatchState",
           "#sid": PUSH_SOURCE_ID,
@@ -502,6 +529,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           "#lma": "lastMatchedAt",
           "#ppri": "pendingPlayedRequestId",
           "#pprb": "pendingPlayedReviewedBy",
+          "#ppma": "pendingPlayedMatchedAt",
         },
         ExpressionAttributeValues: {
           ":tn": trackNorm, ":now": now,
