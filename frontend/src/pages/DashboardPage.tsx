@@ -209,9 +209,8 @@ export function DashboardPage() {
       return;
     }
     setSourceHealth([]);
-    void api
-      .getEvent(eventId)
-      .then((evt) => {
+
+    const applyEventState = (evt: EventRecord) => {
         setEventData(evt);
         setNowPlayingSlots(evt.nowPlayingSlots?.length ? evt.nowPlayingSlots : defaultNowPlayingSlots());
         setTickerPromotions(normalizeTickerPromotions(evt.tickerPromotions));
@@ -220,8 +219,12 @@ export function DashboardPage() {
         setNowPlayingAutoEnabled(Boolean(evt.nowPlayingAutoEnabled));
         setNowPlayingOnTicker(Boolean(evt.nowPlayingOnTicker));
         setBlockedPushSources(evt.blockedPushSources ?? []);
-      })
-      .catch(() => {
+    };
+
+    const loadEvent = async () => {
+      try {
+        applyEventState(await api.getEvent(eventId));
+      } catch {
         setEventData(null);
         setNowPlayingSlots(defaultNowPlayingSlots());
         setTickerPromotions([]);
@@ -230,7 +233,13 @@ export function DashboardPage() {
         setNowPlayingAutoEnabled(false);
         setNowPlayingOnTicker(false);
         setBlockedPushSources([]);
-      });
+      }
+    };
+
+    void loadEvent();
+    const eventInterval = window.setInterval(() => {
+      void loadEvent();
+    }, 5000);
 
     void api
       .getLibrary(eventId)
@@ -240,6 +249,8 @@ export function DashboardPage() {
       .catch(() => {
         setLibraryTracks(null);
       });
+
+    return () => window.clearInterval(eventInterval);
   }, [eventId]);
 
   async function updateStatus(requestId: string, status: "approved" | "vetoed" | "played") {
