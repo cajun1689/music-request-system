@@ -60,6 +60,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let requestsPollTimer: ReturnType<typeof setInterval> | null = null;
 let lastTrackKey = "";
 let lastPushedKey = "";
+let lastHeartbeatPushAt = 0;
 let pendingTrack: TrackInfo | null = null;
 let pendingTrackSince = 0;
 let lastPollError = "";
@@ -373,6 +374,7 @@ async function pollOnce(): Promise<void> {
         try {
           const result = await pushTrack(pendingTrack);
           lastPushedKey = pendingKey;
+          lastHeartbeatPushAt = now;
           status.lastResult = result;
           status.lastTrack = pendingTrack;
           status.connected = true;
@@ -403,6 +405,24 @@ async function pollOnce(): Promise<void> {
         await drainQueue();
         status.queueSize = queueSize();
       }
+      // Heartbeat: re-push the current track periodically so the dashboard
+      // keeps showing this source as active while the same song is playing.
+      const HEARTBEAT_PUSH_MS = 45_000;
+      if (
+        lastPushedKey === key &&
+        track &&
+        now - lastHeartbeatPushAt >= HEARTBEAT_PUSH_MS
+      ) {
+        lastHeartbeatPushAt = now;
+        try {
+          await pushTrack(track);
+          status.connected = true;
+          status.lastTrack = track;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          log.warn("Heartbeat push failed:", message);
+        }
+      }
       sendStatus();
       return;
     }
@@ -418,6 +438,7 @@ async function pollOnce(): Promise<void> {
       try {
         const result = await pushTrack(track);
         lastPushedKey = key;
+        lastHeartbeatPushAt = now;
         status.lastResult = result;
         status.connected = true;
         status.queueSize = queueSize();
@@ -447,6 +468,7 @@ async function pollOnce(): Promise<void> {
           try {
             const result = await pushTrack(pendingTrack);
             lastPushedKey = prevPendingKey;
+            lastHeartbeatPushAt = now;
             status.lastResult = result;
             status.connected = true;
             status.queueSize = queueSize();
@@ -849,6 +871,7 @@ ipcMain.handle("push-pending-now", async () => {
   try {
     const result = await pushTrack(track);
     lastPushedKey = key;
+    lastHeartbeatPushAt = Date.now();
     status.lastResult = result;
     status.lastTrack = track;
     status.connected = true;

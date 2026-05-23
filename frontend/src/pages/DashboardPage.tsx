@@ -702,7 +702,7 @@ export function DashboardPage() {
             const knownSourceIds = new Set(pushSources.map((s) => s.id));
             const orphanBlocked = blockedPushSources.filter((id) => !knownSourceIds.has(id));
 
-            const FRESH_PUSH_MS = 60_000;
+            const FRESH_PUSH_MS = 3 * 60 * 1000;
             const sourceRows = [
               ...pushSources.map((source) => {
                 const isBlocked = blockedPushSources.includes(source.id);
@@ -712,9 +712,15 @@ export function DashboardPage() {
                 const lastMatchedAt = matchState?.lastMatchedAt;
                 const ageMs = lastPushAt ? Date.now() - new Date(lastPushAt).getTime() : null;
                 const matchAgeMs = lastMatchedAt ? Date.now() - new Date(lastMatchedAt).getTime() : null;
+                const slotAgeMs = slot?.updatedAt
+                  ? Date.now() - new Date(slot.updatedAt).getTime()
+                  : null;
+                const isFresh =
+                  (ageMs != null && ageMs < FRESH_PUSH_MS) ||
+                  (slotAgeMs != null && slotAgeMs < FRESH_PUSH_MS);
                 const status = isBlocked ? "blocked" as const
-                  : ageMs != null && ageMs < FRESH_PUSH_MS ? "active" as const
-                  : lastPushAt ? "stale" as const
+                  : isFresh ? "active" as const
+                  : lastPushAt || slot ? "stale" as const
                   : "offline" as const;
                 return {
                   id: source.id,
