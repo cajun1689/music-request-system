@@ -117,6 +117,21 @@ export const api = {
     );
   },
 
+  adminAdjustGenreVotes(
+    eventId: string,
+    payload: { adjustments?: Partial<Record<GenreName, number>>; set?: Partial<Record<GenreName, number>> },
+    token: string,
+  ) {
+    return request<EventRecord>(
+      `/events/${eventId}/genre-votes/admin-adjust`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      token,
+    );
+  },
+
   getEventBySlug(slug: string, token: string) {
     return request<EventRecord>(`/events/by-slug/${encodeURIComponent(slug)}`, undefined, token);
   },

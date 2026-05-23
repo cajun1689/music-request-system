@@ -4,7 +4,14 @@ import { Link } from "react-router-dom";
 import { QRGenerator } from "../components/QRGenerator";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
-import type { EventRecord, LivePlaylistSource } from "../types";
+import type { EventRecord, GenreName, LivePlaylistSource } from "../types";
+import {
+  ALL_GENRES,
+  GENRE_LABELS,
+  GENRE_VOTE_THRESHOLD,
+  buildGenreTickerItem,
+  normalizeGenreVotes,
+} from "../utils/genreVotes";
 
 const GASLIGHT_SLUG = "gaslight-residency";
 const BDL_SLUG = "bdl-residency";
@@ -330,6 +337,40 @@ export function AdminPage() {
     try {
       const response = await api.resetRequests(eventData.eventId, session.idToken);
       setMessage(`Queue reset complete. Archived ${response.archivedCount} requests (analytics preserved).`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const genreState = useMemo(() => normalizeGenreVotes(eventData), [eventData]);
+  const genreTickerPreview = useMemo(() => buildGenreTickerItem(eventData), [eventData]);
+
+  async function onAdjustGenreVotes(adjustments: Partial<Record<GenreName, number>>) {
+    if (!session || !eventData) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const updated = await api.adminAdjustGenreVotes(eventData.eventId, { adjustments }, session.idToken);
+      setEventData(updated);
+      setMessage("Genre votes updated.");
+    } catch (err) {
+      setMessage(`Failed to update votes: ${(err as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onResetGenreVotes() {
+    if (!session || !eventData) return;
+    if (!window.confirm("Reset all genre votes to zero?")) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const updated = await api.resetGenreVotes(eventData.eventId, session.idToken);
+      setEventData(updated);
+      setMessage("Genre votes reset.");
+    } catch (err) {
+      setMessage(`Failed to reset votes: ${(err as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -884,6 +925,120 @@ export function AdminPage() {
                 }}
               >
                 Save Auto-Rules
+              </button>
+            </div>
+
+            {/* Genre Vote Testing Section */}
+            <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-950/50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Genre Vote Testing</h3>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-400">Total:</span>
+                  <span
+                    className={`rounded px-2 py-0.5 font-mono font-semibold ${
+                      genreState.total >= GENRE_VOTE_THRESHOLD
+                        ? "bg-emerald-500/20 text-emerald-300"
+                        : "bg-slate-700 text-slate-300"
+                    }`}
+                  >
+                    {genreState.total} / {GENRE_VOTE_THRESHOLD}
+                  </span>
+                  <span
+                    className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
+                      genreState.total >= GENRE_VOTE_THRESHOLD
+                        ? "bg-emerald-500/15 text-emerald-300 border border-emerald-400/40"
+                        : "bg-slate-700/40 text-slate-400 border border-slate-600/40"
+                    }`}
+                  >
+                    {genreState.total >= GENRE_VOTE_THRESHOLD ? "On ticker" : "Below threshold"}
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-400">
+                Manually adjust votes to test the threshold-driven ticker scroll. The overlay starts
+                showing genre percentages on the ticker once total votes reach{" "}
+                <span className="font-mono">{GENRE_VOTE_THRESHOLD}</span>.
+              </p>
+              <div className="grid gap-2">
+                {ALL_GENRES.map((genre) => {
+                  const count = genreState.votes[genre] ?? 0;
+                  return (
+                    <div
+                      key={genre}
+                      className="flex flex-wrap items-center gap-2 rounded border border-slate-700 bg-slate-900 p-2"
+                    >
+                      <div className="min-w-[140px] flex-1">
+                        <p className="text-sm font-semibold">{GENRE_LABELS[genre]}</p>
+                        <p className="font-mono text-xs text-slate-400">{count} vote{count === 1 ? "" : "s"}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={saving || count === 0}
+                          onClick={() => void onAdjustGenreVotes({ [genre]: -5 })}
+                          className="rounded bg-slate-700 px-2 py-1 text-xs font-mono font-semibold text-slate-200 disabled:opacity-40"
+                        >
+                          -5
+                        </button>
+                        <button
+                          type="button"
+                          disabled={saving || count === 0}
+                          onClick={() => void onAdjustGenreVotes({ [genre]: -1 })}
+                          className="rounded bg-slate-700 px-2 py-1 text-xs font-mono font-semibold text-slate-200 disabled:opacity-40"
+                        >
+                          -1
+                        </button>
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void onAdjustGenreVotes({ [genre]: 1 })}
+                          className="rounded bg-emerald-500/30 px-2 py-1 text-xs font-mono font-semibold text-emerald-200 disabled:opacity-40"
+                        >
+                          +1
+                        </button>
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void onAdjustGenreVotes({ [genre]: 5 })}
+                          className="rounded bg-emerald-500/40 px-2 py-1 text-xs font-mono font-semibold text-emerald-100 disabled:opacity-40"
+                        >
+                          +5
+                        </button>
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void onAdjustGenreVotes({ [genre]: 10 })}
+                          className="rounded bg-emerald-500/60 px-2 py-1 text-xs font-mono font-semibold text-emerald-50 disabled:opacity-40"
+                        >
+                          +10
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {genreTickerPreview ? (
+                <div className="rounded border border-emerald-500/40 bg-emerald-500/10 p-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+                    Ticker preview (live on overlay)
+                  </p>
+                  <p className="mt-1 break-words text-xs font-mono text-emerald-100">{genreTickerPreview}</p>
+                </div>
+              ) : (
+                <p className="rounded border border-slate-700 bg-slate-900 p-2 text-xs text-slate-400">
+                  Not yet on the ticker — add{" "}
+                  <span className="font-mono">{GENRE_VOTE_THRESHOLD - genreState.total}</span> more
+                  vote{GENRE_VOTE_THRESHOLD - genreState.total === 1 ? "" : "s"} to push it over the
+                  threshold.
+                </p>
+              )}
+              <button
+                type="button"
+                disabled={saving || genreState.total === 0}
+                onClick={() => void onResetGenreVotes()}
+                className="rounded-md bg-rose-500/30 px-3 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-500/40 disabled:opacity-40"
+              >
+                Reset all to 0
               </button>
             </div>
 

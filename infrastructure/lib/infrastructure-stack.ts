@@ -244,6 +244,10 @@ export class InfrastructureStack extends Stack {
       "ResetGenreVotesFn",
       "../../backend/lambdas/api/resetGenreVotes.ts",
     );
+    const adminAdjustGenreVotesFn = makeLambda(
+      "AdminAdjustGenreVotesFn",
+      "../../backend/lambdas/api/adminAdjustGenreVotes.ts",
+    );
     const createPaypalOrderFn = makeLambda(
       "CreatePaypalOrderFn",
       "../../backend/lambdas/api/createPaypalOrder.ts",
@@ -364,6 +368,7 @@ export class InfrastructureStack extends Stack {
     eventsTable.grantReadWriteData(toggleFireSaleByTokenFn);
     eventsTable.grantReadWriteData(submitGenreVoteFn);
     eventsTable.grantReadWriteData(resetGenreVotesFn);
+    eventsTable.grantReadWriteData(adminAdjustGenreVotesFn);
     requestsTable.grantStreamRead(requestStreamFn);
     connectionsTable.grantReadWriteData(wsConnectFn);
     connectionsTable.grantReadWriteData(wsDisconnectFn);
@@ -510,6 +515,7 @@ export class InfrastructureStack extends Stack {
     const libraryResource = eventByIdResource.addResource("library");
     const genreVotesResource = eventByIdResource.addResource("genre-votes");
     const resetGenreVotesResource = genreVotesResource.addResource("reset");
+    const adminAdjustGenreVotesResource = genreVotesResource.addResource("admin-adjust");
     const paymentsResource = requestByIdResource.addResource("payments");
     const paypalOrderResource = paymentsResource.addResource("paypal-order");
     const paypalCaptureResource = paymentsResource.addResource("paypal-capture");
@@ -569,6 +575,14 @@ export class InfrastructureStack extends Stack {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
+    adminAdjustGenreVotesResource.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(adminAdjustGenreVotesFn),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+      },
+    );
     const upvoteResource = requestByIdResource.addResource("upvote");
     upvoteResource.addMethod("POST", new apigateway.LambdaIntegration(upvoteRequestFn));
     paypalOrderResource.addMethod("POST", new apigateway.LambdaIntegration(createPaypalOrderFn));
