@@ -4,8 +4,14 @@ import { RequestCard } from "../components/RequestCard";
 import { useAuth } from "../context/AuthContext";
 import { useRequests } from "../hooks/useRequests";
 import { api } from "../services/api";
-import type { EventRecord, LivePlaylistSource, NowPlayingSlot, TickerPromotion } from "../types";
-import { ALL_GENRES, GENRE_LABELS, GENRE_VOTE_THRESHOLD, normalizeGenreVotes } from "../utils/genreVotes";
+import type { EventRecord, GenreName, LivePlaylistSource, NowPlayingSlot, TickerPromotion } from "../types";
+import {
+  ALL_GENRES,
+  GENRE_LABELS,
+  GENRE_VOTE_THRESHOLD,
+  buildGenreTickerItem,
+  normalizeGenreVotes,
+} from "../utils/genreVotes";
 import { comparePriority } from "../utils/priority";
 import { normalizeTickerPromotions } from "../utils/tickerPromotions";
 
@@ -48,6 +54,7 @@ export function DashboardPage() {
   const [showNowPlaying, setShowNowPlaying] = useState(false);
   const [nowPlayingSlots, setNowPlayingSlots] = useState<NowPlayingSlot[]>(defaultNowPlayingSlots());
   const [savingNowPlaying, setSavingNowPlaying] = useState(false);
+  const [savingGenreVotes, setSavingGenreVotes] = useState(false);
   const [playedTitle, setPlayedTitle] = useState("");
   const [playedArtist, setPlayedArtist] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState("serato-a");
@@ -560,12 +567,31 @@ export function DashboardPage() {
     if (!session || !eventId) {
       return;
     }
+    setSavingGenreVotes(true);
     try {
       const updated = await api.resetGenreVotes(eventId, session.idToken);
       setEventData(updated);
       setTickerMessage("Genre votes reset.");
     } catch (error) {
       setTickerMessage((error as Error).message);
+    } finally {
+      setSavingGenreVotes(false);
+    }
+  }
+
+  async function adjustGenreVotes(adjustments: Partial<Record<GenreName, number>>) {
+    if (!session || !eventId) {
+      return;
+    }
+    setSavingGenreVotes(true);
+    try {
+      const updated = await api.adminAdjustGenreVotes(eventId, { adjustments }, session.idToken);
+      setEventData(updated);
+      setTickerMessage("Genre votes updated.");
+    } catch (error) {
+      setTickerMessage((error as Error).message);
+    } finally {
+      setSavingGenreVotes(false);
     }
   }
 
@@ -1024,23 +1050,95 @@ export function DashboardPage() {
           <h2 className="mb-3 text-lg font-semibold">Genre Vote Poll</h2>
           {(() => {
             const { votes, total } = normalizeGenreVotes(eventData);
+            const genreTickerPreview = buildGenreTickerItem(eventData);
+            const onTicker = total >= GENRE_VOTE_THRESHOLD;
             return (
               <>
-                <p className="text-sm text-slate-300">
-                  Live after {GENRE_VOTE_THRESHOLD} votes. Total votes: {total}
-                </p>
-                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+                  <span>
+                    Live after {GENRE_VOTE_THRESHOLD} votes. Total votes: {total}
+                  </span>
+                  <span
+                    className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
+                      onTicker
+                        ? "bg-emerald-500/15 text-emerald-300 border border-emerald-400/40"
+                        : "bg-slate-700/40 text-slate-400 border border-slate-600/40"
+                    }`}
+                  >
+                    {onTicker ? "On ticker" : "Below threshold"}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
                   {ALL_GENRES.map((genre) => {
                     const percentage = total ? Math.round((votes[genre] / total) * 100) : 0;
                     return (
                       <div key={genre} className="rounded border border-slate-700 bg-slate-950 p-3">
-                        <p className="text-xs uppercase text-slate-300">{GENRE_LABELS[genre]}</p>
-                        <p className="mt-1 text-lg font-semibold text-slate-100">{percentage}%</p>
-                        <p className="text-xs text-slate-400">{votes[genre]} votes</p>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs uppercase text-slate-300">{GENRE_LABELS[genre]}</p>
+                            <p className="mt-1 text-lg font-semibold text-slate-100">{percentage}%</p>
+                            <p className="text-xs text-slate-400">{votes[genre]} votes</p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={savingGenreVotes || votes[genre] === 0}
+                              onClick={() => void adjustGenreVotes({ [genre]: -5 })}
+                              className="rounded bg-slate-700 px-2 py-1 text-xs font-mono font-semibold disabled:opacity-40"
+                            >
+                              -5
+                            </button>
+                            <button
+                              type="button"
+                              disabled={savingGenreVotes || votes[genre] === 0}
+                              onClick={() => void adjustGenreVotes({ [genre]: -1 })}
+                              className="rounded bg-slate-700 px-2 py-1 text-xs font-mono font-semibold disabled:opacity-40"
+                            >
+                              -1
+                            </button>
+                            <button
+                              type="button"
+                              disabled={savingGenreVotes}
+                              onClick={() => void adjustGenreVotes({ [genre]: 1 })}
+                              className="rounded bg-emerald-500/30 px-2 py-1 text-xs font-mono font-semibold text-emerald-200 disabled:opacity-40"
+                            >
+                              +1
+                            </button>
+                            <button
+                              type="button"
+                              disabled={savingGenreVotes}
+                              onClick={() => void adjustGenreVotes({ [genre]: 5 })}
+                              className="rounded bg-emerald-500/40 px-2 py-1 text-xs font-mono font-semibold text-emerald-100 disabled:opacity-40"
+                            >
+                              +5
+                            </button>
+                            <button
+                              type="button"
+                              disabled={savingGenreVotes}
+                              onClick={() => void adjustGenreVotes({ [genre]: 10 })}
+                              className="rounded bg-emerald-500/60 px-2 py-1 text-xs font-mono font-semibold text-emerald-50 disabled:opacity-40"
+                            >
+                              +10
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
+                {genreTickerPreview ? (
+                  <div className="mt-3 rounded border border-emerald-500/40 bg-emerald-500/10 p-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+                      Ticker preview
+                    </p>
+                    <p className="mt-1 break-words text-xs font-mono text-emerald-100">{genreTickerPreview}</p>
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-slate-400">
+                    Not on ticker yet — add {GENRE_VOTE_THRESHOLD - total} more vote
+                    {GENRE_VOTE_THRESHOLD - total === 1 ? "" : "s"} to cross the threshold.
+                  </p>
+                )}
                 <button
                   className="mt-3 rounded bg-rose-400 px-3 py-1.5 text-sm font-semibold text-rose-950"
                   onClick={() => void resetGenreVotes()}
