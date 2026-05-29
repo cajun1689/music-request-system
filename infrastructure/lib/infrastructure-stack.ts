@@ -313,6 +313,20 @@ export class InfrastructureStack extends Stack {
       targets: [new targets.LambdaFunction(sweepPendingPlayedFn)],
     });
 
+    const nightlyResetFn = makeLambda(
+      "NightlyResetFn",
+      "../../backend/lambdas/scheduled/nightlyReset.ts",
+    );
+    eventsTable.grantReadWriteData(nightlyResetFn);
+    requestsTable.grantReadWriteData(nightlyResetFn);
+
+    new events.Rule(this, "NightlyResetSchedule", {
+      // 4am Mountain is 10:00 UTC during daylight time and 11:00 UTC during standard time.
+      // The Lambda checks America/Denver and no-ops for the non-matching UTC hour.
+      schedule: events.Schedule.cron({ minute: "0", hour: "10,11" }),
+      targets: [new targets.LambdaFunction(nightlyResetFn)],
+    });
+
     const openaiApiKeyParam = ssm.StringParameter.fromSecureStringParameterAttributes(
       this,
       "OpenAIApiKeyParam",
@@ -630,6 +644,7 @@ export class InfrastructureStack extends Stack {
       ResetRequests: resetRequestsFn,
       SyncLibrary: syncLibraryFn,
       SweepPendingPlayed: sweepPendingPlayedFn,
+      NightlyReset: nightlyResetFn,
       WsConnect: wsConnectFn,
       WsDisconnect: wsDisconnectFn,
       WsSubscribe: wsSubscribeFn,
