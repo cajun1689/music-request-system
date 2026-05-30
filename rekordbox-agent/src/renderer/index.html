@@ -1429,6 +1429,35 @@
 
     function isShoutoutOnly(r) { return !r.songTitle && !!r.shoutout; }
 
+    function copyTextToClipboard(text, successMessage) {
+      var fallbackCopy = function() {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        showToast(successMessage, "success");
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+          showToast(successMessage, "success");
+        }).catch(fallbackCopy);
+      } else {
+        fallbackCopy();
+      }
+    }
+
+    function requestSearchText(req) {
+      return [req.songTitle, req.artistName]
+        .map(function(part) { return String(part || "").trim(); })
+        .filter(Boolean)
+        .join(" ");
+    }
+
     function updateTabCounts(requests) {
       var songRequests = requests.filter(function(r) { return !isShoutoutOnly(r); });
       var pendingCount = songRequests.filter(function(r) { return r.status === "pending"; }).length;
@@ -1572,6 +1601,14 @@
 
         var info = document.createElement("div");
         info.className = "request-info";
+        var searchText = requestSearchText(req);
+        if (searchText) {
+          info.style.cursor = "copy";
+          info.title = "Click to copy: " + searchText;
+          info.addEventListener("click", function() {
+            copyTextToClipboard(searchText, "Copied: " + searchText);
+          });
+        }
 
         var reqIsShoutout = !req.songTitle && !!req.shoutout;
 
@@ -1595,6 +1632,7 @@
         var parts = [];
         if (req.requesterName) parts.push(req.requesterName);
         if (req.submittedAt) parts.push(new Date(req.submittedAt).toLocaleTimeString());
+        if (searchText) parts.push("click song to copy");
         meta.textContent = parts.join(" · ");
 
         info.appendChild(song);
