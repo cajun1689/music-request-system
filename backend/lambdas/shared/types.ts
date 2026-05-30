@@ -93,6 +93,7 @@ export interface RequestRecord {
   shoutoutFlagCategories?: string[];
   shoutoutFlagReason?: string;
   shoutoutModeratedAt?: string;
+  genre?: GenreName;
   status: RequestStatus;
   paymentStatus: PaymentStatus;
   tipAmount?: number;

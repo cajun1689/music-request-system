@@ -1,5 +1,6 @@
 import type { RequestRecord } from "../types";
 import { toDisplayTitleCase } from "../utils/formatting";
+import { GENRE_LABELS } from "../utils/genreVotes";
 
 export interface LibraryMatchInfo {
   found: boolean;
@@ -50,6 +51,7 @@ export function RequestCard({
   const bestTrack = libraryMatch?.bestTrack;
 
   const isShoutoutOnly = !request.songTitle?.trim() && !!request.shoutout;
+  const genreLabel = request.genre ? GENRE_LABELS[request.genre] : null;
 
   return (
     <article className="rounded-xl border border-white/20 bg-slate-900/70 p-4">
@@ -74,6 +76,11 @@ export function RequestCard({
         {typeof request.tipAmount === "number" ? (
           <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-200">
             Tip ${request.tipAmount.toFixed(2)}
+          </span>
+        ) : null}
+        {genreLabel ? (
+          <span className="rounded-full bg-fuchsia-400/15 border border-fuchsia-400/30 px-2 py-0.5 text-xs font-semibold text-fuchsia-200">
+            {genreLabel}
           </span>
         ) : null}
         {inLibrary === true ? (

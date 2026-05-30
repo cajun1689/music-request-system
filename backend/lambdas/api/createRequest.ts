@@ -3,7 +3,7 @@ import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { randomUUID } from "node:crypto";
 import { moderateShoutout } from "../shared/moderateShoutout";
-import type { EventRecord, RequestRecord } from "../shared/types";
+import type { EventRecord, GenreName, RequestRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
 
 const s3 = new S3Client({});
@@ -18,7 +18,10 @@ interface CreateRequestInput {
   venmoHandle?: string;
   paymentReference?: string;
   paymentStatus?: "unpaid" | "pending_verification";
+  genre?: GenreName;
 }
+
+const VALID_GENRES: GenreName[] = ["hip_hop", "country", "edm", "alternative_rock"];
 
 function normalizeSpacing(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -216,6 +219,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     requesterName: input.requesterName,
     message: input.message,
     shoutout: shoutoutText,
+    genre: input.genre && VALID_GENRES.includes(input.genre) ? input.genre : undefined,
     status: autoStatus,
     paymentStatus: input.paymentStatus ?? (input.tipAmount ? "pending_verification" : "unpaid"),
     tipAmount: typeof input.tipAmount === "number" ? Number(input.tipAmount.toFixed(2)) : undefined,

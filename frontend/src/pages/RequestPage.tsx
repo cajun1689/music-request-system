@@ -50,6 +50,7 @@ export function RequestPage() {
   const [trackedRequest, setTrackedRequest] = useState<RequestRecord | null>(null);
   const [songsAway, setSongsAway] = useState<number | null>(null);
   const [votedGenre, setVotedGenre] = useState<GenreName | null>(null);
+  const [requestGenre, setRequestGenre] = useState<GenreName | "">("");
   const [liveQueue, setLiveQueue] = useState<RequestRecord[]>([]);
   const [allRequests, setAllRequests] = useState<RequestRecord[]>([]);
   const [libraryTracks, setLibraryTracks] = useState<LibraryTrack[] | null>(null);
@@ -62,6 +63,7 @@ export function RequestPage() {
       artistName,
       requesterName,
       message,
+      genre: requestGenre || votedGenre || undefined,
       tipAmount: tipAmount ? Number(tipAmount) : undefined,
       paymentStatus: tipAmount && pendingPayment ? "pending_verification" : "unpaid",
     } as Partial<RequestRecord>);
@@ -140,6 +142,7 @@ export function RequestPage() {
     }
     if (existingVote === "hip_hop" || existingVote === "country" || existingVote === "edm" || existingVote === "alternative_rock") {
       setVotedGenre(existingVote);
+      setRequestGenre((prev) => prev || existingVote);
       return;
     }
     setVotedGenre(null);
@@ -284,6 +287,7 @@ export function RequestPage() {
       const updatedEvent = await api.submitGenreVote(eventId, genre, votedGenre ?? undefined);
       setEventData(updatedEvent);
       setVotedGenre(genre);
+      setRequestGenre((prev) => prev || genre);
       localStorage.setItem(voteKey, genre);
     } catch (err) {
       setFeedback(`Vote failed: ${(err as Error).message}`);
@@ -468,6 +472,21 @@ export function RequestPage() {
             onChange={(e) => setArtistName(e.target.value)}
             required
           />
+        </label>
+        <label className="block text-sm">
+          Request genre
+          <select
+            className="mt-1 w-full rounded-md border border-white/25 bg-slate-950/50 px-3 py-2"
+            value={requestGenre}
+            onChange={(e) => setRequestGenre(e.target.value as GenreName | "")}
+          >
+            <option value="">No genre selected</option>
+            {getAvailableGenres().map((genre) => (
+              <option key={genre} value={genre}>
+                {GENRE_LABELS[genre]}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="block text-sm">
           Your Name (optional)
