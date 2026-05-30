@@ -1458,6 +1458,39 @@
         .join(" ");
     }
 
+    function isPaidRequest(req) {
+      return Number(req.tipAmount || 0) > 0 || req.paymentStatus === "verified" || req.paymentStatus === "pending_verification";
+    }
+
+    function requestGenreSortValue(req) {
+      return String(req.genre || req.preferredGenre || req.requestGenre || "").trim().toLowerCase();
+    }
+
+    function requestSubmittedMs(req) {
+      var submitted = req.submittedAt ? new Date(req.submittedAt).getTime() : NaN;
+      if (Number.isFinite(submitted)) return submitted;
+      return Number(req.position || 0);
+    }
+
+    function compareBridgeRequests(a, b) {
+      var aPaid = isPaidRequest(a) ? 1 : 0;
+      var bPaid = isPaidRequest(b) ? 1 : 0;
+      if (aPaid !== bPaid) return bPaid - aPaid;
+
+      var aGenre = requestGenreSortValue(a);
+      var bGenre = requestGenreSortValue(b);
+      if (aGenre !== bGenre) {
+        if (!aGenre) return 1;
+        if (!bGenre) return -1;
+        return aGenre.localeCompare(bGenre);
+      }
+
+      var tipDiff = Number(b.tipAmount || 0) - Number(a.tipAmount || 0);
+      if (tipDiff !== 0) return tipDiff;
+
+      return requestSubmittedMs(a) - requestSubmittedMs(b);
+    }
+
     function updateTabCounts(requests) {
       var songRequests = requests.filter(function(r) { return !isShoutoutOnly(r); });
       var pendingCount = songRequests.filter(function(r) { return r.status === "pending"; }).length;
@@ -1584,7 +1617,9 @@
       renderShoutouts(requests);
       var list = el("requests-list");
       var songRequests = requests.filter(function(r) { return !isShoutoutOnly(r); });
-      var filtered = songRequests.filter(function(r) { return r.status === currentRequestTab; });
+      var filtered = songRequests
+        .filter(function(r) { return r.status === currentRequestTab; })
+        .sort(compareBridgeRequests);
       el("requests-count").textContent = filtered.length + " " + currentRequestTab;
       updateTabCounts(requests);
 

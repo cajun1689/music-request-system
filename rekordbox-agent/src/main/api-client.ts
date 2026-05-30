@@ -238,7 +238,12 @@ export interface RequestItem {
   shoutoutFlagCategories?: string[];
   shoutoutFlagReason?: string;
   status: string;
+  paymentStatus?: string;
   tipAmount?: number;
+  genre?: string;
+  preferredGenre?: string;
+  requestGenre?: string;
+  position?: number;
   submittedAt: string;
 }
 
