@@ -1468,7 +1468,7 @@
 
     function requestGenreLabel(req) {
       var value = requestGenreSortValue(req);
-      if (!value) return "";
+      if (!value) return "No genre";
       return GENRE_LABELS[value] || value.replace(/_/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
     }
 
@@ -1664,14 +1664,17 @@
           song.appendChild(tip);
         }
         var genreLabel = requestGenreLabel(req);
-        if (genreLabel) {
-          var genrePill = document.createElement("span");
-          genrePill.className = "request-tip";
+        var genrePill = document.createElement("span");
+        genrePill.className = "request-tip";
+        if (requestGenreSortValue(req)) {
           genrePill.style.background = "rgba(217,70,239,0.18)";
           genrePill.style.color = "#f0abfc";
-          genrePill.textContent = genreLabel;
-          song.appendChild(genrePill);
+        } else {
+          genrePill.style.background = "rgba(148,163,184,0.14)";
+          genrePill.style.color = "#94a3b8";
         }
+        genrePill.textContent = genreLabel;
+        song.appendChild(genrePill);
 
         var artist = document.createElement("div");
         artist.className = "request-artist";

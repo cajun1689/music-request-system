@@ -58,6 +58,9 @@ export function RequestPage() {
     if (!eventId || !eventData) {
       throw new Error("Event is still loading. Please try again.");
     }
+    if (!requestGenre && !votedGenre) {
+      throw new Error("Choose a request genre before sending.");
+    }
     const created = await api.createRequest(eventId, {
       songTitle,
       artistName,
@@ -232,6 +235,10 @@ export function RequestPage() {
 
     if (!songTitle.trim() || !artistName.trim()) {
       setFeedback("Enter a song title and artist.");
+      return;
+    }
+    if (!requestGenre && !votedGenre) {
+      setFeedback("Choose a request genre.");
       return;
     }
 
@@ -478,9 +485,10 @@ export function RequestPage() {
           <select
             className="mt-1 w-full rounded-md border border-white/25 bg-slate-950/50 px-3 py-2"
             value={requestGenre}
+            required
             onChange={(e) => setRequestGenre(e.target.value as GenreName | "")}
           >
-            <option value="">No genre selected</option>
+            <option value="">Select a genre</option>
             {getAvailableGenres().map((genre) => (
               <option key={genre} value={genre}>
                 {GENRE_LABELS[genre]}

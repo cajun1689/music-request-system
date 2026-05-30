@@ -51,7 +51,7 @@ export function RequestCard({
   const bestTrack = libraryMatch?.bestTrack;
 
   const isShoutoutOnly = !request.songTitle?.trim() && !!request.shoutout;
-  const genreLabel = request.genre ? GENRE_LABELS[request.genre] : null;
+  const genreLabel = request.genre ? GENRE_LABELS[request.genre] : "No genre";
 
   return (
     <article className="rounded-xl border border-white/20 bg-slate-900/70 p-4">
@@ -78,11 +78,15 @@ export function RequestCard({
             Tip ${request.tipAmount.toFixed(2)}
           </span>
         ) : null}
-        {genreLabel ? (
-          <span className="rounded-full bg-fuchsia-400/15 border border-fuchsia-400/30 px-2 py-0.5 text-xs font-semibold text-fuchsia-200">
-            {genreLabel}
-          </span>
-        ) : null}
+        <span
+          className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${
+            request.genre
+              ? "bg-fuchsia-400/15 border-fuchsia-400/30 text-fuchsia-200"
+              : "bg-slate-500/15 border-slate-400/20 text-slate-400"
+          }`}
+        >
+          {genreLabel}
+        </span>
         {inLibrary === true ? (
           <span className="rounded-full bg-blue-400/20 border border-blue-400/40 px-2 py-0.5 text-xs font-semibold text-blue-300">
             ✓ In Library
