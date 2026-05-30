@@ -51,7 +51,7 @@ export function RequestCard({
   const bestTrack = libraryMatch?.bestTrack;
 
   const isShoutoutOnly = !request.songTitle?.trim() && !!request.shoutout;
-  const genreLabel = request.genre ? GENRE_LABELS[request.genre] : "No genre";
+  const genreLabel = request.genre ? GENRE_LABELS[request.genre] : request.genreLabel || "No genre";
 
   return (
     <article className="rounded-xl border border-white/20 bg-slate-900/70 p-4">
@@ -82,6 +82,8 @@ export function RequestCard({
           className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${
             request.genre
               ? "bg-fuchsia-400/15 border-fuchsia-400/30 text-fuchsia-200"
+              : request.genreLabel
+                ? "bg-indigo-400/15 border-indigo-400/30 text-indigo-200"
               : "bg-slate-500/15 border-slate-400/20 text-slate-400"
           }`}
         >

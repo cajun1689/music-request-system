@@ -241,6 +241,7 @@ export interface RequestItem {
   paymentStatus?: string;
   tipAmount?: number;
   genre?: string;
+  genreLabel?: string;
   preferredGenre?: string;
   requestGenre?: string;
   position?: number;

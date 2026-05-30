@@ -1463,13 +1463,15 @@
     }
 
     function requestGenreSortValue(req) {
-      return String(req.genre || req.preferredGenre || req.requestGenre || "").trim().toLowerCase();
+      return String(req.genre || req.genreLabel || req.preferredGenre || req.requestGenre || "").trim().toLowerCase();
     }
 
     function requestGenreLabel(req) {
-      var value = requestGenreSortValue(req);
-      if (!value) return "No genre";
-      return GENRE_LABELS[value] || value.replace(/_/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+      var supported = String(req.genre || "").trim().toLowerCase();
+      if (supported && GENRE_LABELS[supported]) return GENRE_LABELS[supported];
+      var label = String(req.genreLabel || req.preferredGenre || req.requestGenre || "").trim();
+      if (!label) return "No genre";
+      return GENRE_LABELS[label.toLowerCase()] || label.replace(/_/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
     }
 
     function requestSubmittedMs(req) {
@@ -1666,9 +1668,12 @@
         var genreLabel = requestGenreLabel(req);
         var genrePill = document.createElement("span");
         genrePill.className = "request-tip";
-        if (requestGenreSortValue(req)) {
+        if (req.genre) {
           genrePill.style.background = "rgba(217,70,239,0.18)";
           genrePill.style.color = "#f0abfc";
+        } else if (req.genreLabel) {
+          genrePill.style.background = "rgba(99,102,241,0.18)";
+          genrePill.style.color = "#c7d2fe";
         } else {
           genrePill.style.background = "rgba(148,163,184,0.14)";
           genrePill.style.color = "#94a3b8";

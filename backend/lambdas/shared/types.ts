@@ -94,6 +94,7 @@ export interface RequestRecord {
   shoutoutFlagReason?: string;
   shoutoutModeratedAt?: string;
   genre?: GenreName;
+  genreLabel?: string;
   status: RequestStatus;
   paymentStatus: PaymentStatus;
   tipAmount?: number;

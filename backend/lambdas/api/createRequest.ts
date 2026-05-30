@@ -2,6 +2,7 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { randomUUID } from "node:crypto";
+import { classifyRequestGenre } from "../shared/classifyRequestGenre";
 import { moderateShoutout } from "../shared/moderateShoutout";
 import type { EventRecord, GenreName, RequestRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
@@ -19,6 +20,7 @@ interface CreateRequestInput {
   paymentReference?: string;
   paymentStatus?: "unpaid" | "pending_verification";
   genre?: GenreName;
+  genreLabel?: string;
 }
 
 const VALID_GENRES: GenreName[] = ["hip_hop", "country", "edm", "alternative_rock"];
@@ -211,6 +213,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
   }
 
+  const selectedGenre = input.genre && VALID_GENRES.includes(input.genre) ? input.genre : undefined;
+  const genreClassification = !isShoutoutOnly
+    ? await classifyRequestGenre(songTitle, artistName, selectedGenre)
+    : undefined;
+  const genreLabel = input.genreLabel?.trim()
+    || genreClassification?.genreLabel
+    || (selectedGenre ? undefined : "Uncategorized");
+
   const requestRecord: RequestRecord = {
     eventId,
     requestId: randomUUID(),
@@ -219,7 +229,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     requesterName: input.requesterName,
     message: input.message,
     shoutout: shoutoutText,
-    genre: input.genre && VALID_GENRES.includes(input.genre) ? input.genre : undefined,
+    genre: genreClassification?.genre ?? selectedGenre,
+    genreLabel,
     status: autoStatus,
     paymentStatus: input.paymentStatus ?? (input.tipAmount ? "pending_verification" : "unpaid"),
     tipAmount: typeof input.tipAmount === "number" ? Number(input.tipAmount.toFixed(2)) : undefined,
