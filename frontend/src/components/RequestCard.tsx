@@ -17,7 +17,7 @@ function genrePillClass(label: string, supportedGenre?: string): string {
     .replace(/&/g, "and");
 
   if (key.includes("country")) return "bg-amber-400/15 border-amber-400/30 text-amber-200";
-  if (key.includes("hip") || key.includes("rap")) return "bg-orange-400/15 border-orange-400/30 text-orange-200";
+  if (key.includes("hip") || key.includes("rap")) return "bg-red-400/15 border-red-400/30 text-red-200";
   if (key.includes("edm") || key.includes("electronic") || key.includes("dance")) return "bg-cyan-400/15 border-cyan-400/30 text-cyan-200";
   if (key.includes("alternative") || key.includes("rock") || key.includes("metal")) return "bg-violet-400/15 border-violet-400/30 text-violet-200";
   if (key.includes("pop")) return "bg-pink-400/15 border-pink-400/30 text-pink-200";

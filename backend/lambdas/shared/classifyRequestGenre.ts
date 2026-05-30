@@ -60,6 +60,10 @@ function titleCaseLabel(value: string): string {
 function deterministicGenre(songTitle: string, artistName: string): RequestGenreClassification | null {
   const text = normalizeLabel(`${songTitle} ${artistName}`);
 
+  if (/\bchu?r?ch\s+clap\b/.test(text)) {
+    return { genre: "country", genreLabel: SUPPORTED_LABELS.country };
+  }
+
   const countryArtists = [
     "neal mccoy",
     "mikel knight",

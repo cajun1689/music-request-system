@@ -1477,7 +1477,7 @@
     function genrePillColors(label, supportedGenre) {
       var key = String((supportedGenre || "") + " " + (label || "")).toLowerCase().replace(/&/g, "and");
       if (key.indexOf("country") >= 0) return { bg: "rgba(251,191,36,0.18)", color: "#fde68a" };
-      if (key.indexOf("hip") >= 0 || key.indexOf("rap") >= 0) return { bg: "rgba(251,146,60,0.18)", color: "#fed7aa" };
+      if (key.indexOf("hip") >= 0 || key.indexOf("rap") >= 0) return { bg: "rgba(248,113,113,0.18)", color: "#fecaca" };
       if (key.indexOf("edm") >= 0 || key.indexOf("electronic") >= 0 || key.indexOf("dance") >= 0) return { bg: "rgba(34,211,238,0.18)", color: "#a5f3fc" };
       if (key.indexOf("alternative") >= 0 || key.indexOf("rock") >= 0 || key.indexOf("metal") >= 0) return { bg: "rgba(167,139,250,0.18)", color: "#ddd6fe" };
       if (key.indexOf("pop") >= 0) return { bg: "rgba(244,114,182,0.18)", color: "#fbcfe8" };
