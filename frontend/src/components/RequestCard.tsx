@@ -11,6 +11,23 @@ export interface LibraryMatchInfo {
   };
 }
 
+function genrePillClass(label: string, supportedGenre?: string): string {
+  const key = `${supportedGenre ?? ""} ${label}`
+    .toLowerCase()
+    .replace(/&/g, "and");
+
+  if (key.includes("country")) return "bg-amber-400/15 border-amber-400/30 text-amber-200";
+  if (key.includes("hip") || key.includes("rap")) return "bg-orange-400/15 border-orange-400/30 text-orange-200";
+  if (key.includes("edm") || key.includes("electronic") || key.includes("dance")) return "bg-cyan-400/15 border-cyan-400/30 text-cyan-200";
+  if (key.includes("alternative") || key.includes("rock") || key.includes("metal")) return "bg-violet-400/15 border-violet-400/30 text-violet-200";
+  if (key.includes("pop")) return "bg-pink-400/15 border-pink-400/30 text-pink-200";
+  if (key.includes("r and b") || key.includes("rnb") || key.includes("soul")) return "bg-purple-400/15 border-purple-400/30 text-purple-200";
+  if (key.includes("latin") || key.includes("reggaeton")) return "bg-rose-400/15 border-rose-400/30 text-rose-200";
+  if (key.includes("afro")) return "bg-yellow-400/15 border-yellow-400/30 text-yellow-200";
+  if (key.includes("funk")) return "bg-lime-400/15 border-lime-400/30 text-lime-200";
+  return "bg-slate-500/15 border-slate-400/20 text-slate-400";
+}
+
 export function RequestCard({
   request,
   libraryMatch,
@@ -52,6 +69,7 @@ export function RequestCard({
 
   const isShoutoutOnly = !request.songTitle?.trim() && !!request.shoutout;
   const genreLabel = request.genre ? GENRE_LABELS[request.genre] : request.genreLabel || "No genre";
+  const genreClass = genrePillClass(genreLabel, request.genre);
 
   return (
     <article className="rounded-xl border border-white/20 bg-slate-900/70 p-4">
@@ -79,13 +97,7 @@ export function RequestCard({
           </span>
         ) : null}
         <span
-          className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${
-            request.genre
-              ? "bg-fuchsia-400/15 border-fuchsia-400/30 text-fuchsia-200"
-              : request.genreLabel
-                ? "bg-indigo-400/15 border-indigo-400/30 text-indigo-200"
-              : "bg-slate-500/15 border-slate-400/20 text-slate-400"
-          }`}
+          className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${genreClass}`}
         >
           {genreLabel}
         </span>

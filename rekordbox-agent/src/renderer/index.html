@@ -1474,6 +1474,20 @@
       return GENRE_LABELS[label.toLowerCase()] || label.replace(/_/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
     }
 
+    function genrePillColors(label, supportedGenre) {
+      var key = String((supportedGenre || "") + " " + (label || "")).toLowerCase().replace(/&/g, "and");
+      if (key.indexOf("country") >= 0) return { bg: "rgba(251,191,36,0.18)", color: "#fde68a" };
+      if (key.indexOf("hip") >= 0 || key.indexOf("rap") >= 0) return { bg: "rgba(251,146,60,0.18)", color: "#fed7aa" };
+      if (key.indexOf("edm") >= 0 || key.indexOf("electronic") >= 0 || key.indexOf("dance") >= 0) return { bg: "rgba(34,211,238,0.18)", color: "#a5f3fc" };
+      if (key.indexOf("alternative") >= 0 || key.indexOf("rock") >= 0 || key.indexOf("metal") >= 0) return { bg: "rgba(167,139,250,0.18)", color: "#ddd6fe" };
+      if (key.indexOf("pop") >= 0) return { bg: "rgba(244,114,182,0.18)", color: "#fbcfe8" };
+      if (key.indexOf("r and b") >= 0 || key.indexOf("rnb") >= 0 || key.indexOf("soul") >= 0) return { bg: "rgba(192,132,252,0.18)", color: "#e9d5ff" };
+      if (key.indexOf("latin") >= 0 || key.indexOf("reggaeton") >= 0) return { bg: "rgba(251,113,133,0.18)", color: "#fecdd3" };
+      if (key.indexOf("afro") >= 0) return { bg: "rgba(250,204,21,0.18)", color: "#fef08a" };
+      if (key.indexOf("funk") >= 0) return { bg: "rgba(163,230,53,0.18)", color: "#d9f99d" };
+      return { bg: "rgba(148,163,184,0.14)", color: "#94a3b8" };
+    }
+
     function requestSubmittedMs(req) {
       var submitted = req.submittedAt ? new Date(req.submittedAt).getTime() : NaN;
       if (Number.isFinite(submitted)) return submitted;
@@ -1668,16 +1682,9 @@
         var genreLabel = requestGenreLabel(req);
         var genrePill = document.createElement("span");
         genrePill.className = "request-tip";
-        if (req.genre) {
-          genrePill.style.background = "rgba(217,70,239,0.18)";
-          genrePill.style.color = "#f0abfc";
-        } else if (req.genreLabel) {
-          genrePill.style.background = "rgba(99,102,241,0.18)";
-          genrePill.style.color = "#c7d2fe";
-        } else {
-          genrePill.style.background = "rgba(148,163,184,0.14)";
-          genrePill.style.color = "#94a3b8";
-        }
+        var genreColors = genrePillColors(genreLabel, req.genre);
+        genrePill.style.background = genreColors.bg;
+        genrePill.style.color = genreColors.color;
         genrePill.textContent = genreLabel;
         song.appendChild(genrePill);
 
