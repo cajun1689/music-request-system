@@ -1,17 +1,19 @@
 {
   "name": "dj-bridge",
-  "version": "1.11.9",
-  "description": "Menubar Mac app that reads Rekordbox or Serato now-playing tracks and pushes them to the Casper Requests cloud API",
+  "version": "1.12.0",
+  "description": "Menubar Mac app that reads Rekordbox, Serato, or ShowKontrol/CDJ now-playing tracks and pushes them to the Casper Requests cloud API",
   "author": "Casper Requests <admin@casperrequests.com>",
   "repository": "https://github.com/cajun1689/music-request-system",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "tsc && electron .",
     "build": "tsc && rm -rf dist/renderer && cp -r src/renderer dist/renderer && cp src/main/preload.js dist/main/preload.js && node scripts/stamp-version.js",
+    "test:showkontrol": "npm run build && node --test tests/showkontrol.test.js",
     "package": "tsc && electron-builder --mac",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@s0/node-tcnet": "^0.5.1",
     "better-sqlite3-multiple-ciphers": "^12.8.0",
     "electron-log": "^5.2.0",
     "electron-store": "^8.2.0",
@@ -40,15 +42,22 @@
       "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.inherit.plist",
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "DJ Bridge uses the local network to receive ShowKontrol track metadata and DJM on-air status from your CDJs."
+      },
       "notarize": true,
       "target": [
         {
           "target": "dmg",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["universal"]
+          "arch": [
+            "universal"
+          ]
         }
       ]
     },

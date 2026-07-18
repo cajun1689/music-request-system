@@ -1,6 +1,10 @@
 import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { cleanTrackName } from "../shared/cleanTrackName";
+import {
+  buildAutoMatchUpdatePlan,
+  buildRequestMatchUpdatePlan,
+} from "../shared/confirmedPlayback";
 import { finalizeStalePendingPlayed } from "../shared/finalizePendingPlayed";
 import type { EventRecord, NowPlayingSlot, RequestRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
@@ -9,6 +13,14 @@ interface PushTrackInput {
   title: string;
   artist?: string;
   sourceId?: string;
+  /**
+   * Set only by a token-authenticated live reader after mixer/on-air
+   * confirmation. File/history readers omit this and keep deferred playback.
+   */
+  playbackConfirmed?: boolean;
+  sourceLayer?: number;
+  sourceName?: string;
+  sourceAliasId?: string;
 }
 
 const REMIX_WORDS = ["remix", "mix", "edit", "version", "vip", "bootleg", "rework"];
@@ -211,8 +223,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     console.warn("pushTrack: finalizeStalePendingPlayed failed", String(err));
   }
 
+  const baseSourceId = PUSH_SOURCE_ID.replace(/-showkontrol$/i, "");
+  const sourceAliasId = input.sourceAliasId?.trim();
   const matchingSource = (eventRecord.livePlaylistSources ?? []).find(
-    (s) => s.id === PUSH_SOURCE_ID || s.id === "rekordbox",
+    (s) =>
+      s.id === PUSH_SOURCE_ID
+      || s.id === sourceAliasId
+      || s.id === baseSourceId
+      || s.id === "rekordbox",
   );
   const sourceDjName = matchingSource?.djName || matchingSource?.name || PUSH_SOURCE_ID;
 
@@ -342,6 +360,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
   console.log("pushTrack:", JSON.stringify({
     title: input.title, artist: input.artist, sourceId: PUSH_SOURCE_ID,
+    playbackConfirmed: input.playbackConfirmed === true,
+    sourceLayer: input.sourceLayer,
+    sourceName: input.sourceName,
+    sourceAliasId,
     coreTitle: coreTitle(input.title),
     coreArtist: input.artist ? normalize(stripDjPoolTags(input.artist)) : undefined,
   }));
@@ -505,7 +527,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const reviewedBy = `auto:${PUSH_SOURCE_ID}:${sourceDjName}`;
   const matchedWasPending = best.request.status === "pending";
 
-  console.log("MATCH (deferred played):", JSON.stringify({
+  const playbackConfirmed = input.playbackConfirmed === true;
+
+  console.log(playbackConfirmed ? "MATCH (confirmed played):" : "MATCH (deferred played):", JSON.stringify({
     requestId: best.request.requestId,
     requestSong: best.request.songTitle,
     requestArtist: best.request.artistName,
@@ -513,21 +537,21 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     matchedWasPending,
   }));
 
+  const requestUpdate = buildRequestMatchUpdatePlan({
+    playbackConfirmed,
+    matchedWasPending,
+    now,
+    reviewedBy,
+  });
   try {
     await docClient.send(
       new UpdateCommand({
         TableName: env.requestsTableName,
         Key: { eventId, requestId: best.request.requestId },
-        ConditionExpression: "attribute_exists(eventId) and attribute_exists(requestId)",
-        UpdateExpression: matchedWasPending
-          ? "SET reviewedAt = :reviewedAt, reviewedBy = :reviewedBy, #status = :approvedStatus"
-          : "SET reviewedAt = :reviewedAt, reviewedBy = :reviewedBy",
-        ExpressionAttributeNames: matchedWasPending ? { "#status": "status" } : undefined,
-        ExpressionAttributeValues: {
-          ":reviewedAt": now,
-          ":reviewedBy": reviewedBy,
-          ...(matchedWasPending ? { ":approvedStatus": "approved" } : {}),
-        },
+        ConditionExpression: requestUpdate.conditionExpression,
+        UpdateExpression: requestUpdate.updateExpression,
+        ExpressionAttributeNames: requestUpdate.expressionAttributeNames,
+        ExpressionAttributeValues: requestUpdate.expressionAttributeValues,
         ReturnValues: "NONE",
       }),
     );
@@ -535,28 +559,49 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     console.error("pushTrack: failed to set reviewedAt on matched request", {
       requestId: best.request.requestId, error: String(err),
     });
+    // The Bridge retry queue can safely retry only if duplicate suppression is
+    // cleared. Otherwise a transient request-table failure would permanently
+    // skip this confirmed playback.
+    try {
+      await docClient.send(
+        new UpdateCommand({
+          TableName: env.eventsTableName,
+          Key: { eventId },
+          UpdateExpression: "REMOVE #ams.#sid.#lptn",
+          ExpressionAttributeNames: {
+            "#ams": "autoMatchState",
+            "#sid": PUSH_SOURCE_ID,
+            "#lptn": "lastPushedTrackNorm",
+          },
+        }),
+      );
+    } catch (rollbackError) {
+      console.error("pushTrack: failed to clear duplicate state after request update failure", {
+        sourceId: PUSH_SOURCE_ID,
+        error: String(rollbackError),
+      });
+    }
+    return json(500, {
+      error: "Matched the track but could not update the request. The Bridge will retry.",
+    });
   }
 
   try {
+    const autoMatchUpdate = buildAutoMatchUpdatePlan({
+      playbackConfirmed,
+      sourceId: PUSH_SOURCE_ID,
+      trackNorm,
+      now,
+      requestId: best.request.requestId,
+      reviewedBy,
+    });
     await docClient.send(
       new UpdateCommand({
         TableName: env.eventsTableName,
         Key: { eventId },
-        UpdateExpression:
-          "SET #ams.#sid.#lmtn = :tn, #ams.#sid.#lma = :now, #ams.#sid.#ppri = :rid, #ams.#sid.#pprb = :rb, #ams.#sid.#ppma = :now",
-        ExpressionAttributeNames: {
-          "#ams": "autoMatchState",
-          "#sid": PUSH_SOURCE_ID,
-          "#lmtn": "lastMatchedTrackNorm",
-          "#lma": "lastMatchedAt",
-          "#ppri": "pendingPlayedRequestId",
-          "#pprb": "pendingPlayedReviewedBy",
-          "#ppma": "pendingPlayedMatchedAt",
-        },
-        ExpressionAttributeValues: {
-          ":tn": trackNorm, ":now": now,
-          ":rid": best.request.requestId, ":rb": reviewedBy,
-        },
+        UpdateExpression: autoMatchUpdate.updateExpression,
+        ExpressionAttributeNames: autoMatchUpdate.expressionAttributeNames,
+        ExpressionAttributeValues: autoMatchUpdate.expressionAttributeValues,
       }),
     );
   } catch (err) {
@@ -570,7 +615,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     sourceId: PUSH_SOURCE_ID,
     sourceName: sourceDjName,
     confidenceScore: Number(best.score.toFixed(2)),
+    playbackConfirmed,
     pushedTrack: { title: input.title, artist: input.artist },
-    request: best.request,
+    request: playbackConfirmed
+      ? { ...best.request, status: "played", playedAt: now, reviewedAt: now, reviewedBy }
+      : { ...best.request, status: matchedWasPending ? "approved" : best.request.status },
   });
 };

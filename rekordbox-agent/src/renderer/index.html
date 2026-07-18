@@ -545,6 +545,14 @@
         <span class="value" id="queue-label">0 pending</span>
       </div>
 
+      <div id="showkontrol-status-box" style="display:none; margin-top:10px; padding:9px 10px; border:1px solid var(--border); border-radius:7px; background:var(--input-bg);">
+        <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+          <strong style="font-size:11px;">ShowKontrol / TCNet</strong>
+          <span id="showkontrol-state" style="font-size:10px; color:var(--yellow);">Searching…</span>
+        </div>
+        <div id="showkontrol-detail" style="font-size:10px; color:var(--text-muted); margin-top:4px; line-height:1.5;"></div>
+      </div>
+
       <div id="now-playing" class="now-playing" style="display:none;">
         <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:var(--green); margin-bottom:4px; font-weight:600;">♫ Now Playing on Ticker</div>
         <div class="track-title" id="track-title"></div>
@@ -656,6 +664,7 @@
         <option value="auto">Auto-detect</option>
         <option value="rekordbox">Rekordbox</option>
         <option value="serato">Serato DJ</option>
+        <option value="showkontrol">ShowKontrol / CDJ-3000X</option>
       </select>
 
       <label>DJ Source <span style="font-weight:400; color:var(--text-muted);">(which DJ/deck are you?)</span></label>
@@ -673,6 +682,25 @@
       <div id="sqlcipher-row">
         <label>SQLCipher Key <span style="font-weight:400; color:var(--text-muted);">(Rekordbox only, leave blank for unencrypted)</span></label>
         <input type="password" id="cfg-sqlcipher-key" placeholder="Optional" />
+      </div>
+
+      <div id="showkontrol-config" style="display:none; margin-top:10px; padding:10px; border:1px solid rgba(59,130,246,0.35); border-radius:8px; background:rgba(30,64,175,0.1);">
+        <div style="font-size:11px; color:#bfdbfe; line-height:1.5; margin-bottom:8px;">
+          Run ShowKontrol on this Mac and enable TCNet. The CDJ-3000X players and DJM-A9 must share the same PRO DJ LINK network.
+        </div>
+        <label>TCNet Network Interface</label>
+        <select id="cfg-showkontrol-interface">
+          <option value="">Automatic — all active interfaces</option>
+        </select>
+
+        <label>ShowKontrol Source ID <span style="font-weight:400; color:var(--text-muted);">(must not match a live-playlist source)</span></label>
+        <input type="text" id="cfg-showkontrol-source-id" placeholder="booth-showkontrol" />
+
+        <label>On-Air Confirmation (seconds) <span style="font-weight:400; color:var(--text-muted);">Prevents cue/preview tracks from matching</span></label>
+        <input type="number" id="cfg-showkontrol-confirm" value="10" min="3" max="30" step="1" />
+        <div class="btn-row">
+          <button type="button" class="btn secondary" id="btn-restart-showkontrol" style="font-size:11px; padding:5px 10px;">Reconnect TCNet</button>
+        </div>
       </div>
 
       <label>Polling Interval (ms)</label>
@@ -843,7 +871,12 @@
 
     function updateSqlcipherVisibility() {
       const sw = el("cfg-software-type").value;
-      el("sqlcipher-row").style.display = sw === "serato" ? "none" : "";
+      el("sqlcipher-row").style.display = (sw === "serato" || sw === "showkontrol") ? "none" : "";
+      el("showkontrol-config").style.display = sw === "showkontrol" ? "" : "none";
+      if (sw === "showkontrol" && !el("cfg-showkontrol-source-id").value.trim()) {
+        var boothSource = el("cfg-source-id").value.trim() || "booth";
+        el("cfg-showkontrol-source-id").value = boothSource + "-showkontrol";
+      }
     }
 
     el("cfg-software-type").addEventListener("change", updateSqlcipherVisibility);
@@ -868,14 +901,57 @@
       el("mode-label").textContent = s.mode === "auto" ? "Auto" : "Manual";
 
       const swLabel = s.activeSoftware
-        ? s.activeSoftware.charAt(0).toUpperCase() + s.activeSoftware.slice(1)
-        : (s.softwareType === "auto" ? "Auto-detect" : s.softwareType);
+        ? (s.activeSoftware === "showkontrol"
+          ? "ShowKontrol / CDJ"
+          : s.activeSoftware.charAt(0).toUpperCase() + s.activeSoftware.slice(1))
+        : (s.softwareType === "auto"
+          ? "Auto-detect"
+          : s.softwareType === "showkontrol"
+            ? "ShowKontrol / CDJ"
+            : s.softwareType);
       el("software-label").textContent = swLabel;
 
-      el("db-label").textContent = s.dbPath
-        ? s.dbPath.split("/").slice(-2).join("/")
-        : "Not found";
+      if (s.activeSoftware === "showkontrol" || s.softwareType === "showkontrol") {
+        el("db-label").textContent = s.showKontrol && s.showKontrol.masterAddress
+          ? (s.showKontrol.masterName || "ShowKontrol") + " · " + s.showKontrol.masterAddress
+          : "Waiting for TCNet";
+      } else {
+        el("db-label").textContent = s.dbPath
+          ? s.dbPath.split("/").slice(-2).join("/")
+          : "Not found";
+      }
       el("queue-label").textContent = s.queueSize + " pending";
+
+      var skBox = el("showkontrol-status-box");
+      if (s.softwareType === "showkontrol" || s.activeSoftware === "showkontrol") {
+        skBox.style.display = "";
+        var sk = s.showKontrol;
+        var skState = el("showkontrol-state");
+        var skDetail = el("showkontrol-detail");
+        if (!sk) {
+          skState.textContent = "Starting…";
+          skState.style.color = "var(--yellow)";
+          skDetail.textContent = "Opening UDP ports 60000/60001…";
+        } else {
+          skState.textContent = sk.connected ? "Connected" : (sk.state === "error" ? "Error" : "Searching…");
+          skState.style.color = sk.connected ? "var(--green)" : (sk.state === "error" ? "#fca5a5" : "var(--yellow)");
+          var interfaces = (sk.networkInterfaces || []).map(function (n) {
+            return n.name + " " + n.address;
+          }).join(", ");
+          var signal = sk.onAirAvailable
+            ? "DJM on-air signal available"
+            : "Waiting for DJM on-air signal";
+          skDetail.textContent = [
+            sk.masterName ? sk.masterName + (sk.masterAddress ? " @ " + sk.masterAddress : "") : "No TCNet master discovered",
+            (sk.discoveredLayers || 0) + " deck layer(s), " + (sk.playingLayers || 0) + " playing",
+            signal,
+            interfaces || "No active interface",
+            sk.lastError || "",
+          ].filter(Boolean).join(" · ");
+        }
+      } else {
+        skBox.style.display = "none";
+      }
 
       if (s.lastTrack) {
         el("now-playing").style.display = "";
@@ -939,6 +1015,7 @@
     }
 
     let cachedEvents = [];
+    let cachedSources = [];
 
     async function loadSourcesForEvent(eventId, savedSourceId) {
       var sourceSelect = el("cfg-source-id");
@@ -949,8 +1026,9 @@
       sourceSelect.innerHTML = '<option value="">Loading sources…</option>';
       try {
         var sources = await bridge.fetchEventSources(eventId);
+        cachedSources = Array.isArray(sources) ? sources : [];
         sourceSelect.innerHTML = '<option value="">— Pick your DJ source —</option>';
-        sources.forEach(function (src) {
+        cachedSources.forEach(function (src) {
           var opt = document.createElement("option");
           opt.value = src.id;
           var label = (src.djName || src.name || src.id);
@@ -969,8 +1047,9 @@
             sourceSelect.value = savedSourceId;
           }
         }
-        logActivity("Loaded " + sources.length + " DJ sources for event");
+        logActivity("Loaded " + cachedSources.length + " DJ sources for event");
       } catch (e) {
+        cachedSources = [];
         sourceSelect.innerHTML = '<option value="">Failed to load sources</option>';
         logActivity("Failed to load sources: " + (e.message || e), "error");
       }
@@ -979,6 +1058,18 @@
     el("cfg-event-id").addEventListener("change", function () {
       var eventId = el("cfg-event-id").value;
       loadSourcesForEvent(eventId, "");
+    });
+
+    el("cfg-source-id").addEventListener("change", function () {
+      if (el("cfg-software-type").value !== "showkontrol") return;
+      var current = el("cfg-showkontrol-source-id").value.trim();
+      var knownGenerated = cachedSources.some(function (source) {
+        return current === source.id + "-showkontrol";
+      }) || current === "booth-showkontrol";
+      if (!current || knownGenerated) {
+        el("cfg-showkontrol-source-id").value =
+          (el("cfg-source-id").value.trim() || "booth") + "-showkontrol";
+      }
     });
 
     async function loadEvents(savedEventId) {
@@ -1032,6 +1123,33 @@
       }
     }
 
+    async function loadShowKontrolInterfaces(savedInterface) {
+      var select = el("cfg-showkontrol-interface");
+      select.innerHTML = '<option value="">Automatic — all active interfaces</option>';
+      if (!bridge.getShowKontrolInterfaces) return;
+      try {
+        var interfaces = await bridge.getShowKontrolInterfaces();
+        (interfaces || []).forEach(function (network) {
+          var opt = document.createElement("option");
+          opt.value = network.name;
+          opt.textContent = network.name + " · " + network.address + " → " + network.broadcast;
+          select.appendChild(opt);
+        });
+        if (savedInterface) {
+          select.value = savedInterface;
+          if (!select.value) {
+            var missing = document.createElement("option");
+            missing.value = savedInterface;
+            missing.textContent = savedInterface + " (not currently available)";
+            select.appendChild(missing);
+            select.value = savedInterface;
+          }
+        }
+      } catch (err) {
+        logActivity("Could not list TCNet interfaces: " + (err.message || err), "warn");
+      }
+    }
+
     async function loadConfig() {
       logActivity("Loading configuration…");
       try {
@@ -1044,6 +1162,9 @@
         el("cfg-mode").value = c.mode || "auto";
         el("cfg-software-type").value = c.softwareType || "auto";
         el("cfg-music-path").value = c.musicLibraryPath || "";
+        el("cfg-showkontrol-source-id").value = c.showKontrolSourceId || "";
+        el("cfg-showkontrol-confirm").value = c.showKontrolConfirmSec != null ? c.showKontrolConfirmSec : 10;
+        await loadShowKontrolInterfaces(c.showKontrolInterface || "");
         if (c.musicLibraryPath) {
           var mps = el("music-path-status");
           mps.textContent = "Using: " + c.musicLibraryPath;
@@ -1056,6 +1177,7 @@
         if (c.eventId) {
           await loadSourcesForEvent(c.eventId, c.sourceId || "");
         }
+        updateSqlcipherVisibility();
       } catch (err) {
         logActivity("Failed to load config: " + (err.message || err), "error");
       }
@@ -1077,17 +1199,37 @@
       btn.textContent = "Saving…";
       logActivity("Saving configuration…");
       try {
+        var softwareType = el("cfg-software-type").value;
+        var showKontrolSourceId = el("cfg-showkontrol-source-id").value.trim();
+        if (softwareType === "showkontrol") {
+          showKontrolSourceId = showKontrolSourceId
+            || (el("cfg-source-id").value.trim() || "booth") + "-showkontrol";
+          if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{1,63}$/.test(showKontrolSourceId)) {
+            throw new Error("ShowKontrol Source ID must be 2-64 letters, numbers, dashes, or underscores.");
+          }
+          if (showKontrolSourceId === el("cfg-source-id").value.trim()) {
+            throw new Error("ShowKontrol Source ID must be different from the selected live-playlist source. Add -showkontrol.");
+          }
+          if (cachedSources.some(function (source) { return source.id === showKontrolSourceId; })) {
+            throw new Error("ShowKontrol Source ID conflicts with a live-playlist source. Add -showkontrol to make it unique.");
+          }
+        }
+        var transitionDelay = parseInt(el("cfg-transition-delay").value, 10);
+        if (!Number.isFinite(transitionDelay)) transitionDelay = 45;
         await bridge.setConfig({
           apiBaseUrl: el("cfg-api-url").value.trim(),
           eventId: el("cfg-event-id").value,
           pushToken: el("cfg-push-token").value.trim(),
           sqlcipherKey: el("cfg-sqlcipher-key").value.trim(),
           pollingIntervalMs: parseInt(el("cfg-interval").value, 10) || 10000,
-          transitionDelaySec: parseInt(el("cfg-transition-delay").value, 10) || 45,
+          transitionDelaySec: transitionDelay,
           mode: el("cfg-mode").value,
-          softwareType: el("cfg-software-type").value,
+          softwareType: softwareType,
           sourceId: el("cfg-source-id").value.trim(),
           musicLibraryPath: el("cfg-music-path").value.trim(),
+          showKontrolInterface: el("cfg-showkontrol-interface").value,
+          showKontrolConfirmSec: Math.max(3, Math.min(30, parseInt(el("cfg-showkontrol-confirm").value, 10) || 10)),
+          showKontrolSourceId: showKontrolSourceId,
         });
         showToast("Configuration saved ✓", "success");
       } catch (err) {
@@ -1117,9 +1259,22 @@
           const sessDir = await bridge.resolveSeratoPath();
           el("db-label").textContent = sessDir || "Serato sessions not found";
           showToast("Found Serato", "success");
+        } else if (sw === "showkontrol") {
+          var showStatus = await bridge.getShowKontrolStatus();
+          el("db-label").textContent = showStatus && showStatus.masterAddress
+            ? (showStatus.masterName || "ShowKontrol") + " · " + showStatus.masterAddress
+            : "Waiting for TCNet";
+          showToast("ShowKontrol TCNet is connected", "success");
         } else {
           el("db-label").textContent = "No DJ software detected";
-          showToast("No DJ software detected — is Rekordbox or Serato open?", "error", 8000);
+          var configuredShowKontrol = el("cfg-software-type").value === "showkontrol";
+          showToast(
+            configuredShowKontrol
+              ? "ShowKontrol not detected — check TCNet and the selected network interface"
+              : "No DJ software detected — is Rekordbox or Serato open?",
+            "error",
+            8000,
+          );
         }
         el("software-label").textContent = sw
           ? sw.charAt(0).toUpperCase() + sw.slice(1)
@@ -1129,6 +1284,25 @@
       } finally {
         btn.disabled = false;
         btn.textContent = "Detect Source";
+      }
+    });
+
+    el("btn-restart-showkontrol").addEventListener("click", async () => {
+      var btn = el("btn-restart-showkontrol");
+      btn.disabled = true;
+      btn.textContent = "Reconnecting…";
+      try {
+        var result = await bridge.restartShowKontrol();
+        if (result && result.connected) {
+          showToast("ShowKontrol TCNet connected", "success");
+        } else {
+          showToast("TCNet restarted — waiting for ShowKontrol", "info", 6000);
+        }
+      } catch (err) {
+        showToast("TCNet reconnect failed: " + (err.message || err), "error", 8000);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Reconnect TCNet";
       }
     });
 

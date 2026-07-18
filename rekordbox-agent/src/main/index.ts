@@ -9,7 +9,13 @@ import {
 } from "electron";
 import * as path from "path";
 import log, { setLogWindow } from "./logger";
-import { getConfig, setConfig } from "./config-store";
+import {
+  getConfig,
+  getEffectivePushSourceId,
+  setConfig,
+  type ConfigSchema,
+  type DJSoftwareType,
+} from "./config-store";
 import {
   detectRekordboxVersion,
   readCurrentTrack,
@@ -22,6 +28,11 @@ import {
   readSeratoLibrary,
   resolveSeratoSessionDir,
 } from "./serato-reader";
+import {
+  listShowKontrolNetworkInterfaces,
+  ShowKontrolReader,
+  type ShowKontrolReaderStatus,
+} from "./showkontrol-reader";
 import {
   approveShoutout,
   drainQueue,
@@ -57,6 +68,7 @@ process.on("unhandledRejection", (reason) => {
 let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollQueue: Promise<void> = Promise.resolve();
 let requestsPollTimer: ReturnType<typeof setInterval> | null = null;
 let lastTrackKey = "";
 let lastPushedKey = "";
@@ -68,12 +80,15 @@ let isQuitting = false;
 let pendingRequestIds = new Set<string>();
 let flaggedShoutoutIds = new Set<string>();
 let requestsPollerInitialized = false;
+let showKontrolReader: ShowKontrolReader | null = null;
+let showKontrolReaderKey = "";
+let showKontrolStartPromise: Promise<void> | null = null;
 
 interface StatusPayload {
   connected: boolean;
   mode: "auto" | "manual";
-  softwareType: "rekordbox" | "serato" | "auto";
-  activeSoftware: "rekordbox" | "serato" | null;
+  softwareType: DJSoftwareType;
+  activeSoftware: Exclude<DJSoftwareType, "auto"> | null;
   dbPath: string | null;
   lastTrack: TrackInfo | null;
   pendingTrack: TrackInfo | null;
@@ -88,6 +103,7 @@ interface StatusPayload {
   pendingRequestsCount: number;
   flaggedShoutoutsCount: number;
   rekordboxVersion: number | null;
+  showKontrol: ShowKontrolReaderStatus | null;
 }
 
 let status: StatusPayload = {
@@ -109,6 +125,7 @@ let status: StatusPayload = {
   pendingRequestsCount: 0,
   flaggedShoutoutsCount: 0,
   rekordboxVersion: null,
+  showKontrol: null,
 };
 
 function sendStatus(): void {
@@ -118,6 +135,7 @@ function sendStatus(): void {
     : 0;
   const config = getConfig();
   status.transitionDelaySec = config.transitionDelaySec ?? 45;
+  status.showKontrol = showKontrolReader?.getStatus() ?? status.showKontrol;
   mainWindow?.webContents.send("status-update", status);
   updateTrayMenu();
 }
@@ -259,6 +277,7 @@ function switchMode(mode: "auto" | "manual"): void {
     startPolling();
   } else {
     stopPolling();
+    void stopShowKontrolReader();
   }
   sendStatus();
 }
@@ -271,6 +290,86 @@ function toggleLaunchAtLogin(): void {
   sendStatus();
 }
 
+function resetTrackDetectionState(): void {
+  lastTrackKey = "";
+  lastPushedKey = "";
+  lastHeartbeatPushAt = 0;
+  pendingTrack = null;
+  pendingTrackSince = 0;
+}
+
+async function stopShowKontrolReader(): Promise<void> {
+  const reader = showKontrolReader;
+  showKontrolReader = null;
+  showKontrolReaderKey = "";
+  showKontrolStartPromise = null;
+  if (reader) {
+    await reader.stop();
+    log.info("ShowKontrol TCNet reader stopped");
+  }
+  status.showKontrol = null;
+}
+
+async function ensureShowKontrolReader(config: ConfigSchema): Promise<ShowKontrolReader> {
+  const key = [
+    config.showKontrolInterface,
+    config.showKontrolConfirmSec,
+    config.transitionDelaySec,
+  ].join(":");
+
+  const existingState = showKontrolReader?.getStatus().state;
+  if (
+    showKontrolReader
+    && showKontrolReaderKey === key
+    && existingState !== "stopped"
+    && existingState !== "error"
+  ) {
+    if (showKontrolStartPromise) await showKontrolStartPromise;
+    return showKontrolReader;
+  }
+
+  await stopShowKontrolReader();
+  const reader = new ShowKontrolReader(
+    {
+      networkInterface: config.showKontrolInterface || undefined,
+      confirmationSeconds: config.showKontrolConfirmSec ?? 10,
+      fallbackConfirmationSeconds: config.transitionDelaySec ?? 45,
+      onStatus: (showKontrolStatus) => {
+        if (showKontrolReader !== reader) return;
+        status.showKontrol = showKontrolStatus;
+        if (status.activeSoftware === "showkontrol") {
+          status.connected = showKontrolStatus.connected;
+          status.error = showKontrolStatus.lastError;
+        }
+        sendStatus();
+      },
+      onTrack: () => {
+        if (showKontrolReader !== reader || getConfig().softwareType !== "showkontrol") return;
+        // Process an on-air edge immediately instead of waiting for the normal
+        // ten-second file-reader polling interval.
+        void pollOnce();
+      },
+    },
+    log,
+  );
+
+  showKontrolReader = reader;
+  showKontrolReaderKey = key;
+  showKontrolStartPromise = reader.start()
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      status.error = `ShowKontrol connection failed: ${message}`;
+      status.connected = false;
+      log.error(status.error);
+      throw error;
+    })
+    .finally(() => {
+      showKontrolStartPromise = null;
+    });
+  await showKontrolStartPromise;
+  return reader;
+}
+
 function detectSoftware(customPath?: string): "rekordbox" | "serato" | null {
   if (resolveDbPath()) return "rekordbox";
   if (resolveSeratoSessionDir(customPath)) return "serato";
@@ -278,9 +377,23 @@ function detectSoftware(customPath?: string): "rekordbox" | "serato" | null {
 }
 
 async function readTrackForSoftware(
-  sw: "rekordbox" | "serato",
+  sw: Exclude<DJSoftwareType, "auto">,
   config: ReturnType<typeof getConfig>,
 ): Promise<TrackInfo | null> {
+  if (sw === "showkontrol") {
+    const reader = await ensureShowKontrolReader(config);
+    status.dbPath = null;
+    status.showKontrol = reader.getStatus();
+    const track = reader.readCurrentTrack();
+    return track
+      ? {
+          ...track,
+          pushSourceId: getEffectivePushSourceId(config),
+          sourceAliasId: config.sourceId.trim(),
+        }
+      : null;
+  }
+
   if (sw === "rekordbox") {
     const dbPath = status.dbPath || resolveDbPath();
     if (!dbPath) {
@@ -298,7 +411,16 @@ async function readTrackForSoftware(
   return readCurrentSeratoTrack(customPath);
 }
 
-async function pollOnce(): Promise<void> {
+function pollOnce(): Promise<void> {
+  const next = pollQueue.then(
+    () => pollOnceInternal(),
+    () => pollOnceInternal(),
+  );
+  pollQueue = next.catch(() => undefined);
+  return next;
+}
+
+async function pollOnceInternal(): Promise<void> {
   const config = getConfig();
   if (config.mode !== "auto") return;
   status.softwareType = config.softwareType;
@@ -309,7 +431,7 @@ async function pollOnce(): Promise<void> {
     return;
   }
 
-  let sw: "rekordbox" | "serato" | null = null;
+  let sw: Exclude<DJSoftwareType, "auto"> | null = null;
   if (config.softwareType === "auto") {
     sw = detectSoftware(config.musicLibraryPath || undefined);
     if (!sw) {
@@ -323,6 +445,9 @@ async function pollOnce(): Promise<void> {
     sw = config.softwareType;
   }
   status.activeSoftware = sw;
+  if (sw !== "showkontrol" && showKontrolReader) {
+    await stopShowKontrolReader();
+  }
 
   try {
     let track: TrackInfo | null = null;
@@ -356,7 +481,15 @@ async function pollOnce(): Promise<void> {
     }
 
     if (!track) {
-      status.error = null;
+      if (sw === "showkontrol") {
+        const showKontrolStatus = showKontrolReader?.getStatus() ?? null;
+        status.showKontrol = showKontrolStatus;
+        status.connected = showKontrolStatus?.connected ?? false;
+        status.error = showKontrolStatus?.lastError
+          ?? (showKontrolStatus?.connected ? null : "Waiting for ShowKontrol on the TCNet network…");
+      } else {
+        status.error = null;
+      }
       sendStatus();
       return;
     }
@@ -365,7 +498,9 @@ async function pollOnce(): Promise<void> {
     const now = Date.now();
 
     // Check if the pending track's transition delay has elapsed
-    const transitionDelayMs = (config.transitionDelaySec ?? 45) * 1000;
+    const transitionDelayMs = track.playbackConfirmed
+      ? 0
+      : (config.transitionDelaySec ?? 45) * 1000;
     if (pendingTrack && pendingTrackSince > 0) {
       const pendingKey = trackKey(pendingTrack);
       const elapsed = now - pendingTrackSince;
@@ -755,6 +890,7 @@ app.on("ready", () => {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  void stopShowKontrolReader();
 });
 
 app.on("window-all-closed", () => {
@@ -772,10 +908,54 @@ ipcMain.handle("get-config", () => getConfig());
 
 ipcMain.handle(
   "set-config",
-  (_event, partial: Record<string, unknown>) => {
-    setConfig(partial as Parameters<typeof setConfig>[0]);
+  async (_event, partial: Record<string, unknown>) => {
+    const current = getConfig();
+    const proposed = {
+      ...current,
+      ...(partial as Partial<ConfigSchema>),
+    };
+
+    if (proposed.softwareType === "showkontrol") {
+      const generatedSourceId = `${proposed.sourceId.trim() || "booth"}-showkontrol`;
+      proposed.showKontrolSourceId = proposed.showKontrolSourceId.trim() || generatedSourceId;
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{1,63}$/.test(proposed.showKontrolSourceId)) {
+        throw new Error(
+          "ShowKontrol Source ID must be 2-64 characters using letters, numbers, dashes, or underscores.",
+        );
+      }
+      if (proposed.showKontrolSourceId === proposed.sourceId.trim()) {
+        throw new Error(
+          "ShowKontrol Source ID must be different from the selected live-playlist source. "
+          + "Add -showkontrol to keep dashboard slots separate.",
+        );
+      }
+
+      try {
+        const liveSources = proposed.eventId
+          ? await fetchEventSources(proposed.eventId)
+          : [];
+        if (liveSources.some((source) => source.id === proposed.showKontrolSourceId)) {
+          throw new Error(
+            `ShowKontrol Source ID "${proposed.showKontrolSourceId}" conflicts with a live-playlist source. `
+            + "Use a unique ID such as booth-showkontrol.",
+          );
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes("conflicts with a live-playlist source")) {
+          throw error;
+        }
+        log.warn("Could not validate ShowKontrol source ID against event sources:", message);
+      }
+    }
+
+    await stopShowKontrolReader();
+    resetTrackDetectionState();
+    setConfig(proposed);
     const config = getConfig();
     status.mode = config.mode;
+    status.softwareType = config.softwareType;
+    status.activeSoftware = null;
 
     if (config.mode === "auto") {
       startPolling();
@@ -851,9 +1031,24 @@ ipcMain.handle("resolve-serato-path", () => {
 
 ipcMain.handle("detect-software", () => {
   const config = getConfig();
+  if (config.softwareType === "showkontrol") {
+    return showKontrolReader?.getStatus().connected ? "showkontrol" : null;
+  }
   const sw = detectSoftware(config.musicLibraryPath || undefined);
   log.info("Detected software:", sw);
   return sw;
+});
+
+ipcMain.handle("get-showkontrol-interfaces", () => listShowKontrolNetworkInterfaces());
+ipcMain.handle("get-showkontrol-status", () => showKontrolReader?.getStatus() ?? null);
+ipcMain.handle("restart-showkontrol", async () => {
+  const config = getConfig();
+  await stopShowKontrolReader();
+  if (config.mode !== "auto" || config.softwareType !== "showkontrol") {
+    return null;
+  }
+  const reader = await ensureShowKontrolReader(config);
+  return reader.getStatus();
 });
 
 ipcMain.handle("poll-now", async () => {
@@ -943,7 +1138,9 @@ ipcMain.handle("browse-folder", async () => {
 ipcMain.handle("sync-library", async () => {
   const config = getConfig();
   const customPath = config.musicLibraryPath || undefined;
-  const scanBoth = config.softwareType === "auto";
+  // ShowKontrol supplies live deck metadata, not the complete USB/library.
+  // Keep scanning local Rekordbox and Serato libraries for request suggestions.
+  const scanBoth = config.softwareType === "auto" || config.softwareType === "showkontrol";
   const sw = scanBoth ? detectSoftware(customPath) : config.softwareType;
 
   log.info("Library sync starting, software:", sw, "scanBoth:", scanBoth);

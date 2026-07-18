@@ -8,6 +8,15 @@ export interface TrackInfo {
   artist: string;
   album?: string;
   playedAt: string;
+  /**
+   * True only when a live source (currently ShowKontrol/TCNet) has confirmed
+   * that the track is audible, not merely loaded or cued.
+   */
+  playbackConfirmed?: boolean;
+  sourceLayer?: number;
+  sourceName?: string;
+  pushSourceId?: string;
+  sourceAliasId?: string;
 }
 
 const HISTORY_QUERY = `

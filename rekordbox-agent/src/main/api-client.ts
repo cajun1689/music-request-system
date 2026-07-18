@@ -1,10 +1,11 @@
 import { net } from "electron";
-import { getApiBaseUrl, getConfig } from "./config-store";
+import { getApiBaseUrl, getConfig, getEffectivePushSourceId } from "./config-store";
 import log from "./logger";
 import type { LibraryTrack, TrackInfo } from "./rekordbox-reader";
 
 export interface PushResult {
   matched: boolean;
+  playbackConfirmed?: boolean;
   confidenceScore?: number;
   reason?: string;
   pushedTrack?: { title: string; artist?: string };
@@ -69,7 +70,7 @@ export async function testConnection(forceReconnect = false): Promise<PingResult
       "x-push-token": config.pushToken,
     },
     body: JSON.stringify({
-      sourceId: config.sourceId || undefined,
+      sourceId: getEffectivePushSourceId(config) || undefined,
       forceReconnect,
     }),
   });
@@ -180,7 +181,11 @@ export async function pushTrack(track: TrackInfo): Promise<PushResult> {
     body: JSON.stringify({
       title: track.title,
       artist: track.artist,
-      sourceId: config.sourceId || undefined,
+      sourceId: track.pushSourceId || getEffectivePushSourceId(config) || undefined,
+      playbackConfirmed: track.playbackConfirmed === true,
+      sourceLayer: track.sourceLayer,
+      sourceName: track.sourceName,
+      sourceAliasId: track.sourceAliasId,
     }),
   });
 
