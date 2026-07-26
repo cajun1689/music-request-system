@@ -46,6 +46,15 @@ function readyState(confirmMs = 10_000, fallbackMs = 45_000) {
   return state;
 }
 
+function writeUtf32Le(buffer, value, offset, byteLength) {
+  let cursor = offset;
+  for (const character of value) {
+    if (cursor + 4 > offset + byteLength) break;
+    buffer.writeUInt32LE(character.codePointAt(0), cursor);
+    cursor += 4;
+  }
+}
+
 test("builds valid TCNet discovery and metadata request packets", () => {
   const optIn = buildTCNetOptInPacket(65123, 42, 9, 120);
   assert.equal(optIn.length, 68);
@@ -64,12 +73,12 @@ test("builds valid TCNet discovery and metadata request packets", () => {
   assert.equal(request.readUInt8(25), 3, "wire layer IDs are one-based");
 });
 
-test("decodes TCNet 3.5 UTF-16 metadata", () => {
+test("decodes TCNet 3.5 UTF-32 metadata", () => {
   const packet = Buffer.alloc(548);
   packet.writeUInt8(4, 24);
   packet.writeUInt8(2, 25);
-  packet.write("Beyoncé\0", 29, 256, "utf16le");
-  packet.write("CUFF IT\0", 285, 256, "utf16le");
+  writeUtf32Le(packet, "Beyoncé", 29, 256);
+  writeUtf32Le(packet, "CUFF IT", 285, 256);
   packet.writeUInt32LE(777, 543);
 
   assert.deepEqual(parseTCNetMetadataPacket(packet, 5), {
@@ -200,8 +209,8 @@ function fakeMetadata() {
   writeHeader(packet, 200);
   packet.writeUInt8(4, 24);
   packet.writeUInt8(1, 25);
-  packet.write("Daft Punk\0", 29, 256, "utf16le");
-  packet.write("One More Time\0", 285, 256, "utf16le");
+  writeUtf32Le(packet, "Daft Punk", 29, 256);
+  writeUtf32Le(packet, "One More Time", 285, 256);
   packet.writeUInt32LE(505, 543);
   return packet;
 }

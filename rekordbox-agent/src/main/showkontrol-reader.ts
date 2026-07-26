@@ -173,15 +173,18 @@ export function buildTCNetMetadataRequest(
   return buffer;
 }
 
-function decodeNullTerminatedUtf16(buffer: Buffer): string {
-  let end = buffer.length;
-  for (let offset = 0; offset + 1 < buffer.length; offset += 2) {
-    if (buffer.readUInt16LE(offset) === 0) {
-      end = offset;
-      break;
-    }
+function decodeNullTerminatedUtf32(buffer: Buffer): string {
+  const characters: string[] = [];
+  for (let offset = 0; offset + 3 < buffer.length; offset += 4) {
+    const codePoint = buffer.readUInt32LE(offset);
+    if (codePoint === 0) break;
+    characters.push(
+      codePoint <= 0x10ffff && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
+        ? String.fromCodePoint(codePoint)
+        : "\ufffd",
+    );
   }
-  return buffer.subarray(0, end).toString("utf16le").replace(/\0/g, "").trim();
+  return characters.join("").trim();
 }
 
 function decodeNullTerminatedUtf8(buffer: Buffer): string {
@@ -205,8 +208,8 @@ export function parseTCNetMetadataPacket(
     return {
       layerIndex,
       metadata: {
-        artist: decodeNullTerminatedUtf16(buffer.subarray(29, 285)),
-        title: decodeNullTerminatedUtf16(buffer.subarray(285, 541)),
+        artist: decodeNullTerminatedUtf32(buffer.subarray(29, 285)),
+        title: decodeNullTerminatedUtf32(buffer.subarray(285, 541)),
         trackID: buffer.readUInt32LE(543),
       },
     };

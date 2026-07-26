@@ -1,4 +1,9 @@
-## DJ Bridge v1.12.0
+## DJ Bridge v1.12.1
+
+### Fixed
+
+- Correctly decodes ShowKontrol TCNet artist and title metadata from CDJ-3000X players.
+- Preserves the validated on-air confirmation behavior so requests are removed only after a track is actually playing through the DJM.
 
 ### New: ShowKontrol + CDJ-3000X
 
