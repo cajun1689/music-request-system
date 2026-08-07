@@ -15,6 +15,7 @@ import {
 
 const GASLIGHT_SLUG = "gaslight-residency";
 const BDL_SLUG = "bdl-residency";
+const ACQXAH_SOURCE_ID = "dj-acqxah";
 const defaultLiveSources = (seratoUrl = "", rekordboxUrl = ""): LivePlaylistSource[] => [
   { id: "serato-a", name: "Serato A", type: "serato", url: seratoUrl, active: Boolean(seratoUrl) },
   { id: "serato-b", name: "Serato B", type: "serato", url: "", active: false },
@@ -71,6 +72,8 @@ export function AdminPage() {
   const [seratoDjName, setSeratoDjName] = useState<string>("");
   const [serato2DjName, setSerato2DjName] = useState<string>("");
   const [rekordboxDjName, setRekordboxDjName] = useState<string>("");
+  const [acqxahLiveUrlEdit, setAcqxahLiveUrlEdit] = useState<string>("");
+  const [acqxahDjName, setAcqxahDjName] = useState<string>("");
   const [autoApproveInput, setAutoApproveInput] = useState("");
   const [blockListInput, setBlockListInput] = useState("");
   const [libraryOnlyMode, setLibraryOnlyMode] = useState(false);
@@ -151,6 +154,8 @@ export function AdminPage() {
     setSeratoDjName(sources.find((source) => source.id === "serato-a")?.djName ?? "");
     setSerato2DjName(sources.find((source) => source.id === "serato-b")?.djName ?? "");
     setRekordboxDjName(sources.find((source) => source.id === "rekordbox")?.djName ?? "");
+    setAcqxahLiveUrlEdit(sources.find((source) => source.id === ACQXAH_SOURCE_ID)?.url ?? "");
+    setAcqxahDjName(sources.find((source) => source.id === ACQXAH_SOURCE_ID)?.djName ?? "");
   }, [eventData]);
 
   async function onCreate(event: FormEvent) {
@@ -396,6 +401,25 @@ export function AdminPage() {
     }
   }
 
+  function buildEditedLiveSources(): LivePlaylistSource[] {
+    const managedIds = new Set(["serato-a", "serato-b", "rekordbox", ACQXAH_SOURCE_ID]);
+    const otherSources = (eventData?.livePlaylistSources ?? []).filter((source) => !managedIds.has(source.id));
+    return [
+      { id: "serato-a", name: "Serato A", djName: seratoDjName || undefined, type: "serato", url: seratoLiveUrlEdit, active: Boolean(seratoLiveUrlEdit) },
+      { id: "serato-b", name: "Serato B", djName: serato2DjName || undefined, type: "serato", url: seratoLiveUrl2Edit, active: Boolean(seratoLiveUrl2Edit) },
+      { id: "rekordbox", name: "Rekordbox", djName: rekordboxDjName || undefined, type: "rekordbox", url: rekordboxLiveUrlEdit, active: Boolean(rekordboxLiveUrlEdit || rekordboxDjName) },
+      {
+        id: ACQXAH_SOURCE_ID,
+        name: "DJ Bridge 2",
+        djName: acqxahDjName || undefined,
+        type: "rekordbox",
+        url: acqxahLiveUrlEdit,
+        active: Boolean(acqxahLiveUrlEdit || acqxahDjName),
+      },
+      ...otherSources,
+    ];
+  }
+
   async function onSaveLivePlaylistLinks() {
     if (!session || !eventData) {
       return;
@@ -407,11 +431,7 @@ export function AdminPage() {
         eventData.eventId,
         {
           seratoLiveUrl: seratoLiveUrlEdit || undefined,
-          livePlaylistSources: [
-            { id: "serato-a", name: "Serato A", djName: seratoDjName || undefined, type: "serato", url: seratoLiveUrlEdit, active: Boolean(seratoLiveUrlEdit) },
-            { id: "serato-b", name: "Serato B", djName: serato2DjName || undefined, type: "serato", url: seratoLiveUrl2Edit, active: Boolean(seratoLiveUrl2Edit) },
-            { id: "rekordbox", name: "Rekordbox", djName: rekordboxDjName || undefined, type: "rekordbox", url: rekordboxLiveUrlEdit, active: Boolean(rekordboxLiveUrlEdit || rekordboxDjName) },
-          ],
+          livePlaylistSources: buildEditedLiveSources(),
           rekordboxLiveUrl: rekordboxLiveUrlEdit || undefined,
         },
         session.idToken,
@@ -441,11 +461,7 @@ export function AdminPage() {
           djBrandName: eventDetails.djBrandName,
           seratoLiveUrl: seratoLiveUrlEdit || undefined,
           rekordboxLiveUrl: rekordboxLiveUrlEdit || undefined,
-          livePlaylistSources: [
-            { id: "serato-a", name: "Serato A", djName: seratoDjName || undefined, type: "serato", url: seratoLiveUrlEdit, active: Boolean(seratoLiveUrlEdit) },
-            { id: "serato-b", name: "Serato B", djName: serato2DjName || undefined, type: "serato", url: seratoLiveUrl2Edit, active: Boolean(seratoLiveUrl2Edit) },
-            { id: "rekordbox", name: "Rekordbox", djName: rekordboxDjName || undefined, type: "rekordbox", url: rekordboxLiveUrlEdit, active: Boolean(rekordboxLiveUrlEdit || rekordboxDjName) },
-          ],
+          livePlaylistSources: buildEditedLiveSources(),
           primaryColor: eventDetails.primaryColor,
           secondaryColor: eventDetails.secondaryColor,
           accentColor: eventDetails.accentColor,
@@ -822,6 +838,7 @@ export function AdminPage() {
                 { label: "Serato A", sourceId: "serato-a", nameSt: seratoDjName, setName: setSeratoDjName, urlSt: seratoLiveUrlEdit, setUrl: setSeratoLiveUrlEdit, namePh: "DJ name (e.g. Slim Timmy)", urlPh: "Serato Live URL" },
                 { label: "Serato B", sourceId: "serato-b", nameSt: serato2DjName, setName: setSerato2DjName, urlSt: seratoLiveUrl2Edit, setUrl: setSeratoLiveUrl2Edit, namePh: "DJ name (e.g. Turner02)", urlPh: "Serato Live URL #2" },
                 { label: "DJ Bridge (Rekordbox / Serato)", sourceId: "rekordbox", nameSt: rekordboxDjName, setName: setRekordboxDjName, urlSt: rekordboxLiveUrlEdit, setUrl: setRekordboxLiveUrlEdit, namePh: "DJ name", urlPh: "Playlist URL (leave blank for Bridge)" },
+                { label: "DJ Bridge 2 (Rekordbox / Serato)", sourceId: ACQXAH_SOURCE_ID, nameSt: acqxahDjName, setName: setAcqxahDjName, urlSt: acqxahLiveUrlEdit, setUrl: setAcqxahLiveUrlEdit, namePh: "DJ name (e.g. DJ Acqxah)", urlPh: "Playlist URL (leave blank for Bridge)" },
               ].map((src) => (
                 <div key={src.sourceId} className="space-y-1">
                   <div className="flex items-center gap-2">
