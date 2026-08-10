@@ -148,7 +148,7 @@ jobs:
 
       - name: Invalidate CloudFront cache
         run: |
-          DIST_ID="${{ needs.deploy-infrastructure.outputs.distribution }}"
+          DIST_ID="${{ needs.deploy-infrastructure.outputs.distribution-id }}"
           if [ -n "$DIST_ID" ] && [ "$DIST_ID" != "None" ]; then
             aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
           fi
