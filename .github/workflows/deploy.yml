@@ -104,6 +104,7 @@ jobs:
           test -n "$DIST_ID"
           echo "bucket=${BUCKET}" >> "$GITHUB_OUTPUT"
           echo "distribution=${DIST_ID}" >> "$GITHUB_OUTPUT"
+        working-directory: infrastructure
 
   deploy-frontend:
     runs-on: ubuntu-latest
