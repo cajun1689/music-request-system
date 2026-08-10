@@ -10,6 +10,8 @@ import { toDisplayTitleCase } from "../utils/formatting";
 import { GENRE_LABELS, GENRE_VOTE_THRESHOLD, getAvailableGenres, normalizeGenreVotes } from "../utils/genreVotes";
 import { comparePriority } from "../utils/priority";
 
+const STRIPE_ENABLED = import.meta.env.VITE_STRIPE_ENABLED === "true";
+
 interface LibraryTrack {
   title: string;
   artist: string;
@@ -23,7 +25,10 @@ function computeEnergy(requests: RequestRecord[]): number {
   const tenMinAgo = now - 10 * 60 * 1000;
   const recent = requests.filter((r) => new Date(r.submittedAt).getTime() > tenMinAgo);
   const velocity = Math.min(recent.length / 20, 1);
-  const tipVolume = requests.reduce((sum, r) => sum + (r.tipAmount ?? 0), 0);
+  const tipVolume = requests.reduce(
+    (sum, r) => sum + (r.paymentStatus === "verified" ? (r.tipAmount ?? 0) : 0),
+    0,
+  );
   const tipScore = Math.min(tipVolume / 50, 1);
   const upvoteScore = Math.min(
     requests.reduce((sum, r) => sum + (r.upvotes ?? 0), 0) / 30,
@@ -79,7 +84,7 @@ export function RequestPage() {
   }
 
   async function resumeStripeCheckout() {
-    if (!eventId || !trackedRequest?.tipAmount) return;
+    if (!STRIPE_ENABLED || !eventId || !trackedRequest?.tipAmount) return;
     setResumingStripe(true);
     setFeedback(null);
     try {
@@ -581,7 +586,9 @@ export function RequestPage() {
           <p className="text-sm font-semibold text-indigo-300">Tip to prioritize your request (optional)</p>
           <p className="mt-1 text-xs text-indigo-100/90">
             {isSaasEvent
-              ? "Pay securely with Stripe. Successful tips are verified automatically."
+              ? STRIPE_ENABLED
+                ? "Pay securely with Stripe. Successful tips are verified automatically."
+                : "Tips are temporarily unavailable. You can still send your song request for free."
               : "Send a tip to bump your request to the top. DJs verify paid requests in their queue."}
           </p>
           <label className="mt-2 block text-sm">
@@ -594,6 +601,7 @@ export function RequestPage() {
               placeholder="0.00"
               value={tipAmount}
               onChange={(e) => setTipAmount(e.target.value)}
+              disabled={isSaasEvent && !STRIPE_ENABLED}
             />
           </label>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -601,7 +609,7 @@ export function RequestPage() {
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-md bg-violet-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-60"
-                disabled={submitting || !tipAmount || Number(tipAmount) <= 0}
+                disabled={!STRIPE_ENABLED || submitting || !tipAmount || Number(tipAmount) <= 0}
                 onClick={() => {
                   void (async () => {
                     if (!eventId || !eventData) {
@@ -646,7 +654,7 @@ export function RequestPage() {
                   })();
                 }}
               >
-                Pay securely with Stripe
+                {STRIPE_ENABLED ? "Pay securely with Stripe" : "Tips coming soon"}
               </button>
             ) : (
               <>
@@ -767,7 +775,9 @@ export function RequestPage() {
           </div>
           <p className="mt-2 text-[11px] text-indigo-100/70">
             {isSaasEvent
-              ? "Checkout opens on Stripe. Your request is saved before you leave this page."
+              ? STRIPE_ENABLED
+                ? "Checkout opens on Stripe. Your request is saved before you leave this page."
+                : "Stripe checkout will be enabled soon."
               : "Venmo opens the app to send a manual tip (DJs verify it). PayPal / Card checks out instantly and auto-verifies your request."}
           </p>
         </div>
@@ -811,7 +821,8 @@ export function RequestPage() {
           ) : trackedRequest.paymentStatus === "rejected" ? (
             <p className="mt-2 text-xs text-rose-300">The tip was not completed. Your song request is still saved.</p>
           ) : null}
-          {isSaasEvent
+          {STRIPE_ENABLED
+          && isSaasEvent
           && trackedRequest.tipAmount
           && ["pending_verification", "rejected"].includes(trackedRequest.paymentStatus ?? "") ? (
             <button

@@ -41,8 +41,10 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
         run: |
-          test -n "$STRIPE_SECRET_KEY"
-          test -n "$STRIPE_WEBHOOK_SECRET"
+          if [ -z "$STRIPE_SECRET_KEY" ] || [ -z "$STRIPE_WEBHOOK_SECRET" ]; then
+            echo "Stripe is not configured; deploying with SaaS billing and tips disabled."
+            exit 0
+          fi
           aws ssm put-parameter \
             --name "/music-request/prod/stripe-secret-key" \
             --type SecureString \
@@ -130,6 +132,7 @@ jobs:
           VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           VITE_SENTRY_ENV: production
           VITE_RELEASE: ${{ github.sha }}
+          VITE_STRIPE_ENABLED: ${{ secrets.STRIPE_SECRET_KEY != '' && secrets.STRIPE_WEBHOOK_SECRET != '' && secrets.STRIPE_DJ_PRICE_ID != '' && secrets.STRIPE_ORGANIZATION_PRICE_ID != '' }}
 
       - name: Determine S3 bucket
         id: bucket

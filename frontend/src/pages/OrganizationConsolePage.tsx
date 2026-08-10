@@ -13,6 +13,8 @@ import type {
   StripeConnectStatus,
 } from "../types";
 
+const STRIPE_ENABLED = import.meta.env.VITE_STRIPE_ENABLED === "true";
+
 const initialEvent = {
   name: "",
   date: new Date().toISOString().slice(0, 10),
@@ -125,7 +127,9 @@ export function OrganizationConsolePage() {
       api.getOrganizationMembers(activeOrganizationId, session.idToken),
       api.getOrganizationEvents(activeOrganizationId, session.idToken),
       api.getBridgeDevices(activeOrganizationId, session.idToken),
-      api.getStripeConnectStatus(activeOrganizationId, session.idToken).catch(() => null),
+      STRIPE_ENABLED
+        ? api.getStripeConnectStatus(activeOrganizationId, session.idToken).catch(() => null)
+        : Promise.resolve(null),
     ])
       .then(([nextOrganization, memberResult, eventResult, deviceResult, connectResult]) => {
         if (cancelled) return;
@@ -185,7 +189,11 @@ export function OrganizationConsolePage() {
         accentColor: "#f97316",
       });
       setOrgForm({ name: "", slug: "", planId: "dj" });
-      setNotice("Workspace created. Next, choose a plan and connect payouts.");
+      setNotice(
+        STRIPE_ENABLED
+          ? "Workspace created. Next, choose a plan and connect payouts."
+          : "Workspace created. Billing and payouts will be available soon.",
+      );
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
@@ -226,7 +234,7 @@ export function OrganizationConsolePage() {
   }
 
   async function openCheckout(kind: "checkout" | "portal", planId = selectedPlan) {
-    if (!session || !activeOrganizationId) return;
+    if (!STRIPE_ENABLED || !session || !activeOrganizationId) return;
     setBusy(kind);
     setNotice("");
     try {
@@ -242,7 +250,7 @@ export function OrganizationConsolePage() {
   }
 
   async function startConnect() {
-    if (!session || !activeOrganizationId) return;
+    if (!STRIPE_ENABLED || !session || !activeOrganizationId) return;
     setBusy("connect");
     setNotice("");
     try {
@@ -255,7 +263,7 @@ export function OrganizationConsolePage() {
   }
 
   async function refreshConnect() {
-    if (!session || !activeOrganizationId) return;
+    if (!STRIPE_ENABLED || !session || !activeOrganizationId) return;
     setBusy("connect-status");
     try {
       setConnect(await api.getStripeConnectStatus(activeOrganizationId, session.idToken));
@@ -623,7 +631,9 @@ export function OrganizationConsolePage() {
             <div className="grid gap-5 lg:grid-cols-2">
               <Card title="Activate your plan" eyebrow="Step 2 of 4">
                 <p className="text-sm leading-6 text-slate-400">
-                  Subscription billing unlocks SaaS events, team access, and Stripe-powered guest tips.
+                  {STRIPE_ENABLED
+                    ? "Subscription billing unlocks SaaS events, team access, and Stripe-powered guest tips."
+                    : "Online subscription billing is coming soon. Your trial workspace remains available in the meantime."}
                 </p>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   {([
@@ -649,17 +659,19 @@ export function OrganizationConsolePage() {
                   {!subscriptionActive ? (
                     <button
                       onClick={() => void openCheckout("checkout", selectedPlan)}
-                      disabled={busy === "checkout"}
+                      disabled={!STRIPE_ENABLED || busy === "checkout"}
                       className="rounded-xl bg-orange-400 px-4 py-2.5 font-semibold text-orange-950 disabled:opacity-60"
                     >
-                      {busy === "checkout"
+                      {!STRIPE_ENABLED
+                        ? "Billing coming soon"
+                        : busy === "checkout"
                         ? "Opening..."
                         : `Start ${selectedPlan === "dj" ? "$25 DJ" : "$100 organization"} plan`}
                     </button>
                   ) : null}
                   <button
                     onClick={() => void openCheckout("portal")}
-                    disabled={busy === "portal"}
+                    disabled={!STRIPE_ENABLED || busy === "portal"}
                     className="rounded-xl border border-slate-700 px-4 py-2.5 font-semibold disabled:opacity-60"
                   >
                     Manage billing
@@ -669,15 +681,19 @@ export function OrganizationConsolePage() {
 
               <Card title="Connect your payouts" eyebrow="Step 3 of 4">
                 <p className="text-sm leading-6 text-slate-400">
-                  Stripe Connect sends guest tips to your verified payout account. Casper Requests never sees bank credentials.
+                  {STRIPE_ENABLED
+                    ? "Stripe Connect sends guest tips to your verified payout account. Casper Requests never sees bank credentials."
+                    : "Stripe payouts are coming soon. No payout or bank information is required during the preview."}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     onClick={() => void startConnect()}
-                    disabled={busy === "connect" || !subscriptionActive}
+                    disabled={!STRIPE_ENABLED || busy === "connect" || !subscriptionActive}
                     className="rounded-xl bg-sky-400 px-4 py-2.5 font-semibold text-sky-950 disabled:opacity-60"
                   >
-                    {!subscriptionActive
+                    {!STRIPE_ENABLED
+                      ? "Payouts coming soon"
+                      : !subscriptionActive
                       ? "Activate a plan first"
                       : connectStatus === "active"
                         ? "Manage payout account"
@@ -685,7 +701,7 @@ export function OrganizationConsolePage() {
                   </button>
                   <button
                     onClick={() => void refreshConnect()}
-                    disabled={busy === "connect-status"}
+                    disabled={!STRIPE_ENABLED || busy === "connect-status"}
                     className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
                   >
                     Refresh status
