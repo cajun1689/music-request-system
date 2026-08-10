@@ -12,6 +12,7 @@ export function OverlayPage() {
   const { eventId } = useParams();
   const { grouped } = useRequests(eventId, "overlay");
   const [eventData, setEventData] = useState<EventRecord | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (!eventId) {
@@ -35,6 +36,11 @@ export function OverlayPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   if (!eventData) {
     return null;
   }
@@ -42,7 +48,6 @@ export function OverlayPage() {
   const genreTickerItem = buildGenreTickerItem(eventData);
   const promoItems = [...(genreTickerItem ? [genreTickerItem] : []), ...activeTickerText(eventData.tickerPromotions)];
   const SHOUTOUT_TTL_MS = 30 * 60 * 1000;
-  const now = Date.now();
 
   function isShoutoutLive(req: { shoutoutApproved?: boolean; shoutoutApprovedAt?: string; submittedAt: string }) {
     if (!req.shoutoutApproved) return false;

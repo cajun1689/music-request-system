@@ -234,7 +234,8 @@ export function AdminPage() {
     setMessage("");
     try {
       const existing = await api.getEventBySlug(GASLIGHT_SLUG, session.idToken);
-      setEventData(existing);
+      const fullEvent = await api.getAdminEvent(existing.eventId, session.idToken);
+      setEventData(fullEvent);
       localStorage.setItem("activeEventId", existing.eventId);
       setMessage("Loaded Gaslight residency event.");
     } catch {
@@ -288,7 +289,8 @@ export function AdminPage() {
     setMessage("");
     try {
       const existing = await api.getEventBySlug(BDL_SLUG, session.idToken);
-      setEventData(existing);
+      const fullEvent = await api.getAdminEvent(existing.eventId, session.idToken);
+      setEventData(fullEvent);
       localStorage.setItem("activeEventId", existing.eventId);
       setMessage("Loaded BDL residency event.");
     } catch {
@@ -389,7 +391,7 @@ export function AdminPage() {
     setSaving(true);
     setMessage("");
     try {
-      const loaded = await api.getEvent(id);
+      const loaded = await api.getAdminEvent(id, session.idToken);
       setEventData(loaded);
       setLookupEventId(id);
       localStorage.setItem("activeEventId", loaded.eventId);

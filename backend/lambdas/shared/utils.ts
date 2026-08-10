@@ -10,12 +10,23 @@ export const env = {
   eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
   requestsTableName: process.env.REQUESTS_TABLE_NAME ?? "",
   connectionsTableName: process.env.CONNECTIONS_TABLE_NAME ?? "",
+  organizationsTableName: process.env.ORGANIZATIONS_TABLE_NAME ?? "",
+  membershipsTableName: process.env.MEMBERSHIPS_TABLE_NAME ?? "",
+  invitationsTableName: process.env.INVITATIONS_TABLE_NAME ?? "",
+  bridgeDevicesTableName: process.env.BRIDGE_DEVICES_TABLE_NAME ?? "",
+  billingEventsTableName: process.env.BILLING_EVENTS_TABLE_NAME ?? "",
+  usageCountersTableName: process.env.USAGE_COUNTERS_TABLE_NAME ?? "",
   brandAssetsBucketName: process.env.BRAND_ASSETS_BUCKET_NAME ?? "",
   websocketEndpoint: process.env.WEBSOCKET_ENDPOINT ?? "",
   paypalClientId: process.env.PAYPAL_CLIENT_ID ?? "",
   paypalClientSecret: process.env.PAYPAL_CLIENT_SECRET ?? "",
   paypalEnvironment: process.env.PAYPAL_ENVIRONMENT ?? "sandbox",
   paypalWebhookId: process.env.PAYPAL_WEBHOOK_ID ?? "",
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+  stripeDjPriceId: process.env.STRIPE_DJ_PRICE_ID ?? process.env.STRIPE_PRICE_ID ?? "",
+  stripeOrganizationPriceId: process.env.STRIPE_ORGANIZATION_PRICE_ID ?? "",
+  appBaseUrl: process.env.APP_BASE_URL ?? "https://casperrequests.com",
 };
 
 export function json(statusCode: number, body: unknown) {
@@ -24,7 +35,7 @@ export function json(statusCode: number, body: unknown) {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Content-Type,Authorization,x-push-token",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization,x-push-token,x-device-id,stripe-signature",
       "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
     },
     body: JSON.stringify(body),

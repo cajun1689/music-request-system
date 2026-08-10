@@ -3,6 +3,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { randomUUID } from "node:crypto";
 import { env, json, parseBody } from "../shared/utils";
+import { requireEventAccess, authorizationResponse } from "../shared/tenancy";
 
 const s3Client = new S3Client({});
 
@@ -18,9 +19,18 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   if (!eventId || !input?.contentType) {
     return json(400, { error: "eventId and contentType are required" });
   }
+  let organizationId: string | undefined;
+  try {
+    const access = await requireEventAccess(event, eventId, ["owner", "admin"]);
+    organizationId = access.eventRecord.organizationId;
+  } catch (error) {
+    return authorizationResponse(error);
+  }
 
   const extension = input.extension?.replace(/[^a-zA-Z0-9]/g, "") || "png";
-  const key = `events/${eventId}/${randomUUID()}.${extension}`;
+  const key = organizationId
+    ? `organizations/${organizationId}/events/${eventId}/${randomUUID()}.${extension}`
+    : `events/${eventId}/${randomUUID()}.${extension}`;
   const assetUrl = `https://${env.brandAssetsBucketName}.s3.amazonaws.com/${key}`;
 
   if (input.fileBase64) {

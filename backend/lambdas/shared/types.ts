@@ -1,6 +1,102 @@
 export type RequestStatus = "pending" | "approved" | "vetoed" | "played" | "archived";
 export type PaymentStatus = "unpaid" | "pending_verification" | "verified" | "rejected";
 export type GenreName = "hip_hop" | "country" | "edm" | "alternative_rock";
+export type AccountMode = "legacy" | "saas";
+export type OrganizationRole = "owner" | "admin" | "dj";
+export type SaasPlanId = "dj" | "organization";
+export type SubscriptionStatus =
+  | "incomplete"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "unpaid";
+
+export interface OrganizationEntitlements {
+  maxActiveEvents: number;
+  maxMembers: number;
+  maxBridgeDevices: number;
+  maxLibraryTracks: number;
+  maxWebsocketConnections: number;
+  retentionDays: number;
+  monthlyAiRequests: number;
+}
+
+export interface OrganizationBranding {
+  logoUrl?: string;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+}
+
+export interface OrganizationDefaults {
+  djBrandName?: string;
+  venueName?: string;
+}
+
+export interface OrganizationRecord {
+  organizationId: string;
+  slug: string;
+  name: string;
+  accountMode: AccountMode;
+  accountStatus?: "active" | "suspended" | "deletion_pending";
+  ownerUserId: string;
+  memberCount?: number;
+  branding: OrganizationBranding;
+  defaults: OrganizationDefaults;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  stripeSubscriptionEventCreatedAt?: number;
+  stripeConnectedAccountId?: string;
+  stripeConnectDetailsSubmitted?: boolean;
+  stripeConnectChargesEnabled?: boolean;
+  stripeConnectPayoutsEnabled?: boolean;
+  stripeConnectEventCreatedAt?: number;
+  subscriptionStatus?: SubscriptionStatus;
+  planId?: SaasPlanId | "legacy";
+  trialEndsAt?: string;
+  gracePeriodEndsAt?: string;
+  deletionRequestedAt?: string;
+  deletionScheduledAt?: string;
+  entitlements: OrganizationEntitlements;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrganizationMembershipRecord {
+  organizationId: string;
+  userId: string;
+  email: string;
+  role: OrganizationRole;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrganizationInvitationRecord {
+  invitationId: string;
+  organizationId: string;
+  email: string;
+  role: OrganizationRole;
+  tokenHash: string;
+  invitedBy: string;
+  expiresAt: number;
+  acceptedAt?: string;
+  createdAt: string;
+}
+
+export interface BridgeDeviceRecord {
+  deviceId: string;
+  organizationId: string;
+  eventId: string;
+  sourceId: string;
+  name: string;
+  tokenHash: string;
+  status: "active" | "revoked";
+  lastSeenAt?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface GenreVotes {
   hip_hop: number;
@@ -44,6 +140,9 @@ export interface TickerPromotion {
 
 export interface EventRecord {
   eventId: string;
+  organizationId?: string;
+  accountMode?: AccountMode;
+  createdBy?: string;
   name: string;
   slug?: string;
   isRecurring?: boolean;
@@ -81,6 +180,7 @@ export interface EventRecord {
 export interface RequestRecord {
   eventId: string;
   requestId: string;
+  organizationId?: string;
   songTitle: string;
   artistName: string;
   requesterName?: string;
@@ -100,6 +200,9 @@ export interface RequestRecord {
   tipAmount?: number;
   venmoHandle?: string;
   paymentReference?: string;
+  stripePaymentAttemptId?: string;
+  paymentFailureReason?: "failed" | "refunded";
+  paymentUpdatedAt?: string;
   paymentVerifiedBy?: string;
   paidAt?: string;
   position?: number;

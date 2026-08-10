@@ -3,17 +3,35 @@ import type { Session } from "../types";
 
 const STORAGE_KEY = "dj_music_request_session";
 
+interface CognitoSessionLike {
+  isValid: () => boolean;
+  getIdToken: () => { getJwtToken: () => string };
+}
+
 async function getCognitoSdk() {
   return import("amazon-cognito-identity-js");
 }
 
+async function getUserPool() {
+  const { CognitoUserPool } = await getCognitoSdk();
+  return new CognitoUserPool({
+    UserPoolId: config.userPoolId,
+    ClientId: config.userPoolClientId,
+  });
+}
+
+async function getCognitoUser(email: string) {
+  const { CognitoUser } = await getCognitoSdk();
+  return new CognitoUser({
+    Username: email.trim().toLowerCase(),
+    Pool: await getUserPool(),
+  });
+}
+
 export const auth = {
   async login(email: string, password: string): Promise<Session> {
-    const { AuthenticationDetails, CognitoUser, CognitoUserPool } = await getCognitoSdk();
-    const userPool = new CognitoUserPool({
-      UserPoolId: config.userPoolId,
-      ClientId: config.userPoolClientId,
-    });
+    const { AuthenticationDetails, CognitoUser } = await getCognitoSdk();
+    const userPool = await getUserPool();
 
     const cognitoUser = new CognitoUser({
       Username: email,
@@ -44,7 +62,75 @@ export const auth = {
     });
   },
 
+  async signUp(email: string, password: string) {
+    const { CognitoUserAttribute } = await getCognitoSdk();
+    const userPool = await getUserPool();
+    const normalizedEmail = email.trim().toLowerCase();
+    const attributes = [new CognitoUserAttribute({ Name: "email", Value: normalizedEmail })];
+
+    return new Promise<{ userConfirmed: boolean; userSub?: string }>((resolve, reject) => {
+      userPool.signUp(normalizedEmail, password, attributes, [], (error, result) => {
+        if (error || !result) {
+          reject(error ?? new Error("Unable to create account."));
+          return;
+        }
+        resolve({
+          userConfirmed: result.userConfirmed,
+          userSub: result.userSub,
+        });
+      });
+    });
+  },
+
+  async confirmSignUp(email: string, code: string) {
+    const user = await getCognitoUser(email);
+    return new Promise<void>((resolve, reject) => {
+      user.confirmRegistration(code.trim(), true, (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  },
+
+  async resendConfirmationCode(email: string) {
+    const user = await getCognitoUser(email);
+    return new Promise<void>((resolve, reject) => {
+      user.resendConfirmationCode((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  },
+
+  async requestPasswordReset(email: string) {
+    const user = await getCognitoUser(email);
+    return new Promise<void>((resolve, reject) => {
+      user.forgotPassword({
+        onSuccess: () => resolve(),
+        onFailure: reject,
+        inputVerificationCode: () => resolve(),
+      });
+    });
+  },
+
+  async confirmPasswordReset(email: string, code: string, newPassword: string) {
+    const user = await getCognitoUser(email);
+    return new Promise<void>((resolve, reject) => {
+      user.confirmPassword(code.trim(), newPassword, {
+        onSuccess: () => resolve(),
+        onFailure: reject,
+      });
+    });
+  },
+
   logout() {
+    void getUserPool().then((pool) => pool.getCurrentUser()?.signOut());
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -72,18 +158,14 @@ export const auth = {
   },
 
   async getValidSession(): Promise<Session | null> {
-    const { CognitoUserPool } = await getCognitoSdk();
-    const userPool = new CognitoUserPool({
-      UserPoolId: config.userPoolId,
-      ClientId: config.userPoolClientId,
-    });
+    const userPool = await getUserPool();
     const currentUser = userPool.getCurrentUser();
     if (!currentUser) {
       return this.getSession();
     }
 
     return new Promise((resolve) => {
-      currentUser.getSession((err: unknown, cognitoSession: any) => {
+      currentUser.getSession((err: unknown, cognitoSession: CognitoSessionLike | null) => {
         if (err || !cognitoSession?.isValid?.()) {
           resolve(this.getSession());
           return;

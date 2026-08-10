@@ -2,6 +2,7 @@ import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import type { RequestRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
+import { requireEventAccess, authorizationResponse } from "../shared/tenancy";
 
 interface DetectPlayedInput {
   playedTitle: string;
@@ -123,6 +124,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   if (!eventId) {
     return json(400, { error: "eventId is required" });
+  }
+  try {
+    await requireEventAccess(event, eventId);
+  } catch (error) {
+    return authorizationResponse(error);
   }
   const input = parseBody<DetectPlayedInput>(event.body);
   if (!input?.playedTitle?.trim()) {

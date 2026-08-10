@@ -14,10 +14,32 @@ export function initSentry(): void {
     environment: (import.meta.env.VITE_SENTRY_ENV as string | undefined) ?? import.meta.env.MODE,
     release: (import.meta.env.VITE_RELEASE as string | undefined) ?? undefined,
     enabled: import.meta.env.PROD,
-    integrations: [Sentry.browserTracingIntegration(), Sentry.replayIntegration({ maskAllText: false, blockAllMedia: true })],
+    integrations: [
+      Sentry.browserTracingIntegration(),
+      Sentry.replayIntegration({
+        maskAllText: true,
+        maskAllInputs: true,
+        blockAllMedia: true,
+      }),
+    ],
     tracesSampleRate: 0.1,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 1.0,
+    beforeSend(event) {
+      if (event.request?.headers) {
+        delete event.request.headers.Authorization;
+        delete event.request.headers.authorization;
+        delete event.request.headers.Cookie;
+        delete event.request.headers.cookie;
+      }
+      if (event.request?.url) {
+        event.request.url = event.request.url.replace(
+          /\/invitations?\/[^/?#]+/g,
+          "/invitations/[redacted]",
+        );
+      }
+      return event;
+    },
     ignoreErrors: [
       "ResizeObserver loop limit exceeded",
       "Non-Error promise rejection captured",

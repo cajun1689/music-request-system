@@ -1,8 +1,10 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { SaasAuthShell } from "../components/SaasAuthShell";
 import { useAuth } from "../context/AuthContext";
+import { api } from "../services/api";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -12,14 +14,21 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const requestedFrom = (location.state as { from?: string } | null)?.from;
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError(null);
     try {
-      await login(email, password);
-      const from = (location.state as { from?: string } | null)?.from ?? "/admin";
+      const nextSession = await login(email, password);
+      let from = requestedFrom;
+      if (!from) {
+        const result = await api.getOrganizations(nextSession.idToken);
+        from = result.organizations.some((organization) => organization.accountMode === "legacy")
+          ? "/admin"
+          : "/console";
+      }
       navigate(from, { replace: true });
     } catch (err) {
       setError((err as Error).message);
@@ -30,28 +39,33 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+    <SaasAuthShell title="Welcome back" subtitle="Sign in to manage your events, team, requests, and payouts.">
       <title>Sign In — Casper Requests</title>
-      <form onSubmit={onSubmit} className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6">
-        <h1 className="text-2xl font-bold text-white">DJ/Admin Login</h1>
-        <p className="mt-1 text-sm text-slate-300">Use your Cognito credentials.</p>
-        <label className="mt-5 block text-sm text-slate-200">
+      <form onSubmit={onSubmit}>
+        <label className="block text-sm font-medium text-slate-200">
           Email
           <input
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-slate-100 outline-none transition focus:border-orange-400"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
             required
           />
         </label>
-        <label className="mt-3 block text-sm text-slate-200">
-          Password
+        <label className="mt-4 block text-sm font-medium text-slate-200">
+          <span className="flex items-center justify-between">
+            Password
+            <Link to="/forgot-password" className="text-xs text-orange-300 hover:text-orange-200">
+              Forgot password?
+            </Link>
+          </span>
           <input
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2.5 text-slate-100 outline-none transition focus:border-orange-400"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
             required
           />
         </label>
@@ -59,11 +73,21 @@ export function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="mt-5 w-full rounded-lg bg-orange-400 px-4 py-2 font-semibold text-orange-950 disabled:opacity-60"
+          className="mt-6 w-full rounded-xl bg-orange-400 px-4 py-2.5 font-semibold text-orange-950 transition hover:bg-orange-300 disabled:opacity-60"
         >
           {loading ? "Signing in..." : "Sign In"}
         </button>
+        <p className="mt-5 text-center text-sm text-slate-400">
+          New to Casper Requests?{" "}
+          <Link
+            to="/signup"
+            state={{ from: requestedFrom }}
+            className="font-semibold text-orange-300 hover:text-orange-200"
+          >
+            Create an account
+          </Link>
+        </p>
       </form>
-    </div>
+    </SaasAuthShell>
   );
 }

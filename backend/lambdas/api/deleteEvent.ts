@@ -1,18 +1,25 @@
 import { DeleteCommand, QueryCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
+import type { QueryCommandOutput } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { docClient, env, json } from "../shared/utils";
+import { requireEventAccess, authorizationResponse } from "../shared/tenancy";
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   if (!eventId) {
     return json(400, { error: "eventId is required" });
   }
+  try {
+    await requireEventAccess(event, eventId, ["owner"]);
+  } catch (error) {
+    return authorizationResponse(error);
+  }
 
   // Delete associated requests in batches of 25 (DynamoDB limit)
   let deletedRequests = 0;
   let lastKey: Record<string, unknown> | undefined;
   do {
-    const result = await docClient.send(
+    const result: QueryCommandOutput = await docClient.send(
       new QueryCommand({
         TableName: env.requestsTableName,
         KeyConditionExpression: "eventId = :eid",
@@ -22,9 +29,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       }),
     );
 
-    const items = result.Items ?? [];
+    const items: Array<Record<string, unknown>> = result.Items ?? [];
     if (items.length > 0) {
-      const chunks: typeof items[] = [];
+      const chunks: Array<Array<Record<string, unknown>>> = [];
       for (let i = 0; i < items.length; i += 25) {
         chunks.push(items.slice(i, i + 25));
       }

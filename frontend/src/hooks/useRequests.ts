@@ -4,7 +4,11 @@ import type { RequestRecord, RequestStatus } from "../types";
 import { comparePriority } from "../utils/priority";
 import { useWebSocket } from "./useWebSocket";
 
-export function useRequests(eventId: string | undefined, role: "dj" | "overlay") {
+export function useRequests(
+  eventId: string | undefined,
+  role: "dj" | "overlay",
+  token?: string,
+) {
   const [requests, setRequests] = useState<RequestRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -13,14 +17,28 @@ export function useRequests(eventId: string | undefined, role: "dj" | "overlay")
       return;
     }
     setLoading(true);
-    const data = await api.getRequests(eventId);
+    const data = role === "dj" && token
+      ? await api.getAdminRequests(eventId, token)
+      : await api.getRequests(eventId);
     setRequests(data);
     setLoading(false);
-  }, [eventId]);
+  }, [eventId, role, token]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (!eventId) return;
+    let cancelled = false;
+    const request = role === "dj" && token
+      ? api.getAdminRequests(eventId, token)
+      : api.getRequests(eventId);
+    void request.then((data) => {
+      if (cancelled) return;
+      setRequests(data);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId, role, token]);
 
   useWebSocket(eventId, role, (payload) => {
     const parsed = payload as { type?: string; action?: string; data?: RequestRecord };
@@ -32,10 +50,16 @@ export function useRequests(eventId: string | undefined, role: "dj" | "overlay")
       setRequests((prev) => {
         const existing = prev.find((entry) => entry.requestId === parsed.data?.requestId);
         if (!existing) {
+          if (role === "dj" && token) {
+            void api.getAdminRequests(eventId!, token).then(setRequests);
+            return prev;
+          }
           return [parsed.data as RequestRecord, ...prev];
         }
         return prev.map((entry) =>
-          entry.requestId === parsed.data?.requestId ? (parsed.data as RequestRecord) : entry,
+          entry.requestId === parsed.data?.requestId
+            ? { ...entry, ...(parsed.data as RequestRecord) }
+            : entry,
         );
       });
     }

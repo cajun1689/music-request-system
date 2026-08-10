@@ -23,9 +23,11 @@ import {
   aws_s3_deployment as s3deploy,
   aws_sns as sns,
   aws_sns_subscriptions as snsSubscriptions,
+  aws_sqs as sqs,
   aws_events as events,
   aws_events_targets as targets,
   aws_ssm as ssm,
+  aws_wafv2 as wafv2,
 } from "aws-cdk-lib";
 import { Construct } from "constructs";
 
@@ -45,7 +47,11 @@ export class InfrastructureStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    const customDomainNames = ["casperrequests.com", "www.casperrequests.com"];
+    const deploymentStage = process.env.DEPLOY_STAGE?.trim() || "prod";
+    const isProduction = deploymentStage === "prod";
+    const customDomainNames = isProduction
+      ? ["casperrequests.com", "www.casperrequests.com"]
+      : [];
     const cloudFrontCertificateArn =
       "arn:aws:acm:us-east-1:285633211360:certificate/0271c9cf-1aff-4180-8c14-7137c169b8da";
 
@@ -58,6 +64,11 @@ export class InfrastructureStack extends Stack {
     eventsTable.addGlobalSecondaryIndex({
       indexName: "slug-index",
       partitionKey: { name: "slug", type: dynamodb.AttributeType.STRING },
+    });
+    eventsTable.addGlobalSecondaryIndex({
+      indexName: "organizationId-createdAt-index",
+      partitionKey: { name: "organizationId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
     });
 
     const requestsTable = new dynamodb.Table(this, "RequestsTable", {
@@ -74,10 +85,16 @@ export class InfrastructureStack extends Stack {
       partitionKey: { name: "eventId", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "status", type: dynamodb.AttributeType.STRING },
     });
+    requestsTable.addGlobalSecondaryIndex({
+      indexName: "organizationId-submittedAt-index",
+      partitionKey: { name: "organizationId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "submittedAt", type: dynamodb.AttributeType.STRING },
+    });
 
     const connectionsTable = new dynamodb.Table(this, "ConnectionsTable", {
       partitionKey: { name: "connectionId", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: "expiresAt",
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
@@ -85,6 +102,83 @@ export class InfrastructureStack extends Stack {
       indexName: "eventId-index",
       partitionKey: { name: "eventId", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "connectionId", type: dynamodb.AttributeType.STRING },
+    });
+
+    const organizationsTable = new dynamodb.Table(this, "OrganizationsTable", {
+      partitionKey: { name: "organizationId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+    organizationsTable.addGlobalSecondaryIndex({
+      indexName: "stripeCustomerId-index",
+      partitionKey: { name: "stripeCustomerId", type: dynamodb.AttributeType.STRING },
+    });
+    organizationsTable.addGlobalSecondaryIndex({
+      indexName: "stripeConnectedAccountId-index",
+      partitionKey: { name: "stripeConnectedAccountId", type: dynamodb.AttributeType.STRING },
+    });
+
+    const membershipsTable = new dynamodb.Table(this, "MembershipsTable", {
+      partitionKey: { name: "organizationId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "userId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+    membershipsTable.addGlobalSecondaryIndex({
+      indexName: "userId-index",
+      partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "organizationId", type: dynamodb.AttributeType.STRING },
+    });
+
+    const invitationsTable = new dynamodb.Table(this, "InvitationsTable", {
+      partitionKey: { name: "invitationId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: "expiresAt",
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+    invitationsTable.addGlobalSecondaryIndex({
+      indexName: "tokenHash-index",
+      partitionKey: { name: "tokenHash", type: dynamodb.AttributeType.STRING },
+    });
+
+    const bridgeDevicesTable = new dynamodb.Table(this, "BridgeDevicesTable", {
+      partitionKey: { name: "deviceId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: "expiresAt",
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+    bridgeDevicesTable.addGlobalSecondaryIndex({
+      indexName: "organizationId-index",
+      partitionKey: { name: "organizationId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
+    });
+
+    const billingEventsTable = new dynamodb.Table(this, "BillingEventsTable", {
+      partitionKey: { name: "eventId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: "expiresAt",
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    const usageCountersTable = new dynamodb.Table(this, "UsageCountersTable", {
+      partitionKey: { name: "scopeId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "counterKey", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: "expiresAt",
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    const asyncFailureQueue = new sqs.Queue(this, "AsyncFailureQueue", {
+      encryption: sqs.QueueEncryption.SQS_MANAGED,
+      retentionPeriod: Duration.days(14),
+      enforceSSL: true,
+      removalPolicy: RemovalPolicy.RETAIN,
     });
 
     const brandAssetsBucket = new s3.Bucket(this, "BrandAssetsBucket", {
@@ -103,13 +197,21 @@ export class InfrastructureStack extends Stack {
           allowedHeaders: ["*"],
         },
       ],
-      removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
+      versioned: true,
+      lifecycleRules: [
+        {
+          noncurrentVersionExpiration: Duration.days(90),
+          abortIncompleteMultipartUploadAfter: Duration.days(7),
+        },
+      ],
+      removalPolicy: RemovalPolicy.RETAIN,
     });
 
     const frontendBucket = new s3.Bucket(this, "FrontendBucket", {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       enforceSSL: true,
+      versioned: true,
+      lifecycleRules: [{ noncurrentVersionExpiration: Duration.days(30) }],
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
@@ -119,12 +221,16 @@ export class InfrastructureStack extends Stack {
         origin: origins.S3BucketOrigin.withOriginAccessControl(frontendBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
       },
-      domainNames: customDomainNames,
-      certificate: acm.Certificate.fromCertificateArn(
-        this,
-        "FrontendCertificate",
-        cloudFrontCertificateArn,
-      ),
+      ...(isProduction
+        ? {
+            domainNames: customDomainNames,
+            certificate: acm.Certificate.fromCertificateArn(
+              this,
+              "FrontendCertificate",
+              cloudFrontCertificateArn,
+            ),
+          }
+        : {}),
       defaultRootObject: "index.html",
       errorResponses: [
         {
@@ -154,8 +260,16 @@ export class InfrastructureStack extends Stack {
     });
 
     const userPool = new cognito.UserPool(this, "DjUserPool", {
-      userPoolName: "dj-music-request-users",
-      selfSignUpEnabled: false,
+      userPoolName: isProduction
+        ? "dj-music-request-users"
+        : `dj-music-request-users-${deploymentStage}`,
+      selfSignUpEnabled: true,
+      autoVerify: { email: true },
+      userVerification: {
+        emailSubject: "Verify your Casper Requests account",
+        emailBody: "Your Casper Requests verification code is {####}",
+        emailStyle: cognito.VerificationEmailStyle.CODE,
+      },
       signInAliases: { email: true },
       passwordPolicy: {
         minLength: 8,
@@ -164,7 +278,8 @@ export class InfrastructureStack extends Stack {
         requireUppercase: true,
         requireSymbols: false,
       },
-      removalPolicy: RemovalPolicy.DESTROY,
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      removalPolicy: RemovalPolicy.RETAIN,
     });
 
     const userPoolClient = new cognito.UserPoolClient(this, "DjUserPoolClient", {
@@ -177,14 +292,14 @@ export class InfrastructureStack extends Stack {
     });
 
     const websocketApi = new apigatewayv2.CfnApi(this, "RequestsWebSocketApi", {
-      name: "dj-requests-websocket",
+      name: isProduction ? "dj-requests-websocket" : `dj-requests-websocket-${deploymentStage}`,
       protocolType: "WEBSOCKET",
       routeSelectionExpression: "$request.body.action",
     });
 
     const websocketStage = new apigatewayv2.CfnStage(this, "RequestsWebSocketStage", {
       apiId: websocketApi.ref,
-      stageName: "prod",
+      stageName: deploymentStage,
       autoDeploy: true,
     });
 
@@ -198,14 +313,27 @@ export class InfrastructureStack extends Stack {
           EVENTS_TABLE_NAME: eventsTable.tableName,
           REQUESTS_TABLE_NAME: requestsTable.tableName,
           CONNECTIONS_TABLE_NAME: connectionsTable.tableName,
+          ORGANIZATIONS_TABLE_NAME: organizationsTable.tableName,
+          MEMBERSHIPS_TABLE_NAME: membershipsTable.tableName,
+          INVITATIONS_TABLE_NAME: invitationsTable.tableName,
+          BRIDGE_DEVICES_TABLE_NAME: bridgeDevicesTable.tableName,
+          BILLING_EVENTS_TABLE_NAME: billingEventsTable.tableName,
+          USAGE_COUNTERS_TABLE_NAME: usageCountersTable.tableName,
           BRAND_ASSETS_BUCKET_NAME: brandAssetsBucket.bucketName,
           WEBSOCKET_ENDPOINT: websocketEndpoint,
+          APP_BASE_URL:
+            process.env.APP_BASE_URL
+            ?? (isProduction
+              ? "https://casperrequests.com"
+              : `https://${distribution.distributionDomainName}`),
         },
       });
 
     const listEventsFn = makeLambda("ListEventsFn", "../../backend/lambdas/api/listEvents.ts");
     const createEventFn = makeLambda("CreateEventFn", "../../backend/lambdas/api/createEvent.ts");
     const getEventFn = makeLambda("GetEventFn", "../../backend/lambdas/api/getEvent.ts");
+    const tenantApiFn = makeLambda("TenantApiFn", "../../backend/lambdas/api/tenantApi.ts");
+    const getAdminEventFn = tenantApiFn;
     const getEventBySlugFn = makeLambda(
       "GetEventBySlugFn",
       "../../backend/lambdas/api/getEventBySlug.ts",
@@ -295,10 +423,48 @@ export class InfrastructureStack extends Stack {
       "CleanupEventsFn",
       "../../backend/lambdas/api/cleanupEvents.ts",
     );
+    const cleanupEventsResource = cleanupEventsFn.node.defaultChild as lambda.CfnFunction;
+    cleanupEventsResource.timeout = 900;
+    cleanupEventsResource.memorySize = 512;
+    const createOrganizationFn = tenantApiFn;
+    const listMyOrganizationsFn = tenantApiFn;
+    const getOrganizationFn = tenantApiFn;
+    const updateOrganizationFn = tenantApiFn;
+    const listOrganizationMembersFn = tenantApiFn;
+    const createOrganizationInvitationFn = tenantApiFn;
+    const acceptOrganizationInvitationFn = tenantApiFn;
+    const listOrganizationEventsFn = tenantApiFn;
+    const createBridgePairingCodeFn = tenantApiFn;
+    const publicSaasApiFn = makeLambda(
+      "PublicSaasApiFn",
+      "../../backend/lambdas/api/publicSaasApi.ts",
+    );
+    const pairBridgeDeviceFn = publicSaasApiFn;
+    const listBridgeDevicesFn = tenantApiFn;
+    const revokeBridgeDeviceFn = tenantApiFn;
+    const createBillingCheckoutFn = tenantApiFn;
+    const createBillingPortalFn = tenantApiFn;
+    const createStripeConnectLinkFn = tenantApiFn;
+    const getStripeConnectStatusFn = tenantApiFn;
+    const createStripeTipCheckoutFn = publicSaasApiFn;
+    const stripeWebhookFn = publicSaasApiFn;
+    const migrateLegacyTenantFn = makeLambda(
+      "MigrateLegacyTenantFn",
+      "../../backend/lambdas/migrations/migrateLegacyTenant.ts",
+    );
+    const migrateLegacyTenantResource =
+      migrateLegacyTenantFn.node.defaultChild as lambda.CfnFunction;
+    migrateLegacyTenantResource.timeout = 900;
+    migrateLegacyTenantResource.memorySize = 512;
 
     new events.Rule(this, "CleanupEventsSchedule", {
       schedule: events.Schedule.rate(Duration.hours(24)),
-      targets: [new targets.LambdaFunction(cleanupEventsFn)],
+      targets: [
+        new targets.LambdaFunction(cleanupEventsFn, {
+          deadLetterQueue: asyncFailureQueue,
+          retryAttempts: 2,
+        }),
+      ],
     });
 
     const sweepPendingPlayedFn = makeLambda(
@@ -310,7 +476,12 @@ export class InfrastructureStack extends Stack {
 
     new events.Rule(this, "SweepPendingPlayedSchedule", {
       schedule: events.Schedule.rate(Duration.minutes(2)),
-      targets: [new targets.LambdaFunction(sweepPendingPlayedFn)],
+      targets: [
+        new targets.LambdaFunction(sweepPendingPlayedFn, {
+          deadLetterQueue: asyncFailureQueue,
+          retryAttempts: 2,
+        }),
+      ],
     });
 
     const nightlyResetFn = makeLambda(
@@ -324,7 +495,12 @@ export class InfrastructureStack extends Stack {
       // 4am Mountain is 10:00 UTC during daylight time and 11:00 UTC during standard time.
       // The Lambda checks America/Denver and no-ops for the non-matching UTC hour.
       schedule: events.Schedule.cron({ minute: "0", hour: "10,11" }),
-      targets: [new targets.LambdaFunction(nightlyResetFn)],
+      targets: [
+        new targets.LambdaFunction(nightlyResetFn, {
+          deadLetterQueue: asyncFailureQueue,
+          retryAttempts: 2,
+        }),
+      ],
     });
 
     const openaiApiKeyParam = ssm.StringParameter.fromSecureStringParameterAttributes(
@@ -363,15 +539,22 @@ export class InfrastructureStack extends Stack {
     eventsTable.grantReadWriteData(createEventFn);
     eventsTable.grantReadWriteData(updateEventFn);
     eventsTable.grantReadData(createRequestFn);
+    organizationsTable.grantReadData(createRequestFn);
+    usageCountersTable.grantReadWriteData(createRequestFn);
     requestsTable.grantReadWriteData(createRequestFn);
     requestsTable.grantReadWriteData(upvoteRequestFn);
+    usageCountersTable.grantReadWriteData(upvoteRequestFn);
     requestsTable.grantReadData(getRequestsFn);
+    eventsTable.grantReadData(getRequestsFn);
+    bridgeDevicesTable.grantReadWriteData(getRequestsFn);
     requestsTable.grantReadWriteData(updateRequestFn);
     requestsTable.grantReadWriteData(resetRequestsFn);
     requestsTable.grantReadWriteData(detectPlayedFn);
     requestsTable.grantReadWriteData(autoDetectPlayedFn);
     requestsTable.grantReadWriteData(createPaypalOrderFn);
+    eventsTable.grantReadData(createPaypalOrderFn);
     requestsTable.grantReadWriteData(capturePaypalOrderFn);
+    eventsTable.grantReadData(capturePaypalOrderFn);
     requestsTable.grantReadWriteData(paypalWebhookFn);
     eventsTable.grantReadWriteData(autoDetectPlayedFn);
     eventsTable.grantReadWriteData(pushTrackFn);
@@ -385,23 +568,126 @@ export class InfrastructureStack extends Stack {
     eventsTable.grantReadWriteData(adminAdjustGenreVotesFn);
     requestsTable.grantStreamRead(requestStreamFn);
     connectionsTable.grantReadWriteData(wsConnectFn);
+    eventsTable.grantReadData(wsConnectFn);
+    organizationsTable.grantReadData(wsConnectFn);
     connectionsTable.grantReadWriteData(wsDisconnectFn);
     connectionsTable.grantReadWriteData(wsSubscribeFn);
+    eventsTable.grantReadData(wsSubscribeFn);
+    organizationsTable.grantReadData(wsSubscribeFn);
     connectionsTable.grantReadWriteData(requestStreamFn);
     eventsTable.grantReadWriteData(deleteEventFn);
     requestsTable.grantReadWriteData(deleteEventFn);
     eventsTable.grantReadWriteData(cleanupEventsFn);
     requestsTable.grantReadWriteData(cleanupEventsFn);
+    organizationsTable.grantReadWriteData(cleanupEventsFn);
+    membershipsTable.grantReadWriteData(cleanupEventsFn);
+    invitationsTable.grantReadWriteData(cleanupEventsFn);
+    bridgeDevicesTable.grantReadWriteData(cleanupEventsFn);
+    usageCountersTable.grantReadWriteData(cleanupEventsFn);
+    connectionsTable.grantReadWriteData(cleanupEventsFn);
+    brandAssetsBucket.grantReadWrite(cleanupEventsFn);
     brandAssetsBucket.grantRead(createRequestFn);
     brandAssetsBucket.grantPut(uploadBrandAssetFn);
     brandAssetsBucket.grantPut(syncLibraryFn);
     brandAssetsBucket.grantRead(getLibraryFn);
     eventsTable.grantReadData(syncLibraryFn);
+    organizationsTable.grantReadData(syncLibraryFn);
+    eventsTable.grantReadData(getLibraryFn);
+    eventsTable.grantReadData(getAdminEventFn);
+
+    const tenantAuthorizedFunctions = [
+      createEventFn,
+      getAdminEventFn,
+      getEventBySlugFn,
+      updateEventFn,
+      deleteEventFn,
+      updateRequestFn,
+      resetRequestsFn,
+      detectPlayedFn,
+      autoDetectPlayedFn,
+      uploadBrandAssetFn,
+      resetGenreVotesFn,
+      adminAdjustGenreVotesFn,
+      getLibraryFn,
+    ];
+    tenantAuthorizedFunctions.forEach((fn) => membershipsTable.grantReadData(fn));
+    eventsTable.grantReadData(uploadBrandAssetFn);
+    eventsTable.grantReadData(updateRequestFn);
+    eventsTable.grantReadData(resetRequestsFn);
+    eventsTable.grantReadData(detectPlayedFn);
+    eventsTable.grantReadData(resetGenreVotesFn);
+    eventsTable.grantReadData(adminAdjustGenreVotesFn);
+
+    organizationsTable.grantReadWriteData(createOrganizationFn);
+    membershipsTable.grantReadWriteData(createOrganizationFn);
+    organizationsTable.grantReadData(listMyOrganizationsFn);
+    membershipsTable.grantReadData(listMyOrganizationsFn);
+    organizationsTable.grantReadData(getOrganizationFn);
+    membershipsTable.grantReadData(getOrganizationFn);
+    eventsTable.grantReadData(getOrganizationFn);
+    requestsTable.grantReadData(getOrganizationFn);
+    organizationsTable.grantReadWriteData(updateOrganizationFn);
+    membershipsTable.grantReadData(updateOrganizationFn);
+    membershipsTable.grantReadData(listOrganizationMembersFn);
+    membershipsTable.grantReadData(createOrganizationInvitationFn);
+    organizationsTable.grantReadData(createOrganizationInvitationFn);
+    invitationsTable.grantReadWriteData(createOrganizationInvitationFn);
+    invitationsTable.grantReadWriteData(acceptOrganizationInvitationFn);
+    membershipsTable.grantReadWriteData(acceptOrganizationInvitationFn);
+    membershipsTable.grantReadData(listOrganizationEventsFn);
+    eventsTable.grantReadData(listOrganizationEventsFn);
+    organizationsTable.grantReadData(createEventFn);
+
+    membershipsTable.grantReadData(createBridgePairingCodeFn);
+    eventsTable.grantReadData(createBridgePairingCodeFn);
+    organizationsTable.grantReadData(createBridgePairingCodeFn);
+    bridgeDevicesTable.grantReadWriteData(createBridgePairingCodeFn);
+    bridgeDevicesTable.grantReadWriteData(pairBridgeDeviceFn);
+    eventsTable.grantReadData(pairBridgeDeviceFn);
+    organizationsTable.grantReadData(pairBridgeDeviceFn);
+    membershipsTable.grantReadData(listBridgeDevicesFn);
+    bridgeDevicesTable.grantReadData(listBridgeDevicesFn);
+    membershipsTable.grantReadData(revokeBridgeDeviceFn);
+    bridgeDevicesTable.grantReadWriteData(revokeBridgeDeviceFn);
+
+    [pushTrackFn, pingSourceFn, reviewRequestByTokenFn, toggleFireSaleByTokenFn, syncLibraryFn, getLibraryFn]
+      .forEach((fn) => {
+        bridgeDevicesTable.grantReadWriteData(fn);
+        organizationsTable.grantReadData(fn);
+      });
+    organizationsTable.grantReadData(getRequestsFn);
+
+    [createBillingCheckoutFn, createBillingPortalFn, createStripeConnectLinkFn, getStripeConnectStatusFn]
+      .forEach((fn) => {
+        membershipsTable.grantReadData(fn);
+        organizationsTable.grantReadWriteData(fn);
+      });
+    organizationsTable.grantReadData(createStripeTipCheckoutFn);
+    eventsTable.grantReadData(createStripeTipCheckoutFn);
+    requestsTable.grantReadWriteData(createStripeTipCheckoutFn);
+    organizationsTable.grantReadWriteData(stripeWebhookFn);
+    requestsTable.grantReadWriteData(stripeWebhookFn);
+    billingEventsTable.grantReadWriteData(stripeWebhookFn);
+
+    organizationsTable.grantReadWriteData(migrateLegacyTenantFn);
+    membershipsTable.grantReadWriteData(migrateLegacyTenantFn);
+    eventsTable.grantReadWriteData(migrateLegacyTenantFn);
+    requestsTable.grantReadWriteData(migrateLegacyTenantFn);
+    migrateLegacyTenantFn.addEnvironment("USER_POOL_ID", userPool.userPoolId);
+    migrateLegacyTenantFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["cognito-idp:ListUsers"],
+        resources: [userPool.userPoolArn],
+      }),
+    );
 
     requestStreamFn.addEventSource(
       new eventSources.DynamoEventSource(requestsTable, {
         startingPosition: lambda.StartingPosition.LATEST,
         batchSize: 10,
+        bisectBatchOnError: true,
+        retryAttempts: 3,
+        onFailure: new eventSources.SqsDlq(asyncFailureQueue),
       }),
     );
 
@@ -475,22 +761,22 @@ export class InfrastructureStack extends Stack {
     });
 
     const restApi = new apigateway.RestApi(this, "DjRequestsRestApi", {
-      restApiName: "dj-requests-api",
+      restApiName: isProduction ? "dj-requests-api" : `dj-requests-api-${deploymentStage}`,
       deployOptions: {
-        stageName: "prod",
-        throttlingRateLimit: 50,
-        throttlingBurstLimit: 100,
+        stageName: deploymentStage,
+        throttlingRateLimit: 200,
+        throttlingBurstLimit: 400,
       },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allowHeaders: ["Authorization", "Content-Type", "x-push-token"],
+        allowHeaders: ["Authorization", "Content-Type", "x-push-token", "x-device-id", "stripe-signature"],
       },
     });
 
     const gatewayCorsHeaders = {
       "Access-Control-Allow-Origin": "'*'",
-      "Access-Control-Allow-Headers": "'Content-Type,Authorization,x-push-token'",
+      "Access-Control-Allow-Headers": "'Content-Type,Authorization,x-push-token,x-device-id,stripe-signature'",
       "Access-Control-Allow-Methods": "'GET,POST,PATCH,DELETE,OPTIONS'",
     };
     restApi.addGatewayResponse("Default4xxCors", {
@@ -509,6 +795,63 @@ export class InfrastructureStack extends Stack {
       type: apigateway.ResponseType.ACCESS_DENIED,
       responseHeaders: gatewayCorsHeaders,
     });
+
+    const apiWebAcl = new wafv2.CfnWebACL(this, "ApiWebAcl", {
+      scope: "REGIONAL",
+      defaultAction: { allow: {} },
+      visibilityConfig: {
+        cloudWatchMetricsEnabled: true,
+        metricName: `${deploymentStage}-casper-requests-waf`,
+        sampledRequestsEnabled: true,
+      },
+      rules: [
+        {
+          name: "AWSManagedCommonRules",
+          priority: 0,
+          overrideAction: { none: {} },
+          statement: {
+            managedRuleGroupStatement: {
+              name: "AWSManagedRulesCommonRuleSet",
+              vendorName: "AWS",
+              ruleActionOverrides: [
+                {
+                  name: "SizeRestrictions_BODY",
+                  actionToUse: { count: {} },
+                },
+              ],
+            },
+          },
+          visibilityConfig: {
+            cloudWatchMetricsEnabled: true,
+            metricName: `${deploymentStage}-common-rules`,
+            sampledRequestsEnabled: true,
+          },
+        },
+        {
+          name: "PerIpRateLimit",
+          priority: 1,
+          action: { block: {} },
+          statement: {
+            rateBasedStatement: {
+              aggregateKeyType: "IP",
+              limit: 5000,
+            },
+          },
+          visibilityConfig: {
+            cloudWatchMetricsEnabled: true,
+            metricName: `${deploymentStage}-ip-rate-limit`,
+            sampledRequestsEnabled: true,
+          },
+        },
+      ],
+    });
+    const apiWebAclAssociation = new wafv2.CfnWebACLAssociation(this, "ApiWebAclAssociation", {
+      resourceArn:
+        `arn:${this.partition}:apigateway:${this.region}::/restapis/`
+        + `${restApi.restApiId}/stages/${restApi.deploymentStage.stageName}`,
+      webAclArn: apiWebAcl.attrArn,
+    });
+    apiWebAclAssociation.node.addDependency(restApi.deploymentStage);
 
     const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "ApiAuthorizer", {
       cognitoUserPools: [userPool],
@@ -533,8 +876,39 @@ export class InfrastructureStack extends Stack {
     const paymentsResource = requestByIdResource.addResource("payments");
     const paypalOrderResource = paymentsResource.addResource("paypal-order");
     const paypalCaptureResource = paymentsResource.addResource("paypal-capture");
+    const stripeCheckoutResource = paymentsResource.addResource("stripe-checkout");
     const rootPaymentsResource = restApi.root.addResource("payments");
     const paypalWebhookResource = rootPaymentsResource.addResource("paypal-webhook");
+    const stripeWebhookResource = rootPaymentsResource.addResource("stripe-webhook");
+    const adminResource = restApi.root.addResource("admin");
+    const adminEventsResource = adminResource.addResource("events");
+    const adminEventResource = adminEventsResource.addResource("{eventId}");
+    const adminRequestsResource = adminEventResource.addResource("requests");
+    const adminLibraryResource = adminEventResource.addResource("library");
+    const meResource = restApi.root.addResource("me");
+    const myOrganizationsResource = meResource.addResource("organizations");
+    const organizationsResource = restApi.root.addResource("organizations");
+    const organizationResource = organizationsResource.addResource("{organizationId}");
+    const organizationMembersResource = organizationResource.addResource("members");
+    const organizationMemberResource = organizationMembersResource.addResource("{userId}");
+    const organizationInvitationsResource = organizationResource.addResource("invitations");
+    const organizationEventsResource = organizationResource.addResource("events");
+    const organizationBillingResource = organizationResource.addResource("billing");
+    const billingCheckoutResource = organizationBillingResource.addResource("checkout");
+    const billingPortalResource = organizationBillingResource.addResource("portal");
+    const organizationStripeResource = organizationResource.addResource("stripe");
+    const stripeConnectResource = organizationStripeResource.addResource("connect");
+    const stripeStatusResource = organizationStripeResource.addResource("status");
+    const organizationDevicesResource = organizationResource.addResource("devices");
+    const organizationDeviceResource = organizationDevicesResource.addResource("{deviceId}");
+    const invitationsResource = restApi.root.addResource("invitations");
+    const invitationResource = invitationsResource.addResource("{token}");
+    const acceptInvitationResource = invitationResource.addResource("accept");
+    const bridgeResource = restApi.root.addResource("bridge");
+    const bridgePairingCodesResource = bridgeResource.addResource("pairing-codes");
+    const bridgePairResource = bridgeResource.addResource("pair");
+    const bridgeRefreshResource = bridgeResource.addResource("refresh");
+    const bridgeUnpairResource = bridgeResource.addResource("unpair");
 
     eventsResource.addMethod("GET", new apigateway.LambdaIntegration(listEventsFn));
     eventsResource.addMethod("POST", new apigateway.LambdaIntegration(createEventFn), {
@@ -546,6 +920,18 @@ export class InfrastructureStack extends Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     });
     eventByIdResource.addMethod("GET", new apigateway.LambdaIntegration(getEventFn));
+    adminEventResource.addMethod("GET", new apigateway.LambdaIntegration(getAdminEventFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    adminRequestsResource.addMethod("GET", new apigateway.LambdaIntegration(tenantApiFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    adminLibraryResource.addMethod("GET", new apigateway.LambdaIntegration(getLibraryFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
     eventByIdResource.addMethod("PATCH", new apigateway.LambdaIntegration(updateEventFn), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
@@ -601,7 +987,94 @@ export class InfrastructureStack extends Stack {
     upvoteResource.addMethod("POST", new apigateway.LambdaIntegration(upvoteRequestFn));
     paypalOrderResource.addMethod("POST", new apigateway.LambdaIntegration(createPaypalOrderFn));
     paypalCaptureResource.addMethod("POST", new apigateway.LambdaIntegration(capturePaypalOrderFn));
+    stripeCheckoutResource.addMethod("POST", new apigateway.LambdaIntegration(createStripeTipCheckoutFn));
     paypalWebhookResource.addMethod("POST", new apigateway.LambdaIntegration(paypalWebhookFn));
+    stripeWebhookResource.addMethod("POST", new apigateway.LambdaIntegration(stripeWebhookFn));
+
+    myOrganizationsResource.addMethod("GET", new apigateway.LambdaIntegration(listMyOrganizationsFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    organizationsResource.addMethod("POST", new apigateway.LambdaIntegration(createOrganizationFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    organizationResource.addMethod("GET", new apigateway.LambdaIntegration(getOrganizationFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    organizationResource.addMethod("PATCH", new apigateway.LambdaIntegration(updateOrganizationFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
+    organizationMembersResource.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(listOrganizationMembersFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    organizationMemberResource.addMethod(
+      "PATCH",
+      new apigateway.LambdaIntegration(tenantApiFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    organizationMemberResource.addMethod(
+      "DELETE",
+      new apigateway.LambdaIntegration(tenantApiFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    organizationInvitationsResource.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(createOrganizationInvitationFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    organizationEventsResource.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(listOrganizationEventsFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    acceptInvitationResource.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(acceptOrganizationInvitationFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    billingCheckoutResource.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(createBillingCheckoutFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    billingPortalResource.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(createBillingPortalFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    stripeConnectResource.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(createStripeConnectLinkFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    stripeStatusResource.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(getStripeConnectStatusFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    organizationDevicesResource.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(listBridgeDevicesFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    organizationDeviceResource.addMethod(
+      "DELETE",
+      new apigateway.LambdaIntegration(revokeBridgeDeviceFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    bridgePairingCodesResource.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(createBridgePairingCodeFn),
+      { authorizer, authorizationType: apigateway.AuthorizationType.COGNITO },
+    );
+    bridgePairResource.addMethod("POST", new apigateway.LambdaIntegration(pairBridgeDeviceFn));
+    bridgeRefreshResource.addMethod("POST", new apigateway.LambdaIntegration(publicSaasApiFn));
+    bridgeUnpairResource.addMethod("POST", new apigateway.LambdaIntegration(publicSaasApiFn));
 
     const paypalClientId = process.env.PAYPAL_CLIENT_ID ?? "";
     const paypalClientSecret = process.env.PAYPAL_CLIENT_SECRET ?? "";
@@ -617,6 +1090,35 @@ export class InfrastructureStack extends Stack {
     paypalWebhookFn.addEnvironment("PAYPAL_CLIENT_SECRET", paypalClientSecret);
     paypalWebhookFn.addEnvironment("PAYPAL_ENVIRONMENT", paypalEnvironment);
     paypalWebhookFn.addEnvironment("PAYPAL_WEBHOOK_ID", paypalWebhookId);
+
+    const stripeSecretKeyParameterName = `/music-request/${deploymentStage}/stripe-secret-key`;
+    const stripeWebhookSecretParameterName =
+      `/music-request/${deploymentStage}/stripe-webhook-secret`;
+    const stripeSecretKeyParameter = ssm.StringParameter.fromSecureStringParameterAttributes(
+      this,
+      "StripeSecretKeyParameter",
+      { parameterName: stripeSecretKeyParameterName },
+    );
+    const stripeWebhookSecretParameter = ssm.StringParameter.fromSecureStringParameterAttributes(
+      this,
+      "StripeWebhookSecretParameter",
+      { parameterName: stripeWebhookSecretParameterName },
+    );
+    const stripeDjPriceId = process.env.STRIPE_DJ_PRICE_ID ?? process.env.STRIPE_PRICE_ID ?? "";
+    const stripeOrganizationPriceId = process.env.STRIPE_ORGANIZATION_PRICE_ID ?? "";
+    stripeSecretKeyParameter.grantRead(tenantApiFn);
+    stripeSecretKeyParameter.grantRead(publicSaasApiFn);
+    stripeSecretKeyParameter.grantRead(cleanupEventsFn);
+    stripeWebhookSecretParameter.grantRead(publicSaasApiFn);
+    tenantApiFn.addEnvironment("STRIPE_SECRET_KEY_SSM_PARAM", stripeSecretKeyParameterName);
+    tenantApiFn.addEnvironment("STRIPE_DJ_PRICE_ID", stripeDjPriceId);
+    tenantApiFn.addEnvironment("STRIPE_ORGANIZATION_PRICE_ID", stripeOrganizationPriceId);
+    publicSaasApiFn.addEnvironment("STRIPE_SECRET_KEY_SSM_PARAM", stripeSecretKeyParameterName);
+    publicSaasApiFn.addEnvironment(
+      "STRIPE_WEBHOOK_SECRET_SSM_PARAM",
+      stripeWebhookSecretParameterName,
+    );
+    cleanupEventsFn.addEnvironment("STRIPE_SECRET_KEY_SSM_PARAM", stripeSecretKeyParameterName);
 
     // --- CloudWatch alarms ---
     const alarmTopic = new sns.Topic(this, "AlarmTopic", {
@@ -648,14 +1150,32 @@ export class InfrastructureStack extends Stack {
       WsConnect: wsConnectFn,
       WsDisconnect: wsDisconnectFn,
       WsSubscribe: wsSubscribeFn,
+      TenantApi: tenantApiFn,
+      PublicSaasApi: publicSaasApiFn,
     };
-    for (const [label, fn] of Object.entries(criticalFunctions)) {
-      const alarm = new cloudwatch.Alarm(this, `${label}ErrorAlarm`, {
-        metric: fn.metricErrors({ period: Duration.minutes(5) }),
+    const criticalEntries = Object.entries(criticalFunctions);
+    for (let groupIndex = 0; groupIndex < criticalEntries.length; groupIndex += 9) {
+      const group = criticalEntries.slice(groupIndex, groupIndex + 9);
+      const metrics = Object.fromEntries(
+        group.map(([label, fn], index) => [
+          `m${index}`,
+          fn.metricErrors({
+            period: Duration.minutes(5),
+            label,
+          }),
+        ]),
+      );
+      const alarm = new cloudwatch.Alarm(this, `CriticalLambdaErrorsGroup${groupIndex / 9 + 1}`, {
+        metric: new cloudwatch.MathExpression({
+          expression: "SUM(METRICS())",
+          period: Duration.minutes(5),
+          usingMetrics: metrics,
+        }),
         threshold: 1,
         evaluationPeriods: 1,
         comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-        alarmDescription: `${label} Lambda errors >= 1 in 5 min`,
+        alarmDescription:
+          `Critical Lambda errors >= 1 in 5 min (${group.map(([label]) => label).join(", ")})`,
         treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
       });
       alarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
@@ -666,18 +1186,26 @@ export class InfrastructureStack extends Stack {
       CreateRequest: createRequestFn,
       PushTrack: pushTrackFn,
       RequestStream: requestStreamFn,
+      TenantApi: tenantApiFn,
     };
-    for (const [label, fn] of Object.entries(throttleFunctions)) {
-      const alarm = new cloudwatch.Alarm(this, `${label}ThrottleAlarm`, {
-        metric: fn.metricThrottles({ period: Duration.minutes(5) }),
-        threshold: 5,
-        evaluationPeriods: 1,
-        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-        alarmDescription: `${label} Lambda throttles >= 5 in 5 min`,
-        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
-      });
-      alarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
-    }
+    const lambdaThrottleAlarm = new cloudwatch.Alarm(this, "CriticalLambdaThrottleAlarm", {
+      metric: new cloudwatch.MathExpression({
+        expression: "SUM(METRICS())",
+        period: Duration.minutes(5),
+        usingMetrics: Object.fromEntries(
+          Object.entries(throttleFunctions).map(([label, fn], index) => [
+            `m${index}`,
+            fn.metricThrottles({ period: Duration.minutes(5), label }),
+          ]),
+        ),
+      }),
+      threshold: 5,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      alarmDescription: "Critical Lambda throttles >= 5 in 5 min",
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    lambdaThrottleAlarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
 
     const api5xxAlarm = new cloudwatch.Alarm(this, "RestApi5xxAlarm", {
       metric: restApi.metricServerError({ period: Duration.minutes(5) }),
@@ -712,7 +1240,39 @@ export class InfrastructureStack extends Stack {
       alarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
     }
 
+    const tenantTableThrottleAlarm = new cloudwatch.Alarm(this, "TenantTablesThrottleAlarm", {
+      metric: new cloudwatch.MathExpression({
+        expression: "MAX([organizations,memberships,invitations,devices,billing,usage])",
+        period: Duration.minutes(5),
+        usingMetrics: {
+          organizations: organizationsTable.metric("ThrottledRequests", { statistic: "Sum" }),
+          memberships: membershipsTable.metric("ThrottledRequests", { statistic: "Sum" }),
+          invitations: invitationsTable.metric("ThrottledRequests", { statistic: "Sum" }),
+          devices: bridgeDevicesTable.metric("ThrottledRequests", { statistic: "Sum" }),
+          billing: billingEventsTable.metric("ThrottledRequests", { statistic: "Sum" }),
+          usage: usageCountersTable.metric("ThrottledRequests", { statistic: "Sum" }),
+        },
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      alarmDescription: "A SaaS tenant table reported throttled requests",
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    tenantTableThrottleAlarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
+
+    const asyncFailureAlarm = new cloudwatch.Alarm(this, "AsyncFailureQueueAlarm", {
+      metric: asyncFailureQueue.metricApproximateNumberOfMessagesVisible({
+        period: Duration.minutes(5),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      alarmDescription: "An asynchronous job or stream record reached the dead-letter queue",
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    asyncFailureAlarm.addAlarmAction(new cwActions.SnsAction(alarmTopic));
+
     new CfnOutput(this, "AlarmTopicArn", { value: alarmTopic.topicArn });
+    new CfnOutput(this, "AsyncFailureQueueUrl", { value: asyncFailureQueue.queueUrl });
 
     new CfnOutput(this, "RestApiUrl", { value: restApi.url });
     new CfnOutput(this, "WebSocketUrl", {
@@ -724,8 +1284,22 @@ export class InfrastructureStack extends Stack {
     new CfnOutput(this, "CloudFrontUrl", {
       value: `https://${distribution.distributionDomainName}`,
     });
+    new CfnOutput(this, "CloudFrontDistributionId", {
+      value: distribution.distributionId,
+    });
+    new CfnOutput(this, "FrontendBucketName", {
+      value: frontendBucket.bucketName,
+    });
+    new CfnOutput(this, "FrontendUrl", {
+      value: isProduction
+        ? "https://casperrequests.com"
+        : `https://${distribution.distributionDomainName}`,
+    });
     new CfnOutput(this, "UserPoolId", { value: userPool.userPoolId });
     new CfnOutput(this, "UserPoolClientId", { value: userPoolClient.userPoolClientId });
+    new CfnOutput(this, "LegacyMigrationFunctionName", {
+      value: migrateLegacyTenantFn.functionName,
+    });
     new CfnOutput(this, "BrandAssetsBucketName", { value: brandAssetsBucket.bucketName });
   }
 

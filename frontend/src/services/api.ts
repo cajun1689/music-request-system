@@ -1,6 +1,19 @@
 import { config } from "../config";
 import { auth } from "./auth";
-import type { EventRecord, GenreName, PaymentStatus, RequestRecord, RequestStatus } from "../types";
+import type {
+  BridgeDevice,
+  EventRecord,
+  GenreName,
+  Membership,
+  Organization,
+  OrganizationInvitation,
+  OrganizationRole,
+  PaymentStatus,
+  RequestRecord,
+  RequestStatus,
+  SaasPlanId,
+  StripeConnectStatus,
+} from "../types";
 
 async function request<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
   const refreshed = token ? await auth.getValidSession().catch(() => null) : null;
@@ -88,6 +101,10 @@ export const api = {
     return request<EventRecord>(`/events/${eventId}`);
   },
 
+  getAdminEvent(eventId: string, token: string) {
+    return request<EventRecord>(`/admin/events/${encodeURIComponent(eventId)}`, undefined, token);
+  },
+
   listEvents() {
     return request<{ events: Array<{ eventId: string; name: string; date: string; venueName: string; djBrandName: string; isActive: boolean; slug?: string }> }>("/events");
   },
@@ -136,6 +153,183 @@ export const api = {
     return request<EventRecord>(`/events/by-slug/${encodeURIComponent(slug)}`, undefined, token);
   },
 
+  getOrganizations(token: string) {
+    return request<{ organizations: Organization[]; memberships: Membership[] }>("/me/organizations", undefined, token);
+  },
+
+  createOrganization(payload: { name: string; slug: string; planId?: SaasPlanId }, token: string) {
+    return request<{ organization: Organization; membership: Membership }>(
+      "/organizations",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      token,
+    );
+  },
+
+  async getOrganization(organizationId: string, token: string) {
+    const result = await request<{ organization: Organization; membership: Membership }>(
+      `/organizations/${encodeURIComponent(organizationId)}`,
+      undefined,
+      token,
+    );
+    return result.organization;
+  },
+
+  getOrganizationExport(organizationId: string, token: string) {
+    return request<Record<string, unknown>>(
+      `/organizations/${encodeURIComponent(organizationId)}?export=true`,
+      undefined,
+      token,
+    );
+  },
+
+  async updateOrganization(
+    organizationId: string,
+    payload: {
+      name?: string;
+      branding?: Organization["branding"];
+      defaults?: Organization["defaults"];
+      requestDeletion?: boolean;
+      cancelDeletion?: boolean;
+    },
+    token: string,
+  ) {
+    const result = await request<{ organization: Organization }>(
+      `/organizations/${encodeURIComponent(organizationId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+      token,
+    );
+    return result.organization;
+  },
+
+  getOrganizationMembers(organizationId: string, token: string) {
+    return request<{ members: Membership[] }>(
+      `/organizations/${encodeURIComponent(organizationId)}/members`,
+      undefined,
+      token,
+    );
+  },
+
+  inviteOrganizationMember(
+    organizationId: string,
+    payload: { email: string; role: Exclude<OrganizationRole, "owner"> },
+    token: string,
+  ) {
+    return request<{ invitation: OrganizationInvitation }>(
+      `/organizations/${encodeURIComponent(organizationId)}/invitations`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      token,
+    ).then((result) => result.invitation);
+  },
+
+  acceptInvitation(invitationToken: string, token: string) {
+    return request<{ organization?: Organization; membership?: Membership }>(
+      `/invitations/${encodeURIComponent(invitationToken)}/accept`,
+      { method: "POST" },
+      token,
+    );
+  },
+
+  createBillingCheckout(organizationId: string, planId: SaasPlanId, token: string) {
+    return request<{ url: string }>(
+      `/organizations/${encodeURIComponent(organizationId)}/billing/checkout`,
+      { method: "POST", body: JSON.stringify({ planId }) },
+      token,
+    );
+  },
+
+  createBillingPortal(organizationId: string, token: string) {
+    return request<{ url: string }>(
+      `/organizations/${encodeURIComponent(organizationId)}/billing/portal`,
+      { method: "POST" },
+      token,
+    );
+  },
+
+  createStripeConnectOnboarding(organizationId: string, token: string) {
+    return request<{ url: string }>(
+      `/organizations/${encodeURIComponent(organizationId)}/stripe/connect`,
+      { method: "POST" },
+      token,
+    );
+  },
+
+  getStripeConnectStatus(organizationId: string, token: string) {
+    return request<StripeConnectStatus>(
+      `/organizations/${encodeURIComponent(organizationId)}/stripe/status`,
+      undefined,
+      token,
+    );
+  },
+
+  getOrganizationEvents(organizationId: string, token: string) {
+    return request<{ events: EventRecord[] }>(
+      `/organizations/${encodeURIComponent(organizationId)}/events`,
+      undefined,
+      token,
+    );
+  },
+
+  getBridgeDevices(organizationId: string, token: string) {
+    return request<{ devices: BridgeDevice[] }>(
+      `/organizations/${encodeURIComponent(organizationId)}/devices`,
+      undefined,
+      token,
+    );
+  },
+
+  createBridgePairingCode(
+    payload: { eventId: string; sourceId: string; deviceName?: string },
+    token: string,
+  ) {
+    return request<{ code: string; expiresAt: number }>(
+      "/bridge/pairing-codes",
+      { method: "POST", body: JSON.stringify(payload) },
+      token,
+    );
+  },
+
+  revokeBridgeDevice(organizationId: string, deviceId: string, token: string) {
+    return request<{ deviceId: string; revoked: boolean }>(
+      `/organizations/${encodeURIComponent(organizationId)}/devices/${encodeURIComponent(deviceId)}`,
+      { method: "DELETE" },
+      token,
+    );
+  },
+
+  updateOrganizationMember(
+    organizationId: string,
+    userId: string,
+    payload: { role?: "admin" | "dj"; transferOwnership?: boolean },
+    token: string,
+  ) {
+    return request<{ membership?: Membership; transferred?: boolean }>(
+      `/organizations/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(userId)}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+      token,
+    );
+  },
+
+  removeOrganizationMember(
+    organizationId: string,
+    userId: string,
+    token: string,
+  ) {
+    return request<{ removed: boolean; userId: string }>(
+      `/organizations/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+      token,
+    );
+  },
+
   createRequest(eventId: string, payload: Partial<RequestRecord>) {
     return request<RequestRecord>(`/events/${eventId}/requests`, {
       method: "POST",
@@ -153,6 +347,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ tipAmount }),
     });
+  },
+
+  createStripeCheckout(eventId: string, requestId: string, tipAmount: number) {
+    return request<{ checkoutUrl?: string; alreadyPaid?: boolean }>(
+      `/events/${eventId}/requests/${requestId}/payments/stripe-checkout`,
+      {
+        method: "POST",
+        body: JSON.stringify({ tipAmount }),
+      },
+    );
   },
 
   capturePaypalOrder(eventId: string, requestId: string, orderId: string) {
@@ -177,6 +381,14 @@ export const api = {
   getRequests(eventId: string, status?: RequestStatus) {
     const query = status ? `?status=${status}` : "";
     return request<RequestRecord[]>(`/events/${eventId}/requests${query}`);
+  },
+
+  getAdminRequests(eventId: string, token: string) {
+    return request<RequestRecord[]>(
+      `/admin/events/${encodeURIComponent(eventId)}/requests`,
+      undefined,
+      token,
+    );
   },
 
   updateRequest(
@@ -344,5 +556,21 @@ export const api = {
         playCount: number;
       }>;
     }>(`/events/${eventId}/library`);
+  },
+
+  getAdminLibrary(eventId: string, token: string) {
+    return request<{
+      eventId: string;
+      sourceId: string;
+      syncedAt: string;
+      trackCount: number;
+      tracks: Array<{
+        title: string;
+        artist: string;
+        titleNorm: string;
+        artistNorm: string;
+        playCount: number;
+      }>;
+    }>(`/admin/events/${encodeURIComponent(eventId)}/library`, undefined, token);
   },
 };

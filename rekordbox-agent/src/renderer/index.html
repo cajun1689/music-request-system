@@ -637,6 +637,46 @@
       </div>
     </div>
 
+    <!-- Device Pairing Card -->
+    <div class="card" id="device-pairing-card" style="border-color:rgba(59,130,246,0.4);">
+      <div class="card-header">
+        <span class="card-title">Device Pairing</span>
+        <span class="status-badge idle" id="pairing-badge">Not paired</span>
+      </div>
+
+      <div id="pairing-form">
+        <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">
+          Enter the code from your Casper Requests organization. Pairing does not change your legacy event or push-token setup.
+        </p>
+        <label>Pairing Code</label>
+        <input type="text" id="pairing-code" placeholder="Enter pairing code" autocomplete="off" />
+        <label>Device Name</label>
+        <input type="text" id="pairing-device-name" placeholder="DJ Bridge on this Mac" maxlength="80" />
+        <div class="btn-row">
+          <button class="btn" id="btn-pair-device">Pair Device</button>
+        </div>
+      </div>
+
+      <div id="paired-device-status" style="display:none;">
+        <div class="info-grid">
+          <span class="label">Organization</span>
+          <span class="value" id="paired-organization"></span>
+          <span class="label">Event</span>
+          <span class="value" id="paired-event"></span>
+          <span class="label">Source</span>
+          <span class="value" id="paired-source"></span>
+          <span class="label">Device</span>
+          <span class="value" id="paired-device-id" style="font-size:10px; word-break:break-all;"></span>
+        </div>
+        <p style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+          Paired credentials take priority. Clear pairing to return to the legacy setup below.
+        </p>
+        <div class="btn-row">
+          <button class="btn secondary" id="btn-clear-pairing">Clear Pairing</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Configuration Card -->
     <div class="card">
       <div class="card-header">
@@ -1017,6 +1057,29 @@
     let cachedEvents = [];
     let cachedSources = [];
 
+    function updatePairingUI(config) {
+      var paired = Boolean(config && config.deviceId && config.deviceToken);
+      var badge = el("pairing-badge");
+      el("pairing-form").style.display = paired ? "none" : "";
+      el("paired-device-status").style.display = paired ? "" : "none";
+      badge.textContent = paired ? "Paired" : "Not paired";
+      badge.className = "status-badge " + (paired ? "connected" : "idle");
+
+      if (paired) {
+        el("paired-organization").textContent =
+          config.pairedOrganizationName || config.organizationId || "Connected organization";
+        el("paired-event").textContent =
+          config.pairedEventName || config.pairedEventId || "Connected event";
+        el("paired-source").textContent = config.pairedSourceId || "Default";
+        el("paired-device-id").textContent = config.deviceId;
+      } else if (!el("pairing-device-name").value.trim()) {
+        var platformName = navigator.platform && navigator.platform.indexOf("Mac") >= 0
+          ? "Mac"
+          : "Computer";
+        el("pairing-device-name").value = "DJ Bridge on " + platformName;
+      }
+    }
+
     async function loadSourcesForEvent(eventId, savedSourceId) {
       var sourceSelect = el("cfg-source-id");
       if (!eventId || !bridge.fetchEventSources) {
@@ -1154,6 +1217,7 @@
       logActivity("Loading configuration…");
       try {
         var c = await bridge.getConfig();
+        updatePairingUI(c);
         el("cfg-api-url").value = c.apiBaseUrl || "";
         el("cfg-push-token").value = c.pushToken || "";
         el("cfg-sqlcipher-key").value = c.sqlcipherKey || "";
@@ -1182,6 +1246,67 @@
         logActivity("Failed to load config: " + (err.message || err), "error");
       }
     }
+
+    el("btn-pair-device").addEventListener("click", async function() {
+      var code = el("pairing-code").value.trim();
+      var deviceName = el("pairing-device-name").value.trim();
+      if (!code) {
+        showToast("Enter a pairing code first", "error");
+        return;
+      }
+
+      var btn = el("btn-pair-device");
+      btn.disabled = true;
+      btn.textContent = "Pairing…";
+      try {
+        var result = await bridge.pairDevice(code, deviceName);
+        el("pairing-code").value = "";
+        updatePairingUI(await bridge.getConfig());
+        showToast("Paired with " + result.organizationName + " · " + result.eventName, "success", 7000);
+        loadRequests();
+        loadEventStatus();
+      } catch (err) {
+        showToast("Pairing failed: " + (err.message || err), "error", 8000);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Pair Device";
+      }
+    });
+
+    el("btn-clear-pairing").addEventListener("click", async function() {
+      if (!window.confirm("Clear this device pairing and return to the saved legacy Event ID and Push Token setup?")) {
+        return;
+      }
+
+      var btn = el("btn-clear-pairing");
+      btn.disabled = true;
+      btn.textContent = "Clearing…";
+      try {
+        var config = await bridge.clearDevicePairing();
+        updatePairingUI(config);
+        if (config.remoteRevoked === false) {
+          showToast(
+            "Local pairing cleared, but the server could not be reached. Disconnect this device in the organization console.",
+            "error",
+            9000
+          );
+        } else {
+          showToast(
+            config.pushToken
+              ? "Pairing cleared. Legacy configuration is active."
+              : "Pairing cleared. This Bridge is now disconnected.",
+            "success"
+          );
+        }
+        loadRequests();
+        loadEventStatus();
+      } catch (err) {
+        showToast("Could not clear pairing: " + (err.message || err), "error", 8000);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Clear Pairing";
+      }
+    });
 
     async function loadStatus() {
       try {
@@ -1633,7 +1758,7 @@
     }
 
     function isPaidRequest(req) {
-      return Number(req.tipAmount || 0) > 0 || req.paymentStatus === "verified" || req.paymentStatus === "pending_verification";
+      return req.paymentStatus === "verified" && Number(req.tipAmount || 0) > 0;
     }
 
     function requestGenreSortValue(req) {

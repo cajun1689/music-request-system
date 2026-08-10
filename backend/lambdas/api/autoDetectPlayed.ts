@@ -4,6 +4,7 @@ import { cleanTrackName } from "../shared/cleanTrackName";
 import { finalizeStalePendingPlayed } from "../shared/finalizePendingPlayed";
 import type { EventRecord, LivePlaylistSource, NowPlayingSlot, RequestRecord } from "../shared/types";
 import { docClient, env, json } from "../shared/utils";
+import { requireEventAccess, authorizationResponse } from "../shared/tenancy";
 
 const REMIX_WORDS = ["remix", "mix", "edit", "version", "vip", "bootleg", "rework"];
 
@@ -153,6 +154,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   if (!eventId) {
     return json(400, { error: "eventId is required" });
+  }
+  try {
+    await requireEventAccess(event, eventId);
+  } catch (error) {
+    return authorizationResponse(error);
   }
 
   const eventResponse = await docClient.send(

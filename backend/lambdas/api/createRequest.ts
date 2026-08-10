@@ -4,8 +4,9 @@ import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { randomUUID } from "node:crypto";
 import { classifyRequestGenre } from "../shared/classifyRequestGenre";
 import { moderateShoutout } from "../shared/moderateShoutout";
-import type { EventRecord, GenreName, RequestRecord } from "../shared/types";
+import type { EventRecord, GenreName, OrganizationRecord, RequestRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
+import { incrementUsage } from "../shared/usage";
 
 const s3 = new S3Client({});
 
@@ -17,7 +18,6 @@ interface CreateRequestInput {
   shoutout?: string;
   tipAmount?: number;
   venmoHandle?: string;
-  paymentReference?: string;
   paymentStatus?: "unpaid" | "pending_verification";
   genre?: GenreName;
   genreLabel?: string;
@@ -66,6 +66,15 @@ function isDuplicate(
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   const input = parseBody<CreateRequestInput>(event.body);
+  if (!input) {
+    return json(400, { error: "A valid JSON request body is required" });
+  }
+  if (
+    input.tipAmount !== undefined
+    && (!Number.isFinite(input.tipAmount) || input.tipAmount < 0 || input.tipAmount > 500)
+  ) {
+    return json(400, { error: "Tip amount must be between $0 and $500" });
+  }
   const isShoutoutOnly = !input?.songTitle?.trim() && !input?.artistName?.trim() && !!input?.shoutout?.trim();
 
   if (!eventId || (!isShoutoutOnly && (!input?.songTitle || !input?.artistName))) {
@@ -125,6 +134,33 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }),
   );
   const eventRecord = eventResult.Item as EventRecord | undefined;
+  if (!eventRecord || eventRecord.isActive === false) {
+    return json(404, { error: "Event not found" });
+  }
+
+  let aiAllowed = true;
+  if (eventRecord.accountMode === "saas" && eventRecord.organizationId) {
+    const now = new Date();
+    const minuteKey = `requests#${now.toISOString().slice(0, 16)}`;
+    const requestCount = await incrementUsage(eventId, minuteKey, 2 * 60 * 60);
+    if (requestCount > 120) {
+      return json(429, { error: "This event is receiving requests too quickly. Please try again shortly." });
+    }
+    const organizationResult = await docClient.send(
+      new GetCommand({
+        TableName: env.organizationsTableName,
+        Key: { organizationId: eventRecord.organizationId },
+      }),
+    );
+    const organization = organizationResult.Item as OrganizationRecord | undefined;
+    if (!organization) return json(404, { error: "Organization not found" });
+    const aiCount = await incrementUsage(
+      eventRecord.organizationId,
+      `ai#${now.toISOString().slice(0, 7)}`,
+      40 * 24 * 60 * 60,
+    );
+    aiAllowed = aiCount <= organization.entitlements.monthlyAiRequests;
+  }
 
   let autoStatus: "pending" | "approved" | "vetoed" = "pending";
   let autoReviewedBy: string | undefined;
@@ -186,7 +222,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   let shoutoutModeratedAt: string | undefined;
   let shoutoutAutoApproved: boolean | undefined;
 
-  if (shoutoutText) {
+  if (shoutoutText && !aiAllowed) {
+    shoutoutFlagged = true;
+    shoutoutFlagSeverity = "warn";
+    shoutoutFlagCategories = ["moderation_quota"];
+    shoutoutFlagReason = "Awaiting manual review";
+    shoutoutAutoApproved = false;
+  } else if (shoutoutText) {
     shoutoutAutoApproved = true;
     try {
       const mod = await moderateShoutout(shoutoutText, {
@@ -214,7 +256,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   }
 
   const selectedGenre = input.genre && VALID_GENRES.includes(input.genre) ? input.genre : undefined;
-  const genreClassification = !isShoutoutOnly
+  const genreClassification = !isShoutoutOnly && aiAllowed
     ? await classifyRequestGenre(songTitle, artistName, selectedGenre)
     : undefined;
   const genreLabel = input.genreLabel?.trim()
@@ -224,6 +266,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const requestRecord: RequestRecord = {
     eventId,
     requestId: randomUUID(),
+    organizationId: eventRecord?.organizationId,
     songTitle,
     artistName,
     requesterName: input.requesterName,
@@ -232,10 +275,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     genre: genreClassification?.genre ?? selectedGenre,
     genreLabel,
     status: autoStatus,
-    paymentStatus: input.paymentStatus ?? (input.tipAmount ? "pending_verification" : "unpaid"),
+    paymentStatus:
+      input.paymentStatus === "pending_verification" && Number(input.tipAmount ?? 0) > 0
+        ? "pending_verification"
+        : "unpaid",
     tipAmount: typeof input.tipAmount === "number" ? Number(input.tipAmount.toFixed(2)) : undefined,
     venmoHandle: input.venmoHandle?.replace("@", ""),
-    paymentReference: input.paymentReference,
     position: Date.now(),
     upvotes: 0,
     reviewedBy: autoReviewedBy,

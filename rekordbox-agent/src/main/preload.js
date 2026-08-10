@@ -7,6 +7,8 @@ try {
     getAppVersion: function () { return ipcRenderer.invoke("get-app-version"); },
     getConfig: function () { return ipcRenderer.invoke("get-config"); },
     setConfig: function (partial) { return ipcRenderer.invoke("set-config", partial); },
+    pairDevice: function (code, deviceName) { return ipcRenderer.invoke("pair-device", code, deviceName); },
+    clearDevicePairing: function () { return ipcRenderer.invoke("clear-device-pairing"); },
     getStatus: function () { return ipcRenderer.invoke("get-status"); },
     manualPush: function (title, artist) { return ipcRenderer.invoke("manual-push", title, artist); },
     resolveDbPath: function () { return ipcRenderer.invoke("resolve-db-path"); },

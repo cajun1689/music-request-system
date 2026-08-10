@@ -1,5 +1,6 @@
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
+import type { EventRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
 
 interface CreatePaypalOrderInput {
@@ -46,12 +47,20 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     return json(400, { error: "tipAmount must be greater than zero" });
   }
 
-  const requestResult = await docClient.send(
-    new GetCommand({
-      TableName: env.requestsTableName,
-      Key: { eventId, requestId },
-    }),
-  );
+  const [requestResult, eventResult] = await Promise.all([
+    docClient.send(
+      new GetCommand({
+        TableName: env.requestsTableName,
+        Key: { eventId, requestId },
+      }),
+    ),
+    docClient.send(new GetCommand({ TableName: env.eventsTableName, Key: { eventId } })),
+  ]);
+  const eventRecord = eventResult.Item as EventRecord | undefined;
+  if (!eventRecord) return json(404, { error: "Event not found" });
+  if (eventRecord.accountMode === "saas") {
+    return json(409, { error: "This event uses Stripe for tips" });
+  }
   const requestRecord = requestResult.Item as
     | { eventId: string; requestId: string; songTitle: string; artistName: string; paymentStatus?: string }
     | undefined;

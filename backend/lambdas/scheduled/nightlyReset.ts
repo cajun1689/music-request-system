@@ -27,9 +27,11 @@ async function listEventsToReset(): Promise<EventRecord[]> {
     const result = await docClient.send(
       new ScanCommand({
         TableName: env.eventsTableName,
-        FilterExpression: "#active = :true OR isRecurring = :true",
+        FilterExpression:
+          "(#active = :true OR isRecurring = :true) "
+          + "AND (attribute_not_exists(accountMode) OR accountMode = :legacy)",
         ExpressionAttributeNames: { "#active": "isActive" },
-        ExpressionAttributeValues: { ":true": true },
+        ExpressionAttributeValues: { ":true": true, ":legacy": "legacy" },
         ExclusiveStartKey,
       }),
     );

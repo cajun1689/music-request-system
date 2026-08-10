@@ -1,8 +1,9 @@
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import type { EventRecord } from "../shared/types";
+import type { EventRecord, OrganizationRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
+import { authorizeBridgeRequest } from "../shared/bridgeAuth";
 
 const s3 = new S3Client({});
 
@@ -29,10 +30,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   if (!eventId) return json(400, { error: "eventId is required" });
 
-  const pushToken =
-    event.headers?.["x-push-token"] ?? event.headers?.["X-Push-Token"] ?? "";
-  if (!pushToken) return json(401, { error: "Missing x-push-token header" });
-
   const input = parseBody<SyncInput>(event.body);
   if (!input?.tracks?.length) return json(400, { error: "tracks array is required" });
 
@@ -42,8 +39,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventRecord = eventResponse.Item as EventRecord | undefined;
   if (!eventRecord) return json(404, { error: "Event not found" });
 
-  if (!eventRecord.pushToken || eventRecord.pushToken !== pushToken) {
-    return json(403, { error: "Invalid push token" });
+  const bridgeAuthorization = await authorizeBridgeRequest(event, eventRecord);
+  if (!bridgeAuthorization) return json(403, { error: "Invalid Bridge credential" });
+  if (bridgeAuthorization.device) input.sourceId = bridgeAuthorization.device.sourceId;
+  if (eventRecord.accountMode === "saas" && eventRecord.organizationId) {
+    const organizationResult = await docClient.send(
+      new GetCommand({
+        TableName: env.organizationsTableName,
+        Key: { organizationId: eventRecord.organizationId },
+      }),
+    );
+    const organization = organizationResult.Item as OrganizationRecord | undefined;
+    if (!organization) return json(404, { error: "Organization not found" });
+    if (input.tracks.length > organization.entitlements.maxLibraryTracks) {
+      return json(413, {
+        error: `Library exceeds the ${organization.entitlements.maxLibraryTracks} track limit`,
+      });
+    }
   }
 
   const normalizedTracks = input.tracks.map((t) => ({

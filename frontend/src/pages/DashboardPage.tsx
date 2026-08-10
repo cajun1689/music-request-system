@@ -89,7 +89,11 @@ export function DashboardPage() {
   }
   const [libraryTracks, setLibraryTracks] = useState<LibraryEntry[] | null>(null);
   const [tab, setTab] = useState<Tab>("pending");
-  const { grouped, loading, applyLocalStatus, swapPositions, refresh } = useRequests(eventId || undefined, "dj");
+  const { grouped, loading, applyLocalStatus, swapPositions, refresh } = useRequests(
+    eventId || undefined,
+    "dj",
+    session?.idToken,
+  );
 
   const isShoutoutOnly = (req: { songTitle?: string; shoutout?: string }) =>
     !req.songTitle?.trim() && !!req.shoutout;
@@ -223,7 +227,8 @@ export function DashboardPage() {
 
     const loadEvent = async () => {
       try {
-        applyEventState(await api.getEvent(eventId));
+        if (!session) return;
+        applyEventState(await api.getAdminEvent(eventId, session.idToken));
       } catch {
         setEventData(null);
         setNowPlayingSlots(defaultNowPlayingSlots());
@@ -241,8 +246,9 @@ export function DashboardPage() {
       void loadEvent();
     }, 5000);
 
+    if (!session) return () => window.clearInterval(eventInterval);
     void api
-      .getLibrary(eventId)
+      .getAdminLibrary(eventId, session.idToken)
       .then((lib) => {
         setLibraryTracks(lib.tracks);
       })
@@ -251,7 +257,7 @@ export function DashboardPage() {
       });
 
     return () => window.clearInterval(eventInterval);
-  }, [eventId]);
+  }, [eventId, session]);
 
   async function updateStatus(requestId: string, status: "approved" | "vetoed" | "played") {
     if (!session || !eventId) {
@@ -474,7 +480,7 @@ export function DashboardPage() {
     try {
       const result = await api.autoDetectPlayed(eventId, session.idToken);
       setSourceHealth(result.sourceStatuses ?? []);
-      const latestEvent = await api.getEvent(eventId);
+      const latestEvent = await api.getAdminEvent(eventId, session.idToken);
       setEventData(latestEvent);
       setTickerPromotions(normalizeTickerPromotions(latestEvent.tickerPromotions));
       setFireSaleActive(Boolean(latestEvent.fireSaleActive));
@@ -1405,13 +1411,17 @@ export function DashboardPage() {
                 onVeto={tab === "pending" || tab === "approved" ? (id) => void updateStatus(id, "vetoed") : undefined}
                 onPlayed={tab === "approved" ? (id) => void updateStatus(id, "played") : undefined}
                 onVerifyTip={
-                  (request.paymentStatus ?? "unpaid") === "pending_verification"
+                  eventData?.accountMode !== "saas"
+                  && (request.paymentStatus ?? "unpaid") === "pending_verification"
                     ? (id) => void updatePayment(id, "verified")
                     : undefined
                 }
                 onRejectTip={
-                  (request.paymentStatus ?? "unpaid") === "pending_verification" ||
-                  (request.paymentStatus ?? "unpaid") === "verified"
+                  eventData?.accountMode !== "saas"
+                  && (
+                    (request.paymentStatus ?? "unpaid") === "pending_verification"
+                    || (request.paymentStatus ?? "unpaid") === "verified"
+                  )
                     ? (id) => void updatePayment(id, "rejected")
                     : undefined
                 }

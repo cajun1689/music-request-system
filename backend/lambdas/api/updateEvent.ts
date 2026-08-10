@@ -2,6 +2,7 @@ import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { docClient, env, json, parseBody } from "../shared/utils";
 import type { EventRecord } from "../shared/types";
+import { requireEventAccess, authorizationResponse } from "../shared/tenancy";
 
 interface UpdateEventInput {
   name?: string;
@@ -33,6 +34,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   if (!eventId) {
     return json(400, { error: "eventId is required" });
   }
+  let eventRecord: EventRecord;
+  try {
+    ({ eventRecord } = await requireEventAccess(event, eventId, ["owner", "admin"]));
+  } catch (error) {
+    return authorizationResponse(error);
+  }
 
   const input = parseBody<UpdateEventInput>(event.body);
   if (!input) {
@@ -42,7 +49,36 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     input.venmoHandle = input.venmoHandle.replace("@", "");
   }
 
-  const fieldEntries = Object.entries(input).filter(([, value]) => value !== undefined);
+  const allowedFields = new Set<keyof UpdateEventInput>([
+    "name",
+    "slug",
+    "isRecurring",
+    "date",
+    "venueName",
+    "djBrandName",
+    "venueLogoUrl",
+    "djLogoUrl",
+    "seratoLiveUrl",
+    "rekordboxLiveUrl",
+    "livePlaylistSources",
+    "tickerPromotions",
+    "fireSaleActive",
+    "fireSaleMessage",
+    "venmoHandle",
+    "pushToken",
+    "blockedPushSources",
+    "nowPlayingSlots",
+    "primaryColor",
+    "secondaryColor",
+    "accentColor",
+    "isActive",
+  ]);
+  const fieldEntries = Object.entries(input).filter(
+    ([key, value]) =>
+      value !== undefined
+      && allowedFields.has(key as keyof UpdateEventInput)
+      && !(key === "pushToken" && eventRecord.accountMode === "saas"),
+  );
   if (fieldEntries.length === 0) {
     return json(400, { error: "No fields to update" });
   }

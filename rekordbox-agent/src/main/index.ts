@@ -17,6 +17,10 @@ import {
   type DJSoftwareType,
 } from "./config-store";
 import {
+  getEffectiveEventId,
+  hasBridgeCredential,
+} from "./bridge-auth";
+import {
   detectRekordboxVersion,
   readCurrentTrack,
   readRekordboxLibrary,
@@ -42,6 +46,8 @@ import {
   fetchEventStatus,
   fetchGenreVotes,
   fetchRequests,
+  pairDevice,
+  unpairDevice,
   toggleFireSale,
   pushTrack,
   reviewRequest,
@@ -83,6 +89,10 @@ let requestsPollerInitialized = false;
 let showKontrolReader: ShowKontrolReader | null = null;
 let showKontrolReaderKey = "";
 let showKontrolStartPromise: Promise<void> | null = null;
+
+function isBridgeConfigured(config = getConfig()): boolean {
+  return Boolean(getEffectiveEventId(config) && hasBridgeCredential(config));
+}
 
 interface StatusPayload {
   connected: boolean;
@@ -425,8 +435,8 @@ async function pollOnceInternal(): Promise<void> {
   if (config.mode !== "auto") return;
   status.softwareType = config.softwareType;
 
-  if (!config.eventId || !config.pushToken) {
-    status.error = "Event ID and Push Token must be configured.";
+  if (!isBridgeConfigured(config)) {
+    status.error = "Pair this device or configure an Event ID and Push Token.";
     sendStatus();
     return;
   }
@@ -665,7 +675,7 @@ const REQUESTS_POLL_MS = 8_000;
 
 async function pollRequestsOnce(): Promise<void> {
   const config = getConfig();
-  if (!config.eventId || !config.pushToken) return;
+  if (!isBridgeConfigured(config)) return;
 
   try {
     const all = await fetchRequests();
@@ -876,7 +886,7 @@ app.on("ready", () => {
   if (config.mode === "auto") {
     startPolling();
   }
-  if (config.eventId && config.pushToken) {
+  if (isBridgeConfigured(config)) {
     startRequestsPolling();
   }
 
@@ -905,6 +915,67 @@ app.on("activate", () => {
 
 ipcMain.handle("get-app-version", () => app.getVersion());
 ipcMain.handle("get-config", () => getConfig());
+
+ipcMain.handle("pair-device", async (_event, code: string, deviceName: string) => {
+  const result = await pairDevice(code, deviceName);
+  setConfig({
+    deviceId: result.deviceId,
+    deviceToken: result.deviceToken,
+    organizationId: result.organizationId,
+    pairedEventId: result.eventId,
+    pairedSourceId: result.sourceId,
+    pairedEventName: result.eventName,
+    pairedOrganizationName: result.organizationName,
+  });
+
+  resetTrackDetectionState();
+  status.error = null;
+  requestsPollerInitialized = false;
+  pendingRequestIds = new Set();
+  flaggedShoutoutIds = new Set();
+  if (getConfig().mode === "auto") startPolling();
+  startRequestsPolling();
+  sendStatus();
+  log.info("Device paired:", result.deviceId, result.organizationId, result.eventId);
+  return result;
+});
+
+ipcMain.handle("clear-device-pairing", async () => {
+  let remoteRevoked = true;
+  try {
+    await unpairDevice();
+  } catch (error) {
+    remoteRevoked = false;
+    log.warn("Could not revoke pairing remotely; clearing local credential:", String(error));
+  }
+  setConfig({
+    deviceId: "",
+    deviceToken: "",
+    organizationId: "",
+    pairedEventId: "",
+    pairedSourceId: "",
+    pairedEventName: "",
+    pairedOrganizationName: "",
+  });
+
+  resetTrackDetectionState();
+  status.error = null;
+  const config = getConfig();
+  if (config.mode === "auto") startPolling();
+  if (isBridgeConfigured(config)) {
+    requestsPollerInitialized = false;
+    pendingRequestIds = new Set();
+    flaggedShoutoutIds = new Set();
+    startRequestsPolling();
+  } else {
+    stopRequestsPolling();
+    status.pendingRequestsCount = 0;
+    status.flaggedShoutoutsCount = 0;
+  }
+  sendStatus();
+  log.info("Device pairing cleared; legacy configuration retained");
+  return { ...config, remoteRevoked };
+});
 
 ipcMain.handle(
   "set-config",
@@ -963,7 +1034,7 @@ ipcMain.handle(
       stopPolling();
     }
 
-    if (config.eventId && config.pushToken) {
+    if (isBridgeConfigured(config)) {
       requestsPollerInitialized = false;
       pendingRequestIds = new Set();
       flaggedShoutoutIds = new Set();

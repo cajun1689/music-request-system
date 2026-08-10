@@ -1,0 +1,104 @@
+name: Deploy SaaS Staging
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  DEPLOY_STAGE: staging
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Store Stripe test runtime secrets
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_TEST_WEBHOOK_SECRET }}
+        run: |
+          test -n "$STRIPE_SECRET_KEY"
+          test -n "$STRIPE_WEBHOOK_SECRET"
+          aws ssm put-parameter \
+            --name "/music-request/staging/stripe-secret-key" \
+            --type SecureString \
+            --value "$STRIPE_SECRET_KEY" \
+            --overwrite
+          aws ssm put-parameter \
+            --name "/music-request/staging/stripe-webhook-secret" \
+            --type SecureString \
+            --value "$STRIPE_WEBHOOK_SECRET" \
+            --overwrite
+
+      - name: Install and verify backend
+        run: npm ci && npm run typecheck
+        working-directory: backend
+
+      - name: Install and verify infrastructure
+        run: npm ci && npm run build && npm test -- --runInBand
+        working-directory: infrastructure
+
+      - name: Deploy isolated staging stack
+        run: npx cdk deploy InfrastructureStackStaging --require-approval never --outputs-file cdk-outputs.json
+        working-directory: infrastructure
+        env:
+          DEPLOY_STAGE: staging
+          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_SANDBOX_CLIENT_ID }}
+          PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_SANDBOX_CLIENT_SECRET }}
+          PAYPAL_ENVIRONMENT: sandbox
+          STRIPE_DJ_PRICE_ID: ${{ secrets.STRIPE_TEST_DJ_PRICE_ID }}
+          STRIPE_ORGANIZATION_PRICE_ID: ${{ secrets.STRIPE_TEST_ORGANIZATION_PRICE_ID }}
+          ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
+
+      - name: Read staging outputs
+        id: outputs
+        run: |
+          echo "bucket=$(jq -r '.InfrastructureStackStaging.FrontendBucketName' cdk-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "distribution=$(jq -r '.InfrastructureStackStaging.CloudFrontDistributionId' cdk-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "api=$(jq -r '.InfrastructureStackStaging.RestApiUrl' cdk-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "websocket=$(jq -r '.InfrastructureStackStaging.WebSocketUrl' cdk-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "pool=$(jq -r '.InfrastructureStackStaging.UserPoolId' cdk-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "client=$(jq -r '.InfrastructureStackStaging.UserPoolClientId' cdk-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "frontend=$(jq -r '.InfrastructureStackStaging.FrontendUrl' cdk-outputs.json)" >> "$GITHUB_OUTPUT"
+        working-directory: infrastructure
+
+      - name: Build staging frontend
+        run: npm ci && npm run build
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ steps.outputs.outputs.api }}
+          VITE_WEBSOCKET_URL: ${{ steps.outputs.outputs.websocket }}
+          VITE_USER_POOL_ID: ${{ steps.outputs.outputs.pool }}
+          VITE_USER_POOL_CLIENT_ID: ${{ steps.outputs.outputs.client }}
+          VITE_SENTRY_DSN: ${{ secrets.SENTRY_STAGING_DSN }}
+          VITE_SENTRY_ENV: staging
+          VITE_RELEASE: ${{ github.sha }}
+
+      - name: Publish staging frontend
+        run: |
+          aws s3 sync frontend/dist "s3://${{ steps.outputs.outputs.bucket }}" --delete
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.outputs.outputs.distribution }}" \
+            --paths "/*"
+
+      - name: Smoke test staging
+        run: |
+          curl --fail --retry 10 --retry-delay 5 \
+            "${{ steps.outputs.outputs.api }}events"
+          curl --fail --retry 10 --retry-delay 5 \
+            "${{ steps.outputs.outputs.frontend }}"

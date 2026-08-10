@@ -9,7 +9,9 @@ export function useWebSocket(
   onMessage: (payload: unknown) => void,
 ) {
   const stableHandler = useRef(onMessage);
-  stableHandler.current = onMessage;
+  useEffect(() => {
+    stableHandler.current = onMessage;
+  }, [onMessage]);
 
   const key = useMemo(() => `${eventId ?? "none"}-${role}`, [eventId, role]);
 

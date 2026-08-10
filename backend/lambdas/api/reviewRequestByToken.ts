@@ -2,6 +2,7 @@ import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import type { EventRecord, RequestStatus } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
+import { authorizeBridgeRequest } from "../shared/bridgeAuth";
 
 const ALLOWED_STATUSES: RequestStatus[] = ["approved", "vetoed", "played"];
 
@@ -14,10 +15,6 @@ interface ReviewInput {
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   if (!eventId) return json(400, { error: "eventId is required" });
-
-  const pushToken =
-    event.headers?.["x-push-token"] ?? event.headers?.["X-Push-Token"] ?? "";
-  if (!pushToken) return json(401, { error: "Missing x-push-token header" });
 
   const input = parseBody<ReviewInput>(event.body);
   if (!input?.requestId?.trim()) {
@@ -37,8 +34,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventRecord = eventResponse.Item as EventRecord | undefined;
   if (!eventRecord) return json(404, { error: "Event not found" });
 
-  if (!eventRecord.pushToken || eventRecord.pushToken !== pushToken) {
-    return json(403, { error: "Invalid push token" });
+  if (!(await authorizeBridgeRequest(event, eventRecord))) {
+    return json(403, { error: "Invalid Bridge credential" });
   }
 
   const now = new Date().toISOString();

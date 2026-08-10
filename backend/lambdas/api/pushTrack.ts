@@ -8,6 +8,7 @@ import {
 import { finalizeStalePendingPlayed } from "../shared/finalizePendingPlayed";
 import type { EventRecord, NowPlayingSlot, RequestRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
+import { authorizeBridgeRequest } from "../shared/bridgeAuth";
 
 interface PushTrackInput {
   title: string;
@@ -170,10 +171,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   if (!eventId) return json(400, { error: "eventId is required" });
 
-  const pushToken =
-    event.headers?.["x-push-token"] ?? event.headers?.["X-Push-Token"] ?? "";
-  if (!pushToken) return json(401, { error: "Missing x-push-token header" });
-
   const rawInput = parseBody<PushTrackInput>(event.body);
   if (!rawInput?.title?.trim()) return json(400, { error: "title is required" });
 
@@ -203,9 +200,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     return json(404, { error: "Event not found" });
   }
 
-  if (!eventRecord.pushToken || eventRecord.pushToken !== pushToken) {
-    console.log("pushTrack: invalid push token", { eventId });
-    return json(403, { error: "Invalid push token" });
+  const bridgeAuthorization = await authorizeBridgeRequest(event, eventRecord);
+  if (!bridgeAuthorization) {
+    console.log("pushTrack: invalid Bridge credential", { eventId });
+    return json(403, { error: "Invalid Bridge credential" });
+  }
+  if (bridgeAuthorization.device) {
+    input.sourceId = bridgeAuthorization.device.sourceId;
   }
 
   const PUSH_SOURCE_ID = input.sourceId?.trim() || DEFAULT_PUSH_SOURCE_ID;

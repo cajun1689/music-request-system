@@ -1,6 +1,8 @@
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { randomUUID } from "node:crypto";
+import { toPublicEvent } from "../shared/publicEvent";
+import type { EventRecord } from "../shared/types";
 import { docClient, env, json } from "../shared/utils";
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
@@ -20,7 +22,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     return json(404, { error: "Event not found" });
   }
 
-  if (!response.Item.pushToken) {
+  if (response.Item.accountMode !== "saas" && !response.Item.pushToken) {
     const newToken = randomUUID();
     try {
       await docClient.send(
@@ -38,11 +40,5 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
   }
 
-  const authHeader = event.headers?.authorization ?? event.headers?.Authorization;
-  if (!authHeader) {
-    const { pushToken: _stripped, autoMatchState: _match, blockedPushSources: _blocked, ...publicFields } = response.Item;
-    return json(200, publicFields);
-  }
-
-  return json(200, response.Item);
+  return json(200, toPublicEvent(response.Item as EventRecord));
 };

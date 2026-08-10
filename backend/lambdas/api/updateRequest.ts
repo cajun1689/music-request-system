@@ -1,7 +1,8 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import type { PaymentStatus, RequestStatus } from "../shared/types";
+import type { EventRecord, PaymentStatus, RequestStatus } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
+import { requireEventAccess, authorizationResponse } from "../shared/tenancy";
 
 const REVIEWABLE_STATUS: RequestStatus[] = ["approved", "vetoed", "played"];
 const VALID_PAYMENT_STATUSES: PaymentStatus[] = [
@@ -27,6 +28,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   if (!eventId || !requestId) {
     return json(400, { error: "eventId and requestId are required" });
   }
+  let eventRecord: EventRecord;
+  try {
+    ({ eventRecord } = await requireEventAccess(event, eventId, ["owner", "admin", "dj"]));
+  } catch (error) {
+    return authorizationResponse(error);
+  }
 
   const input = parseBody<UpdateRequestInput>(event.body);
   if (
@@ -46,6 +53,16 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   }
   if (input.paymentStatus && !VALID_PAYMENT_STATUSES.includes(input.paymentStatus)) {
     return json(400, { error: "Invalid paymentStatus value" });
+  }
+  if (
+    eventRecord.accountMode === "saas"
+    && (
+      input.paymentStatus !== undefined
+      || input.paymentReference !== undefined
+      || input.tipAmount !== undefined
+    )
+  ) {
+    return json(403, { error: "Stripe payment fields are updated only by verified webhooks" });
   }
 
   const now = new Date().toISOString();

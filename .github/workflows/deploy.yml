@@ -36,12 +36,30 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Store Stripe runtime secrets
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+        run: |
+          test -n "$STRIPE_SECRET_KEY"
+          test -n "$STRIPE_WEBHOOK_SECRET"
+          aws ssm put-parameter \
+            --name "/music-request/prod/stripe-secret-key" \
+            --type SecureString \
+            --value "$STRIPE_SECRET_KEY" \
+            --overwrite
+          aws ssm put-parameter \
+            --name "/music-request/prod/stripe-webhook-secret" \
+            --type SecureString \
+            --value "$STRIPE_WEBHOOK_SECRET" \
+            --overwrite
+
       - name: Install backend dependencies
-        run: npm ci
+        run: npm ci && npm run typecheck
         working-directory: backend
 
       - name: Install infrastructure dependencies
-        run: npm ci
+        run: npm ci && npm run build && npm test -- --runInBand
         working-directory: infrastructure
 
       - name: CDK diff
@@ -52,6 +70,8 @@ jobs:
           PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           PAYPAL_ENVIRONMENT: ${{ secrets.PAYPAL_ENVIRONMENT }}
           PAYPAL_WEBHOOK_ID: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+          STRIPE_DJ_PRICE_ID: ${{ secrets.STRIPE_DJ_PRICE_ID }}
+          STRIPE_ORGANIZATION_PRICE_ID: ${{ secrets.STRIPE_ORGANIZATION_PRICE_ID }}
           ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
 
       - name: CDK deploy
@@ -62,15 +82,24 @@ jobs:
           PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           PAYPAL_ENVIRONMENT: ${{ secrets.PAYPAL_ENVIRONMENT }}
           PAYPAL_WEBHOOK_ID: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+          STRIPE_DJ_PRICE_ID: ${{ secrets.STRIPE_DJ_PRICE_ID }}
+          STRIPE_ORGANIZATION_PRICE_ID: ${{ secrets.STRIPE_ORGANIZATION_PRICE_ID }}
           ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
+
+      - name: Apply idempotent MAPL tenant migration
+        run: |
+          MIGRATION_FN=$(jq -r '.InfrastructureStack.LegacyMigrationFunctionName' cdk-outputs.json)
+          aws lambda invoke --function-name "$MIGRATION_FN" /tmp/legacy-migration.json
+          jq -e 'has("errorMessage") | not' /tmp/legacy-migration.json
+        working-directory: infrastructure
 
       - name: Extract stack outputs
         id: outputs
         run: |
-          BUCKET=$(aws cloudformation describe-stacks --stack-name InfrastructureStack \
-            --query "Stacks[0].Outputs[?OutputKey=='FrontendBucketName'].OutputValue" --output text 2>/dev/null || echo "")
-          DIST_ID=$(aws cloudfront list-distributions \
-            --query "DistributionList.Items[?Aliases.Items[?contains(@,'casperrequests.com')]].Id | [0]" --output text)
+          BUCKET=$(jq -r '.InfrastructureStack.FrontendBucketName // empty' cdk-outputs.json)
+          DIST_ID=$(jq -r '.InfrastructureStack.CloudFrontDistributionId // empty' cdk-outputs.json)
+          test -n "$BUCKET"
+          test -n "$DIST_ID"
           echo "bucket=${BUCKET}" >> "$GITHUB_OUTPUT"
           echo "distribution=${DIST_ID}" >> "$GITHUB_OUTPUT"
 
@@ -97,14 +126,16 @@ jobs:
       - name: Build frontend
         run: npm run build
         working-directory: frontend
+        env:
+          VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          VITE_SENTRY_ENV: production
+          VITE_RELEASE: ${{ github.sha }}
 
       - name: Determine S3 bucket
         id: bucket
         run: |
           BUCKET="${{ needs.deploy-infrastructure.outputs.frontend-bucket }}"
-          if [ -z "$BUCKET" ] || [ "$BUCKET" = "None" ]; then
-            BUCKET=$(aws s3 ls | grep -o 'infrastructurestack-frontendbucket[^ ]*' | head -1)
-          fi
+          test -n "$BUCKET"
           echo "name=${BUCKET}" >> "$GITHUB_OUTPUT"
 
       - name: Sync to S3

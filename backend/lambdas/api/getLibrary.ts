@@ -1,12 +1,26 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { env, json } from "../shared/utils";
+import { authorizeBridgeRequest } from "../shared/bridgeAuth";
+import { getEventRecord, requireEventAccess } from "../shared/tenancy";
 
 const s3 = new S3Client({});
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   if (!eventId) return json(400, { error: "eventId is required" });
+  const eventRecord = await getEventRecord(eventId);
+  if (!eventRecord) return json(404, { error: "Event not found" });
+  if (eventRecord.accountMode === "saas") {
+    let authorized = false;
+    try {
+      await requireEventAccess(event, eventId);
+      authorized = true;
+    } catch {
+      authorized = Boolean(await authorizeBridgeRequest(event, eventRecord));
+    }
+    if (!authorized) return json(403, { error: "Library access is restricted" });
+  }
 
   const key = `libraries/${eventId}.json`;
 

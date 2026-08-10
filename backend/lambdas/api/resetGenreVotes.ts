@@ -1,11 +1,17 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { docClient, env, json } from "../shared/utils";
+import { requireEventAccess, authorizationResponse } from "../shared/tenancy";
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   if (!eventId) {
     return json(400, { error: "eventId is required" });
+  }
+  try {
+    await requireEventAccess(event, eventId, ["owner", "admin"]);
+  } catch (error) {
+    return authorizationResponse(error);
   }
 
   const now = new Date().toISOString();

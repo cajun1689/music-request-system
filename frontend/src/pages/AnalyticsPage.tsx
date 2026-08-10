@@ -87,22 +87,24 @@ function getTimelineTitle(range: TimeRange): string {
 
 export function AnalyticsPage() {
   const { eventId } = useParams();
-  useAuth();
+  const { session } = useAuth();
   const [eventData, setEventData] = useState<EventRecord | null>(null);
   const [allRequests, setAllRequests] = useState<RequestRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<TimeRange>("all");
 
   useEffect(() => {
-    if (!eventId) return;
-    setLoading(true);
-    Promise.all([api.getEvent(eventId), api.getRequests(eventId)])
+    if (!eventId || !session) return;
+    Promise.all([
+      api.getAdminEvent(eventId, session.idToken),
+      api.getAdminRequests(eventId, session.idToken),
+    ])
       .then(([event, reqs]) => {
         setEventData(event);
         setAllRequests(reqs);
       })
       .finally(() => setLoading(false));
-  }, [eventId]);
+  }, [eventId, session]);
 
   const requests = useMemo(() => {
     const cutoff = getRangeCutoff(range);
@@ -120,7 +122,9 @@ export function AnalyticsPage() {
     const played = requests.filter((r) => effectiveStatus(r) === "played").length;
     const pending = requests.filter((r) => effectiveStatus(r) === "pending").length;
 
-    const tips = requests.filter((r) => r.tipAmount && r.tipAmount > 0);
+    const tips = requests.filter(
+      (r) => r.paymentStatus === "verified" && r.tipAmount && r.tipAmount > 0,
+    );
     const totalTips = tips.reduce((sum, r) => sum + (r.tipAmount ?? 0), 0);
     const avgTip = tips.length ? totalTips / tips.length : 0;
     const maxTip = tips.length ? Math.max(...tips.map((r) => r.tipAmount ?? 0)) : 0;
@@ -182,7 +186,8 @@ export function AnalyticsPage() {
       }
       neverPlayedCounts[key].count++;
       neverPlayedCounts[key].upvotes += req.upvotes ?? 0;
-      neverPlayedCounts[key].tipTotal += req.tipAmount ?? 0;
+      neverPlayedCounts[key].tipTotal +=
+        req.paymentStatus === "verified" ? (req.tipAmount ?? 0) : 0;
     }
 
     const topVetoed = Object.values(vetoedCounts)

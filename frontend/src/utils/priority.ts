@@ -7,17 +7,26 @@ const UPVOTE_PRIORITY_MS = 60_000;
 // Cap the tip-driven boost so a whale can't park forever at #1.
 const MAX_TIP_BOOST_DOLLARS = 100;
 
-export function priorityScore(req: Pick<RequestRecord, "position" | "tipAmount" | "upvotes" | "submittedAt">): number {
+export function priorityScore(
+  req: Pick<RequestRecord, "position" | "tipAmount" | "paymentStatus" | "upvotes" | "submittedAt">,
+): number {
   const basePos = Number(
     req.position ?? (req.submittedAt ? new Date(req.submittedAt).getTime() : Number.MAX_SAFE_INTEGER),
   );
-  const tip = Math.min(req.tipAmount ?? 0, MAX_TIP_BOOST_DOLLARS);
+  const tip = req.paymentStatus === "verified"
+    ? Math.min(req.tipAmount ?? 0, MAX_TIP_BOOST_DOLLARS)
+    : 0;
   const tipBoost = tip * TIP_PRIORITY_MS_PER_DOLLAR;
   const upvoteBoost = (req.upvotes ?? 0) * UPVOTE_PRIORITY_MS;
   return basePos - tipBoost - upvoteBoost;
 }
 
-export function comparePriority<T extends Pick<RequestRecord, "position" | "tipAmount" | "upvotes" | "submittedAt">>(
+export function comparePriority<
+  T extends Pick<
+    RequestRecord,
+    "position" | "tipAmount" | "paymentStatus" | "upvotes" | "submittedAt"
+  >,
+>(
   a: T,
   b: T,
 ): number {
@@ -30,8 +39,12 @@ export interface PriorityBoost {
   totalBoostMin: number;
 }
 
-export function describeBoost(req: Pick<RequestRecord, "tipAmount" | "upvotes">): PriorityBoost {
-  const tip = Math.min(req.tipAmount ?? 0, MAX_TIP_BOOST_DOLLARS);
+export function describeBoost(
+  req: Pick<RequestRecord, "tipAmount" | "paymentStatus" | "upvotes">,
+): PriorityBoost {
+  const tip = req.paymentStatus === "verified"
+    ? Math.min(req.tipAmount ?? 0, MAX_TIP_BOOST_DOLLARS)
+    : 0;
   const tipBoostMin = (tip * TIP_PRIORITY_MS_PER_DOLLAR) / 60_000;
   const upvoteBoostMin = ((req.upvotes ?? 0) * UPVOTE_PRIORITY_MS) / 60_000;
   return {

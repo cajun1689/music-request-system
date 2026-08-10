@@ -6,6 +6,7 @@ import { unmarshall } from "@aws-sdk/util-dynamodb";
 import { DeleteCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { DynamoDBStreamHandler } from "aws-lambda";
 import { docClient, env } from "../shared/utils";
+import { toPublicRequest } from "../shared/publicRequest";
 
 type ConnectionRecord = {
   connectionId: string;
@@ -23,8 +24,12 @@ export const handler: DynamoDBStreamHandler = async (event) => {
       continue;
     }
 
-    const newImage = record.dynamodb.NewImage ? unmarshall(record.dynamodb.NewImage) : undefined;
-    const oldImage = record.dynamodb.OldImage ? unmarshall(record.dynamodb.OldImage) : undefined;
+    const newImage = record.dynamodb.NewImage
+      ? unmarshall(record.dynamodb.NewImage as Parameters<typeof unmarshall>[0])
+      : undefined;
+    const oldImage = record.dynamodb.OldImage
+      ? unmarshall(record.dynamodb.OldImage as Parameters<typeof unmarshall>[0])
+      : undefined;
     const eventId = String(newImage?.eventId ?? oldImage?.eventId ?? "");
     if (!eventId) {
       continue;
@@ -45,7 +50,7 @@ export const handler: DynamoDBStreamHandler = async (event) => {
       type: "request_updated",
       action: record.eventName,
       eventId,
-      data: newImage ?? oldImage,
+      data: toPublicRequest((newImage ?? oldImage) as Record<string, unknown>),
     });
 
     await Promise.all(

@@ -2,6 +2,7 @@ import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import type { EventRecord } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
+import { authorizeBridgeRequest } from "../shared/bridgeAuth";
 
 interface PingInput {
   sourceId?: string;
@@ -12,12 +13,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   if (!eventId) return json(400, { error: "eventId is required" });
 
-  const pushToken =
-    event.headers?.["x-push-token"] ?? event.headers?.["X-Push-Token"] ?? "";
-  if (!pushToken) return json(401, { error: "Missing x-push-token header" });
-
   const input = parseBody<PingInput>(event.body) ?? {};
-  const sourceId = input.sourceId?.trim() || "rekordbox-push";
+  let sourceId = input.sourceId?.trim() || "rekordbox-push";
 
   const eventResponse = await docClient.send(
     new GetCommand({ TableName: env.eventsTableName, Key: { eventId } }),
@@ -27,9 +24,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     return json(404, { error: "Event not found" });
   }
 
-  if (!eventRecord.pushToken || eventRecord.pushToken !== pushToken) {
-    return json(403, { error: "Invalid push token" });
-  }
+  const bridgeAuthorization = await authorizeBridgeRequest(event, eventRecord);
+  if (!bridgeAuthorization) return json(403, { error: "Invalid Bridge credential" });
+  if (bridgeAuthorization.device) sourceId = bridgeAuthorization.device.sourceId;
 
   const blocked = eventRecord.blockedPushSources ?? [];
   const isBlocked = blocked.includes(sourceId);

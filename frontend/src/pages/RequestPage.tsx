@@ -46,6 +46,7 @@ export function RequestPage() {
   const [tipAmount, setTipAmount] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resumingStripe, setResumingStripe] = useState(false);
   const [voteBusy, setVoteBusy] = useState(false);
   const [trackedRequest, setTrackedRequest] = useState<RequestRecord | null>(null);
   const [songsAway, setSongsAway] = useState<number | null>(null);
@@ -59,14 +60,15 @@ export function RequestPage() {
     if (!eventId || !eventData) {
       throw new Error("Event is still loading. Please try again.");
     }
+    const includeTip = Boolean(tipAmount) && (pendingPayment || eventData.accountMode !== "saas");
     const created = await api.createRequest(eventId, {
       songTitle,
       artistName,
       requesterName,
       message,
       genre: requestGenre || votedGenre || undefined,
-      tipAmount: tipAmount ? Number(tipAmount) : undefined,
-      paymentStatus: tipAmount && pendingPayment ? "pending_verification" : "unpaid",
+      tipAmount: includeTip ? Number(tipAmount) : undefined,
+      paymentStatus: includeTip && pendingPayment ? "pending_verification" : "unpaid",
     } as Partial<RequestRecord>);
 
     localStorage.setItem(trackedRequestKey, created.requestId);
@@ -74,6 +76,30 @@ export function RequestPage() {
     setSongsAway(null);
     localStorage.setItem(lockKey, String(Date.now() + 2 * 60 * 1000));
     return created;
+  }
+
+  async function resumeStripeCheckout() {
+    if (!eventId || !trackedRequest?.tipAmount) return;
+    setResumingStripe(true);
+    setFeedback(null);
+    try {
+      const checkout = await api.createStripeCheckout(
+        eventId,
+        trackedRequest.requestId,
+        trackedRequest.tipAmount,
+      );
+      if (checkout.alreadyPaid) {
+        setFeedback("Your tip is already paid and is being verified.");
+      } else if (checkout.checkoutUrl) {
+        window.location.assign(checkout.checkoutUrl);
+      } else {
+        throw new Error("Could not resume Stripe checkout.");
+      }
+    } catch (error) {
+      setFeedback(`Checkout failed: ${(error as Error).message}`);
+    } finally {
+      setResumingStripe(false);
+    }
   }
 
   async function onSubmitShoutout() {
@@ -385,6 +411,7 @@ export function RequestPage() {
   }
 
   const { total: genreVoteTotal } = normalizeGenreVotes(eventData);
+  const isSaasEvent = eventData.accountMode === "saas";
 
   const energyColor =
     energy < 30 ? "from-blue-500 to-cyan-400" : energy < 60 ? "from-yellow-400 to-orange-400" : "from-orange-500 to-red-500";
@@ -553,7 +580,9 @@ export function RequestPage() {
         <div className="rounded-lg border border-indigo-400/40 bg-indigo-900/20 p-3">
           <p className="text-sm font-semibold text-indigo-300">Tip to prioritize your request (optional)</p>
           <p className="mt-1 text-xs text-indigo-100/90">
-            Send a tip to bump your request to the top. DJs verify paid requests in their queue.
+            {isSaasEvent
+              ? "Pay securely with Stripe. Successful tips are verified automatically."
+              : "Send a tip to bump your request to the top. DJs verify paid requests in their queue."}
           </p>
           <label className="mt-2 block text-sm">
             Tip amount (USD)
@@ -568,7 +597,60 @@ export function RequestPage() {
             />
           </label>
           <div className="mt-3 flex flex-wrap gap-2">
-            {eventData.venmoHandle ? (
+            {isSaasEvent ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-md bg-violet-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:opacity-60"
+                disabled={submitting || !tipAmount || Number(tipAmount) <= 0}
+                onClick={() => {
+                  void (async () => {
+                    if (!eventId || !eventData) {
+                      setFeedback("Event is still loading. Please try again.");
+                      return;
+                    }
+                    if (!songTitle.trim() || !artistName.trim()) {
+                      setFeedback("Enter song title and artist before checkout.");
+                      return;
+                    }
+                    if (!tipAmount || Number(tipAmount) <= 0) {
+                      setFeedback("Enter a tip amount before checkout.");
+                      return;
+                    }
+                    const lockedUntil = Number(localStorage.getItem(lockKey) ?? "0");
+                    if (Date.now() < lockedUntil) {
+                      setFeedback("Please wait before sending another request.");
+                      return;
+                    }
+
+                    setSubmitting(true);
+                    try {
+                      const created = await createGuestRequest(true);
+                      const checkout = await api.createStripeCheckout(
+                        eventId,
+                        created.requestId,
+                        Number(tipAmount),
+                      );
+                      if (checkout.alreadyPaid) {
+                        setFeedback("This request is already marked paid.");
+                        setSubmitting(false);
+                        return;
+                      }
+                      if (!checkout.checkoutUrl) {
+                        throw new Error("Could not start Stripe checkout.");
+                      }
+                      window.location.assign(checkout.checkoutUrl);
+                    } catch (err) {
+                      setFeedback(`Checkout failed: ${(err as Error).message}`);
+                      setSubmitting(false);
+                    }
+                  })();
+                }}
+              >
+                Pay securely with Stripe
+              </button>
+            ) : (
+              <>
+              {eventData.venmoHandle ? (
               <button
                 type="button"
                 className="inline-flex items-center gap-1.5 rounded-md bg-[#008CFF] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
@@ -680,10 +762,13 @@ export function RequestPage() {
               <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 0 1 .923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z"/></svg>
               PayPal / Card
             </button>
+              </>
+            )}
           </div>
           <p className="mt-2 text-[11px] text-indigo-100/70">
-            Venmo opens the app to send a manual tip (DJs verify it). PayPal / Card
-            checks out instantly and auto-verifies your request.
+            {isSaasEvent
+              ? "Checkout opens on Stripe. Your request is saved before you leave this page."
+              : "Venmo opens the app to send a manual tip (DJs verify it). PayPal / Card checks out instantly and auto-verifies your request."}
           </p>
         </div>
         <button
@@ -720,7 +805,23 @@ export function RequestPage() {
           {trackedRequest.paymentStatus === "verified" ? (
             <p className="mt-2 text-xs text-emerald-300">Tip verified by DJ team.</p>
           ) : trackedRequest.paymentStatus === "pending_verification" ? (
-            <p className="mt-2 text-xs text-amber-300">Tip submitted and pending verification.</p>
+            <p className="mt-2 text-xs text-amber-300">
+              {isSaasEvent ? "Stripe checkout is pending." : "Tip submitted and pending verification."}
+            </p>
+          ) : trackedRequest.paymentStatus === "rejected" ? (
+            <p className="mt-2 text-xs text-rose-300">The tip was not completed. Your song request is still saved.</p>
+          ) : null}
+          {isSaasEvent
+          && trackedRequest.tipAmount
+          && ["pending_verification", "rejected"].includes(trackedRequest.paymentStatus ?? "") ? (
+            <button
+              type="button"
+              disabled={resumingStripe}
+              onClick={() => void resumeStripeCheckout()}
+              className="mt-3 rounded-md bg-violet-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            >
+              {resumingStripe ? "Opening Stripe…" : "Resume secure tip checkout"}
+            </button>
           ) : null}
         </section>
       ) : null}

@@ -2,6 +2,7 @@ import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import type { EventRecord, GenreName, GenreVotes } from "../shared/types";
 import { docClient, env, json, parseBody } from "../shared/utils";
+import { requireEventAccess, authorizationResponse } from "../shared/tenancy";
 
 interface AdminAdjustGenreVotesInput {
   adjustments?: Partial<Record<GenreName, number>>;
@@ -18,6 +19,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const eventId = event.pathParameters?.eventId;
   if (!eventId) {
     return json(400, { error: "eventId is required" });
+  }
+  try {
+    await requireEventAccess(event, eventId, ["owner", "admin"]);
+  } catch (error) {
+    return authorizationResponse(error);
   }
 
   const input = parseBody<AdminAdjustGenreVotesInput>(event.body);
