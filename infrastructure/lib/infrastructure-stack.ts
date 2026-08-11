@@ -36,6 +36,8 @@ const lambdaDefaults = {
   memorySize: 256,
   timeout: Duration.seconds(15),
   logRetention: logs.RetentionDays.ONE_MONTH,
+  projectRoot: path.join(__dirname, "../../backend"),
+  depsLockFilePath: path.join(__dirname, "../../backend/package-lock.json"),
   bundling: {
     minify: true,
     sourceMap: true,
@@ -118,6 +120,11 @@ export class InfrastructureStack extends Stack {
       indexName: "stripeConnectedAccountId-index",
       partitionKey: { name: "stripeConnectedAccountId", type: dynamodb.AttributeType.STRING },
     });
+    organizationsTable.addGlobalSecondaryIndex({
+      indexName: "accountMode-createdAt-index",
+      partitionKey: { name: "accountMode", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
+    });
 
     const membershipsTable = new dynamodb.Table(this, "MembershipsTable", {
       partitionKey: { name: "organizationId", type: dynamodb.AttributeType.STRING },
@@ -143,6 +150,11 @@ export class InfrastructureStack extends Stack {
       indexName: "tokenHash-index",
       partitionKey: { name: "tokenHash", type: dynamodb.AttributeType.STRING },
     });
+    invitationsTable.addGlobalSecondaryIndex({
+      indexName: "organizationId-index",
+      partitionKey: { name: "organizationId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
+    });
 
     const bridgeDevicesTable = new dynamodb.Table(this, "BridgeDevicesTable", {
       partitionKey: { name: "deviceId", type: dynamodb.AttributeType.STRING },
@@ -164,6 +176,11 @@ export class InfrastructureStack extends Stack {
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: RemovalPolicy.RETAIN,
     });
+    billingEventsTable.addGlobalSecondaryIndex({
+      indexName: "organizationId-createdAt-index",
+      partitionKey: { name: "organizationId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
+    });
 
     const usageCountersTable = new dynamodb.Table(this, "UsageCountersTable", {
       partitionKey: { name: "scopeId", type: dynamodb.AttributeType.STRING },
@@ -172,6 +189,29 @@ export class InfrastructureStack extends Stack {
       timeToLiveAttribute: "expiresAt",
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    const platformOperationsTable = new dynamodb.Table(this, "PlatformOperationsTable", {
+      partitionKey: { name: "recordId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: "retentionExpiresAt",
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+    platformOperationsTable.addGlobalSecondaryIndex({
+      indexName: "organizationId-createdAt-index",
+      partitionKey: { name: "organizationId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
+    });
+    platformOperationsTable.addGlobalSecondaryIndex({
+      indexName: "actorUserId-createdAt-index",
+      partitionKey: { name: "actorUserId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
+    });
+    platformOperationsTable.addGlobalSecondaryIndex({
+      indexName: "recordType-createdAt-index",
+      partitionKey: { name: "recordType", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
     });
 
     const asyncFailureQueue = new sqs.Queue(this, "AsyncFailureQueue", {
@@ -319,6 +359,10 @@ export class InfrastructureStack extends Stack {
           BRIDGE_DEVICES_TABLE_NAME: bridgeDevicesTable.tableName,
           BILLING_EVENTS_TABLE_NAME: billingEventsTable.tableName,
           USAGE_COUNTERS_TABLE_NAME: usageCountersTable.tableName,
+          PLATFORM_OPERATIONS_TABLE_NAME: platformOperationsTable.tableName,
+          PLATFORM_ALARM_PREFIX: this.stackName,
+          ASYNC_FAILURE_QUEUE_URL: asyncFailureQueue.queueUrl,
+          STRIPE_ENABLED: process.env.STRIPE_ENABLED === "true" ? "true" : "false",
           BRAND_ASSETS_BUCKET_NAME: brandAssetsBucket.bucketName,
           WEBSOCKET_ENDPOINT: websocketEndpoint,
           APP_BASE_URL:
@@ -334,6 +378,13 @@ export class InfrastructureStack extends Stack {
     const getEventFn = makeLambda("GetEventFn", "../../backend/lambdas/api/getEvent.ts");
     const tenantApiFn = makeLambda("TenantApiFn", "../../backend/lambdas/api/tenantApi.ts");
     const getAdminEventFn = tenantApiFn;
+    const platformApiFn = makeLambda(
+      "PlatformApiFn",
+      "../../backend/lambdas/api/platformApi.ts",
+    );
+    const platformApiResource = platformApiFn.node.defaultChild as lambda.CfnFunction;
+    platformApiResource.timeout = 30;
+    platformApiResource.memorySize = 512;
     const getEventBySlugFn = makeLambda(
       "GetEventBySlugFn",
       "../../backend/lambdas/api/getEventBySlug.ts",
@@ -584,6 +635,8 @@ export class InfrastructureStack extends Stack {
     invitationsTable.grantReadWriteData(cleanupEventsFn);
     bridgeDevicesTable.grantReadWriteData(cleanupEventsFn);
     usageCountersTable.grantReadWriteData(cleanupEventsFn);
+    billingEventsTable.grantReadWriteData(cleanupEventsFn);
+    platformOperationsTable.grantReadWriteData(cleanupEventsFn);
     connectionsTable.grantReadWriteData(cleanupEventsFn);
     brandAssetsBucket.grantReadWrite(cleanupEventsFn);
     brandAssetsBucket.grantRead(createRequestFn);
@@ -681,6 +734,42 @@ export class InfrastructureStack extends Stack {
       }),
     );
 
+    organizationsTable.grantReadWriteData(platformApiFn);
+    membershipsTable.grantReadWriteData(platformApiFn);
+    invitationsTable.grantReadWriteData(platformApiFn);
+    eventsTable.grantReadData(platformApiFn);
+    requestsTable.grantReadData(platformApiFn);
+    bridgeDevicesTable.grantReadWriteData(platformApiFn);
+    billingEventsTable.grantReadData(platformApiFn);
+    usageCountersTable.grantReadData(platformApiFn);
+    platformOperationsTable.grantReadWriteData(platformApiFn);
+    brandAssetsBucket.grantRead(platformApiFn);
+    platformApiFn.addEnvironment("USER_POOL_ID", userPool.userPoolId);
+    platformApiFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "cognito-idp:ListUsers",
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:AdminDisableUser",
+          "cognito-idp:AdminEnableUser",
+          "cognito-idp:AdminResetUserPassword",
+        ],
+        resources: [userPool.userPoolArn],
+      }),
+    );
+    platformApiFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["cloudwatch:DescribeAlarms", "cloudwatch:GetMetricData"],
+        resources: ["*"],
+      }),
+    );
+    platformApiFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["sqs:GetQueueAttributes"],
+        resources: [asyncFailureQueue.queueArn],
+      }),
+    );
+
     requestStreamFn.addEventSource(
       new eventSources.DynamoEventSource(requestsTable, {
         startingPosition: lambda.StartingPosition.LATEST,
@@ -770,13 +859,21 @@ export class InfrastructureStack extends Stack {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allowHeaders: ["Authorization", "Content-Type", "x-push-token", "x-device-id", "stripe-signature"],
+        allowHeaders: [
+          "Authorization",
+          "Content-Type",
+          "x-push-token",
+          "x-device-id",
+          "x-support-session-id",
+          "stripe-signature",
+        ],
       },
     });
 
     const gatewayCorsHeaders = {
       "Access-Control-Allow-Origin": "'*'",
-      "Access-Control-Allow-Headers": "'Content-Type,Authorization,x-push-token,x-device-id,stripe-signature'",
+      "Access-Control-Allow-Headers":
+        "'Content-Type,Authorization,x-push-token,x-device-id,x-support-session-id,stripe-signature'",
       "Access-Control-Allow-Methods": "'GET,POST,PATCH,DELETE,OPTIONS'",
     };
     restApi.addGatewayResponse("Default4xxCors", {
@@ -909,6 +1006,8 @@ export class InfrastructureStack extends Stack {
     const bridgePairResource = bridgeResource.addResource("pair");
     const bridgeRefreshResource = bridgeResource.addResource("refresh");
     const bridgeUnpairResource = bridgeResource.addResource("unpair");
+    const platformResource = restApi.root.addResource("platform");
+    const platformProxyResource = platformResource.addProxy({ anyMethod: false });
 
     eventsResource.addMethod("GET", new apigateway.LambdaIntegration(listEventsFn));
     eventsResource.addMethod("POST", new apigateway.LambdaIntegration(createEventFn), {
@@ -990,6 +1089,10 @@ export class InfrastructureStack extends Stack {
     stripeCheckoutResource.addMethod("POST", new apigateway.LambdaIntegration(createStripeTipCheckoutFn));
     paypalWebhookResource.addMethod("POST", new apigateway.LambdaIntegration(paypalWebhookFn));
     stripeWebhookResource.addMethod("POST", new apigateway.LambdaIntegration(stripeWebhookFn));
+    platformProxyResource.addMethod("ANY", new apigateway.LambdaIntegration(platformApiFn), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+    });
 
     myOrganizationsResource.addMethod("GET", new apigateway.LambdaIntegration(listMyOrganizationsFn), {
       authorizer,
@@ -1109,10 +1212,14 @@ export class InfrastructureStack extends Stack {
     stripeSecretKeyParameter.grantRead(tenantApiFn);
     stripeSecretKeyParameter.grantRead(publicSaasApiFn);
     stripeSecretKeyParameter.grantRead(cleanupEventsFn);
+    stripeSecretKeyParameter.grantRead(platformApiFn);
     stripeWebhookSecretParameter.grantRead(publicSaasApiFn);
     tenantApiFn.addEnvironment("STRIPE_SECRET_KEY_SSM_PARAM", stripeSecretKeyParameterName);
     tenantApiFn.addEnvironment("STRIPE_DJ_PRICE_ID", stripeDjPriceId);
     tenantApiFn.addEnvironment("STRIPE_ORGANIZATION_PRICE_ID", stripeOrganizationPriceId);
+    platformApiFn.addEnvironment("STRIPE_SECRET_KEY_SSM_PARAM", stripeSecretKeyParameterName);
+    platformApiFn.addEnvironment("STRIPE_DJ_PRICE_ID", stripeDjPriceId);
+    platformApiFn.addEnvironment("STRIPE_ORGANIZATION_PRICE_ID", stripeOrganizationPriceId);
     publicSaasApiFn.addEnvironment("STRIPE_SECRET_KEY_SSM_PARAM", stripeSecretKeyParameterName);
     publicSaasApiFn.addEnvironment(
       "STRIPE_WEBHOOK_SECRET_SSM_PARAM",
@@ -1152,6 +1259,7 @@ export class InfrastructureStack extends Stack {
       WsSubscribe: wsSubscribeFn,
       TenantApi: tenantApiFn,
       PublicSaasApi: publicSaasApiFn,
+      PlatformApi: platformApiFn,
     };
     const criticalEntries = Object.entries(criticalFunctions);
     for (let groupIndex = 0; groupIndex < criticalEntries.length; groupIndex += 9) {
@@ -1187,6 +1295,7 @@ export class InfrastructureStack extends Stack {
       PushTrack: pushTrackFn,
       RequestStream: requestStreamFn,
       TenantApi: tenantApiFn,
+      PlatformApi: platformApiFn,
     };
     const lambdaThrottleAlarm = new cloudwatch.Alarm(this, "CriticalLambdaThrottleAlarm", {
       metric: new cloudwatch.MathExpression({
@@ -1242,7 +1351,7 @@ export class InfrastructureStack extends Stack {
 
     const tenantTableThrottleAlarm = new cloudwatch.Alarm(this, "TenantTablesThrottleAlarm", {
       metric: new cloudwatch.MathExpression({
-        expression: "MAX([organizations,memberships,invitations,devices,billing,usage])",
+        expression: "MAX([organizations,memberships,invitations,devices,billing,usage,platform])",
         period: Duration.minutes(5),
         usingMetrics: {
           organizations: organizationsTable.metric("ThrottledRequests", { statistic: "Sum" }),
@@ -1251,6 +1360,7 @@ export class InfrastructureStack extends Stack {
           devices: bridgeDevicesTable.metric("ThrottledRequests", { statistic: "Sum" }),
           billing: billingEventsTable.metric("ThrottledRequests", { statistic: "Sum" }),
           usage: usageCountersTable.metric("ThrottledRequests", { statistic: "Sum" }),
+          platform: platformOperationsTable.metric("ThrottledRequests", { statistic: "Sum" }),
         },
       }),
       threshold: 1,

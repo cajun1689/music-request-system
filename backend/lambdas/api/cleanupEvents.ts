@@ -91,12 +91,17 @@ async function deleteObjectVersions(prefix: string): Promise<void> {
       .filter((item): item is typeof item & { Key: string } => Boolean(item.Key))
       .map(({ Key, VersionId }) => ({ Key, VersionId }));
     for (let i = 0; i < objects.length; i += 1000) {
-      await s3.send(
+      const deleted = await s3.send(
         new DeleteObjectsCommand({
           Bucket: bucket,
           Delete: { Objects: objects.slice(i, i + 1000) },
         }),
       );
+      if (deleted.Errors?.length) {
+        throw new Error(
+          `S3 failed to delete ${deleted.Errors.length} object version(s) under ${prefix}`,
+        );
+      }
     }
     keyMarker = page.NextKeyMarker;
     versionIdMarker = page.NextVersionIdMarker;
@@ -110,26 +115,69 @@ function pageIsTruncated(
   return Boolean(nextKeyMarker || nextVersionIdMarker);
 }
 
+function stripeResourceIsMissing(error: unknown): boolean {
+  const stripeError = error as {
+    statusCode?: number;
+    code?: string;
+    raw?: { statusCode?: number; code?: string };
+  };
+  return stripeError.statusCode === 404
+    || stripeError.raw?.statusCode === 404
+    || stripeError.code === "resource_missing"
+    || stripeError.raw?.code === "resource_missing";
+}
+
+async function removeStripeResource(
+  label: string,
+  operation: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await operation();
+  } catch (error) {
+    if (stripeResourceIsMissing(error)) {
+      console.info(`Stripe ${label} was already removed`);
+      return;
+    }
+    throw error;
+  }
+}
+
 async function purgeOrganization(organization: OrganizationRecord): Promise<void> {
   const organizationId = organization.organizationId;
   if (organization.accountMode !== "saas") return;
 
-  if (process.env.STRIPE_SECRET_KEY_SSM_PARAM || env.stripeSecretKey) {
+  const hasStripeResources = Boolean(
+    organization.stripeSubscriptionId
+    || organization.stripeConnectedAccountId
+    || organization.stripeCustomerId,
+  );
+  if (hasStripeResources && process.env.STRIPE_ENABLED !== "true") {
+    throw new Error(
+      `Cannot purge ${organizationId} while its Stripe resources are unavailable`,
+    );
+  }
+  if (
+    hasStripeResources
+    && (process.env.STRIPE_SECRET_KEY_SSM_PARAM || env.stripeSecretKey)
+  ) {
     const stripe = await getStripe();
     if (organization.stripeSubscriptionId) {
-      await stripe.subscriptions.cancel(organization.stripeSubscriptionId).catch((error) => {
-        console.warn("Could not cancel deleted organization subscription", String(error));
-      });
+      await removeStripeResource(
+        "subscription",
+        () => stripe.subscriptions.cancel(organization.stripeSubscriptionId as string),
+      );
     }
     if (organization.stripeConnectedAccountId) {
-      await stripe.accounts.del(organization.stripeConnectedAccountId).catch((error) => {
-        console.warn("Could not delete connected payout account", String(error));
-      });
+      await removeStripeResource(
+        "connected account",
+        () => stripe.accounts.del(organization.stripeConnectedAccountId as string),
+      );
     }
     if (organization.stripeCustomerId) {
-      await stripe.customers.del(organization.stripeCustomerId).catch((error) => {
-        console.warn("Could not delete Stripe customer", String(error));
-      });
+      await removeStripeResource(
+        "customer",
+        () => stripe.customers.del(organization.stripeCustomerId as string),
+      );
     }
   }
 
@@ -138,20 +186,24 @@ async function purgeOrganization(organization: OrganizationRecord): Promise<void
     "organizationId = :organizationId",
     { ":organizationId": organizationId },
     "eventId",
-    "organizationId-index",
+    "organizationId-createdAt-index",
+  );
+  const organizationRequests = await queryKeys(
+    env.requestsTableName,
+    "organizationId = :organizationId",
+    { ":organizationId": organizationId },
+    "eventId, requestId",
+    "organizationId-submittedAt-index",
+  );
+  await batchDelete(
+    env.requestsTableName,
+    organizationRequests.map((item) => ({
+      eventId: item.eventId,
+      requestId: item.requestId,
+    })),
   );
   for (const eventItem of eventItems) {
     const eventId = String(eventItem.eventId);
-    const requestItems = await queryKeys(
-      env.requestsTableName,
-      "eventId = :eventId",
-      { ":eventId": eventId },
-      "eventId, requestId",
-    );
-    await batchDelete(
-      env.requestsTableName,
-      requestItems.map((item) => ({ eventId: item.eventId, requestId: item.requestId })),
-    );
     const connections = await queryKeys(
       env.connectionsTableName,
       "eventId = :eventId",
@@ -166,15 +218,13 @@ async function purgeOrganization(organization: OrganizationRecord): Promise<void
     await deleteObjectVersions(`libraries/${eventId}.json`);
     const eventUsage = await queryKeys(
       env.usageCountersTableName,
-      "#scope = :scope",
-      { ":scope": eventId },
-      "#scope, counterKey",
-      undefined,
-      { "#scope": "scope" },
-    ).catch(() => []);
+      "scopeId = :scopeId",
+      { ":scopeId": eventId },
+      "scopeId, counterKey",
+    );
     await batchDelete(
       env.usageCountersTableName,
-      eventUsage.map((item) => ({ scope: item.scope, counterKey: item.counterKey })),
+      eventUsage.map((item) => ({ scopeId: item.scopeId, counterKey: item.counterKey })),
     );
   }
   await batchDelete(
@@ -182,7 +232,14 @@ async function purgeOrganization(organization: OrganizationRecord): Promise<void
     eventItems.map((item) => ({ eventId: item.eventId })),
   );
 
-  const [memberships, invitations, devices, organizationUsage] = await Promise.all([
+  const [
+    memberships,
+    invitations,
+    devices,
+    organizationUsage,
+    billingEvents,
+    platformOperations,
+  ] = await Promise.all([
     queryKeys(
       env.membershipsTableName,
       "organizationId = :organizationId",
@@ -205,13 +262,41 @@ async function purgeOrganization(organization: OrganizationRecord): Promise<void
     ),
     queryKeys(
       env.usageCountersTableName,
-      "#scope = :scope",
-      { ":scope": organizationId },
-      "#scope, counterKey",
-      undefined,
-      { "#scope": "scope" },
-    ).catch(() => []),
+      "scopeId = :scopeId",
+      { ":scopeId": organizationId },
+      "scopeId, counterKey",
+    ),
+    queryKeys(
+      env.billingEventsTableName,
+      "organizationId = :organizationId",
+      { ":organizationId": organizationId },
+      "eventId",
+      "organizationId-createdAt-index",
+    ),
+    queryKeys(
+      env.platformOperationsTableName,
+      "organizationId = :organizationId",
+      { ":organizationId": organizationId },
+      "recordId, recordType",
+      "organizationId-createdAt-index",
+    ),
   ]);
+  for (const item of platformOperations.filter((record) => record.recordType === "audit")) {
+    await docClient.send(
+      new UpdateCommand({
+        TableName: env.platformOperationsTableName,
+        Key: { recordId: item.recordId },
+        UpdateExpression:
+          "SET organizationDeletedAt = :now "
+          + "REMOVE reason, details, targetUserId, supportSessionId",
+        ConditionExpression: "recordType = :audit",
+        ExpressionAttributeValues: {
+          ":now": new Date().toISOString(),
+          ":audit": "audit",
+        },
+      }),
+    );
+  }
   await Promise.all([
     batchDelete(
       env.membershipsTableName,
@@ -227,8 +312,19 @@ async function purgeOrganization(organization: OrganizationRecord): Promise<void
     ),
     batchDelete(
       env.usageCountersTableName,
-      organizationUsage.map((item) => ({ scope: item.scope, counterKey: item.counterKey })),
+      organizationUsage.map((item) => ({ scopeId: item.scopeId, counterKey: item.counterKey })),
     ),
+    batchDelete(
+      env.billingEventsTableName,
+      billingEvents.map((item) => ({ eventId: item.eventId })),
+    ),
+    batchDelete(
+      env.platformOperationsTableName,
+      platformOperations
+        .filter((item) => item.recordType === "support_session")
+        .map((item) => ({ recordId: item.recordId })),
+    ),
+    deleteObjectVersions(`organizations/${organizationId}/`),
     deleteObjectVersions(`${organizationId}/`),
   ]);
 

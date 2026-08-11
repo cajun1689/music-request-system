@@ -12,6 +12,11 @@ export interface CallerIdentity {
   email: string;
 }
 
+export interface PlatformAdminIdentity extends CallerIdentity {
+  role: "owner" | "admin";
+  sourceIp?: string;
+}
+
 export class AuthorizationError extends Error {
   constructor(
     message: string,
@@ -60,6 +65,16 @@ export async function getMembership(
   return (result.Item as OrganizationMembershipRecord | undefined) ?? null;
 }
 
+export function membershipCanAccessPlatform(
+  membership: OrganizationMembershipRecord | null,
+): membership is OrganizationMembershipRecord & { role: "owner" | "admin" } {
+  return Boolean(
+    membership
+    && membership.organizationId === "mapl-legacy"
+    && (membership.role === "owner" || membership.role === "admin"),
+  );
+}
+
 export async function requireOrganizationRole(
   event: APIGatewayProxyEventV2,
   organizationId: string,
@@ -71,6 +86,31 @@ export async function requireOrganizationRole(
     throw new AuthorizationError("You do not have access to this organization");
   }
   return { caller, membership };
+}
+
+/**
+ * Platform administration is deliberately granted only through the internal
+ * MAPL tenant. The legacy migration added every existing MAPL Cognito user to
+ * this tenant; newly-created SaaS users receive no such membership.
+ */
+export async function requirePlatformAdmin(
+  event: APIGatewayProxyEventV2,
+): Promise<PlatformAdminIdentity> {
+  const caller = getCallerIdentity(event);
+  const membership = await getMembership("mapl-legacy", caller.userId);
+  if (!membershipCanAccessPlatform(membership)) {
+    throw new AuthorizationError("Platform administrator access is required");
+  }
+  return {
+    ...caller,
+    email: caller.email || membership.email,
+    role: membership.role,
+    sourceIp:
+      event.requestContext.http?.sourceIp
+      ?? (event.requestContext as typeof event.requestContext & {
+        identity?: { sourceIp?: string };
+      }).identity?.sourceIp,
+  };
 }
 
 export async function getEventRecord(eventId: string): Promise<EventRecord | null> {

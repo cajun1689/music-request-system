@@ -223,3 +223,103 @@ export interface Session {
   email: string;
   idToken: string;
 }
+
+export interface PlatformAccess {
+  isPlatformAdmin: boolean;
+  userId: string;
+  email: string;
+  role: string;
+}
+
+export type PlatformOrganizationAction =
+  | "suspend"
+  | "reactivate"
+  | "extend_trial"
+  | "change_plan"
+  | "cancel_subscription"
+  | "reactivate_subscription"
+  | "schedule_deletion"
+  | "cancel_deletion";
+
+export interface PlatformOrganization extends Organization {
+  memberCount?: number;
+  eventCount?: number;
+  deviceCount?: number;
+  ownerEmail?: string;
+  trialEndsAt?: string;
+  deletionScheduledAt?: string;
+  suspendedAt?: string;
+}
+
+export interface PlatformMember extends Membership {
+  disabled?: boolean;
+  lastLoginAt?: string;
+}
+
+export interface PlatformAuditEntry {
+  auditId?: string;
+  id?: string;
+  action: string;
+  createdAt?: string;
+  timestamp?: string;
+  actorEmail?: string;
+  actorUserId?: string;
+  organizationId?: string;
+  targetUserId?: string;
+  reason?: string;
+  outcome?: "pending" | "success" | "failure";
+  sourceIp?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PlatformOrganizationDetail {
+  organization: PlatformOrganization;
+  members: PlatformMember[];
+  invitations: OrganizationInvitation[];
+  events: EventRecord[];
+  devices: BridgeDevice[];
+  usage: Record<string, unknown>;
+  analytics: Record<string, unknown>;
+  health?: Record<string, unknown>;
+  billing: Record<string, unknown> & {
+    stripeAvailable?: boolean;
+    subscriptionStatus?: string;
+    planId?: string;
+  };
+  billingEvents?: Array<Record<string, unknown>>;
+  recentAudit: PlatformAuditEntry[];
+}
+
+export interface PlatformUser {
+  userId: string;
+  email?: string;
+  enabled?: boolean;
+  status?: string;
+  createdAt?: string;
+  lastLoginAt?: string;
+  memberships?: Membership[];
+}
+
+export type SupportSessionMode = "read_only" | "support_write";
+
+export interface PlatformSupportSession {
+  supportSessionId: string;
+  organizationId: string;
+  organizationName?: string;
+  operatorUserId?: string;
+  operatorEmail?: string;
+  targetUserId?: string;
+  mode: SupportSessionMode;
+  reason: string;
+  startedAt?: string;
+  expiresAt: string | number;
+  endedAt?: string;
+  status?: "active" | "expired" | "revoked" | "ended";
+}
+
+export interface PlatformSupportView {
+  supportSession?: PlatformSupportSession;
+  organization?: PlatformOrganization;
+  data?: Record<string, unknown>;
+  [key: string]: unknown;
+}

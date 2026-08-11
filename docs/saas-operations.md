@@ -22,6 +22,8 @@ Staging:
 
 The workflows copy Stripe secret values into encrypted stage-specific SSM parameters before deployment. Lambda configuration contains only parameter names. The deployment role therefore needs `ssm:PutParameter`, while CDK grants the runtime functions read-only access to the exact parameters.
 
+The workflows also set the non-secret `STRIPE_ENABLED` deployment flag only when both secrets and both recurring price IDs are present. For a manual CDK deployment, set `STRIPE_ENABLED=true` only after those SSM parameters and price IDs are configured; otherwise keep it false so billing controls fail closed. A scheduled organization purge pauses instead of orphaning known Stripe resources while this integration is unavailable.
+
 Configure the Stripe webhook URL as:
 
 `https://<api-host>/prod/payments/stripe-webhook`
@@ -72,7 +74,17 @@ to existing records when those fields are absent. The membership import is marke
 
 Stripe `past_due` subscriptions receive a seven-day grace period. Canceled or unpaid subscriptions are suspended server-side from new events, devices, and tips. Existing MAPL records are exempt.
 
-Organization owners can request deletion in the console. Data enters a 30-day deletion-pending state, the subscription is set to cancel at period end, and both can be restored during that window. The daily cleanup job then cancels remaining Stripe resources on a best-effort basis and removes tenant events, requests, memberships, invitations, devices, usage counters, connections, and all versions of tenant brand/library objects. Stripe webhook idempotency records expire after 90 days. Owners can download an authenticated JSON export before deletion.
+Organization owners can request deletion in the console. Data enters a 30-day deletion-pending state, the subscription is set to cancel at period end, and both can be restored during that window. The daily cleanup job must remove or confirm the prior removal of known Stripe resources before it purges local data; other Stripe failures abort that attempt for automatic retry. It then removes tenant events, requests, memberships, invitations, devices, usage counters, billing-event payloads, support sessions, connections, and all versions of tenant brand/library objects. Security audit records are retained without customer credentials so platform actions remain attributable. Stripe webhook idempotency records otherwise expire after 90 days. Owners can download an authenticated JSON export before deletion.
+
+## Platform administration
+
+The cross-tenant operations dashboard is available at `/platform-admin`. Access is limited server-side to owner or admin members of the internal `mapl-legacy` organization. This intentionally includes the Cognito users imported by the one-time legacy migration; later SaaS signups are never added to that organization.
+
+Platform operators can inspect organization health, members, invitations, events, devices, usage, verified-tip analytics, billing state, and recent audit history. The structured JSON export includes tenant records, usage and billing history, platform-operation records, and a versioned S3 object manifest for brand assets and library snapshots; binary objects are inventoried rather than embedded in the JSON. Mutating actions require a reason and must first persist an immutable audit intent; completion or failure is appended afterward, leaving a visible pending operation if execution is interrupted. High-impact controls add typed confirmation and protect the current operator, the final organization owner, and the platform access boundary.
+
+Customer support mode never reveals or replaces a customer's Cognito credentials. It creates a revocable, operator-bound session for at most 60 minutes, defaults to read-only, remains visibly identified in the browser, and records start, access, mutation, and end events. Session authorization expires independently from its 400-day history retention. Elevated support-write sessions are restricted to that organization and only allow invitation, member, and Bridge-device operations; account status, billing, deletion, and global Cognito actions require leaving support mode and using the normal platform controls. End the session immediately when the support case is complete.
+
+Manual suspension is independent of Stripe billing. Plan, trial, cancellation, and reactivation controls use Stripe as the source of truth and remain unavailable until the stage's Stripe secrets and price IDs are configured. Deletion always enters the existing 30-day recovery window; the dashboard does not expose an immediate purge button.
 
 ## Incident response
 

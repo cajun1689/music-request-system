@@ -23,6 +23,7 @@ jobs:
     outputs:
       frontend-bucket: ${{ steps.outputs.outputs.bucket }}
       distribution-id: ${{ steps.outputs.outputs.distribution }}
+      api-url: ${{ steps.outputs.outputs.api }}
     steps:
       - uses: actions/checkout@v4
 
@@ -74,6 +75,7 @@ jobs:
           PAYPAL_WEBHOOK_ID: ${{ secrets.PAYPAL_WEBHOOK_ID }}
           STRIPE_DJ_PRICE_ID: ${{ secrets.STRIPE_DJ_PRICE_ID }}
           STRIPE_ORGANIZATION_PRICE_ID: ${{ secrets.STRIPE_ORGANIZATION_PRICE_ID }}
+          STRIPE_ENABLED: ${{ secrets.STRIPE_SECRET_KEY != '' && secrets.STRIPE_WEBHOOK_SECRET != '' && secrets.STRIPE_DJ_PRICE_ID != '' && secrets.STRIPE_ORGANIZATION_PRICE_ID != '' }}
           ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
 
       - name: CDK deploy
@@ -86,6 +88,7 @@ jobs:
           PAYPAL_WEBHOOK_ID: ${{ secrets.PAYPAL_WEBHOOK_ID }}
           STRIPE_DJ_PRICE_ID: ${{ secrets.STRIPE_DJ_PRICE_ID }}
           STRIPE_ORGANIZATION_PRICE_ID: ${{ secrets.STRIPE_ORGANIZATION_PRICE_ID }}
+          STRIPE_ENABLED: ${{ secrets.STRIPE_SECRET_KEY != '' && secrets.STRIPE_WEBHOOK_SECRET != '' && secrets.STRIPE_DJ_PRICE_ID != '' && secrets.STRIPE_ORGANIZATION_PRICE_ID != '' }}
           ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
 
       - name: Apply idempotent MAPL tenant migration
@@ -100,10 +103,13 @@ jobs:
         run: |
           BUCKET=$(jq -r '.InfrastructureStack.FrontendBucketName // empty' cdk-outputs.json)
           DIST_ID=$(jq -r '.InfrastructureStack.CloudFrontDistributionId // empty' cdk-outputs.json)
+          API_URL=$(jq -r '.InfrastructureStack.RestApiUrl // empty' cdk-outputs.json)
           test -n "$BUCKET"
           test -n "$DIST_ID"
+          test -n "$API_URL"
           echo "bucket=${BUCKET}" >> "$GITHUB_OUTPUT"
           echo "distribution=${DIST_ID}" >> "$GITHUB_OUTPUT"
+          echo "api=${API_URL}" >> "$GITHUB_OUTPUT"
         working-directory: infrastructure
 
   deploy-frontend:
@@ -150,5 +156,21 @@ jobs:
         run: |
           DIST_ID="${{ needs.deploy-infrastructure.outputs.distribution-id }}"
           if [ -n "$DIST_ID" ] && [ "$DIST_ID" != "None" ]; then
-            aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
+            INVALIDATION_ID=$(aws cloudfront create-invalidation \
+              --distribution-id "$DIST_ID" \
+              --paths "/*" \
+              --query 'Invalidation.Id' \
+              --output text)
+            aws cloudfront wait invalidation-completed \
+              --distribution-id "$DIST_ID" \
+              --id "$INVALIDATION_ID"
           fi
+
+      - name: Smoke test production portals
+        run: |
+          for path in platform-admin admin console; do
+            curl --fail --silent --show-error --output /dev/null --retry 10 --retry-delay 5 \
+              "https://casperrequests.com/${path}?release=${{ github.sha }}"
+          done
+          curl --fail --silent --show-error --output /dev/null --retry 10 --retry-delay 5 \
+            "${{ needs.deploy-infrastructure.outputs.api-url }}events"

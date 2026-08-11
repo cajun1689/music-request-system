@@ -5,6 +5,18 @@ import { entitlementsForPlan } from "../shared/plans";
 import { getStripe, getStripeWebhookSecret } from "../shared/stripe";
 import { docClient, env, json } from "../shared/utils";
 
+export function subscriptionPlanForPrice(
+  priceId: string | undefined,
+  djPriceId = env.stripeDjPriceId,
+  organizationPriceId = env.stripeOrganizationPriceId,
+) {
+  if (priceId && organizationPriceId && priceId === organizationPriceId) {
+    return "organization" as const;
+  }
+  if (priceId && djPriceId && priceId === djPriceId) return "dj" as const;
+  throw new Error(`Stripe subscription uses an unknown price ${priceId ?? "(missing)"}`);
+}
+
 async function updateSubscription(
   subscription: Stripe.Subscription,
   stripeEventCreatedAt: number,
@@ -12,13 +24,7 @@ async function updateSubscription(
   const organizationId = subscription.metadata.organizationId;
   if (!organizationId) return;
   const subscriptionPriceId = subscription.items.data[0]?.price.id;
-  const planId = subscriptionPriceId === env.stripeOrganizationPriceId
-    ? "organization"
-    : subscriptionPriceId === env.stripeDjPriceId
-      ? "dj"
-      : subscription.metadata.planId === "organization"
-        ? "organization"
-        : "dj";
+  const planId = subscriptionPlanForPrice(subscriptionPriceId);
   const trialEnd = subscription.trial_end
     ? new Date(subscription.trial_end * 1000).toISOString()
     : undefined;
@@ -29,35 +35,64 @@ async function updateSubscription(
     subscription.status === "canceled" || subscription.status === "unpaid"
       ? "suspended"
       : "active";
-  await docClient.send(
-    new UpdateCommand({
-      TableName: env.organizationsTableName,
-      Key: { organizationId },
-      UpdateExpression:
-        "SET stripeSubscriptionId = :subscriptionId, subscriptionStatus = :status, "
-        + "trialEndsAt = :trialEndsAt, gracePeriodEndsAt = :gracePeriodEndsAt, "
-        + "accountStatus = :accountStatus, planId = :planId, "
-        + "entitlements = :entitlements, stripeSubscriptionEventCreatedAt = :eventCreated, "
-        + "updatedAt = :now",
-      ConditionExpression:
-        "attribute_exists(organizationId) AND "
-        + "(attribute_not_exists(stripeSubscriptionEventCreatedAt) "
-        + "OR stripeSubscriptionEventCreatedAt <= :eventCreated)",
-      ExpressionAttributeValues: {
-        ":subscriptionId": subscription.id,
-        ":status": subscription.status,
-        ":trialEndsAt": trialEnd ?? null,
-        ":gracePeriodEndsAt": gracePeriodEndsAt,
-        ":accountStatus": accountStatus,
-        ":planId": planId,
-        ":entitlements": entitlementsForPlan(planId),
-        ":eventCreated": stripeEventCreatedAt,
-        ":now": new Date().toISOString(),
-      },
-    }),
-  ).catch((error: { name?: string }) => {
-    if (error.name !== "ConditionalCheckFailedException") throw error;
-  });
+  const values = {
+    ":subscriptionId": subscription.id,
+    ":status": subscription.status,
+    ":trialEndsAt": trialEnd ?? null,
+    ":gracePeriodEndsAt": gracePeriodEndsAt,
+    ":accountStatus": accountStatus,
+    ":deletionPending": "deletion_pending",
+    ":planId": planId,
+    ":entitlements": entitlementsForPlan(planId),
+    ":eventCreated": stripeEventCreatedAt,
+    ":now": new Date().toISOString(),
+  };
+  const baseSet =
+    "stripeSubscriptionId = :subscriptionId, subscriptionStatus = :status, "
+    + "trialEndsAt = :trialEndsAt, gracePeriodEndsAt = :gracePeriodEndsAt, "
+    + "planId = :planId, entitlements = :entitlements, "
+    + "stripeSubscriptionEventCreatedAt = :eventCreated, updatedAt = :now";
+  const eventOrderCondition =
+    "attribute_exists(organizationId) AND "
+    + "(attribute_not_exists(stripeSubscriptionEventCreatedAt) "
+    + "OR stripeSubscriptionEventCreatedAt <= :eventCreated)";
+  try {
+    await docClient.send(
+      new UpdateCommand({
+        TableName: env.organizationsTableName,
+        Key: { organizationId },
+        UpdateExpression: `SET ${baseSet}, accountStatus = :accountStatus`,
+        ConditionExpression:
+          `${eventOrderCondition} AND `
+          + "(attribute_not_exists(accountStatus) OR accountStatus <> :deletionPending) "
+          + "AND attribute_not_exists(suspendedAt)",
+        ExpressionAttributeValues: values,
+      }),
+    );
+  } catch (error) {
+    if ((error as { name?: string }).name !== "ConditionalCheckFailedException") throw error;
+    const {
+      ":accountStatus": _accountStatus,
+      ":deletionPending": _deletionPending,
+      ...retryValues
+    } = values;
+    await docClient.send(
+      new UpdateCommand({
+        TableName: env.organizationsTableName,
+        Key: { organizationId },
+        UpdateExpression: `SET ${baseSet}`,
+        ConditionExpression: eventOrderCondition,
+        ExpressionAttributeValues: retryValues,
+      }),
+    ).catch((retryError: { name?: string }) => {
+      if (retryError.name !== "ConditionalCheckFailedException") throw retryError;
+    });
+  }
+}
+
+function eventOrganizationId(stripeEvent: Stripe.Event): string | undefined {
+  const object = stripeEvent.data.object as { metadata?: Record<string, string> };
+  return object.metadata?.organizationId;
 }
 
 async function markTipPaid(session: Stripe.Checkout.Session): Promise<void> {
@@ -181,6 +216,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         Item: {
           eventId: stripeEvent.id,
           eventType: stripeEvent.type,
+          organizationId: eventOrganizationId(stripeEvent),
           status: "processing",
           connectedAccountId: stripeEvent.account,
           expiresAt: Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60,
@@ -258,4 +294,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     });
     throw error;
   }
+};
+
+export const stripeWebhookTestExports = {
+  updateSubscription,
 };

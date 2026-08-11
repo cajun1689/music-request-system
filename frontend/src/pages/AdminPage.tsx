@@ -56,7 +56,7 @@ interface EventSummary {
 }
 
 export function AdminPage() {
-  const { session, logout } = useAuth();
+  const { session, isPlatformAdmin, logout } = useAuth();
   const [form, setForm] = useState(emptyForm);
   const [eventData, setEventData] = useState<EventRecord | null>(null);
   const [djLogoFile, setDjLogoFile] = useState<File | null>(null);
@@ -489,6 +489,14 @@ export function AdminPage() {
             <p className="text-sm text-slate-300">Create event branding and guest request QR code.</p>
           </div>
           <div className="flex gap-2">
+            {isPlatformAdmin ? (
+              <Link className="rounded-md border border-cyan-400/40 px-3 py-1.5 text-sm text-cyan-300" to="/platform-admin">
+                Platform Admin
+              </Link>
+            ) : null}
+            <Link className="rounded-md border border-slate-700 px-3 py-1.5 text-sm" to="/console">
+              Customer Console
+            </Link>
             {eventData ? (
               <Link className="rounded-md border border-slate-700 px-3 py-1.5 text-sm" to={`/dashboard/${eventData.eventId}`}>
                 Dashboard

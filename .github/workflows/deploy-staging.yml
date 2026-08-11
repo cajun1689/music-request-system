@@ -32,8 +32,10 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_TEST_WEBHOOK_SECRET }}
         run: |
-          test -n "$STRIPE_SECRET_KEY"
-          test -n "$STRIPE_WEBHOOK_SECRET"
+          if [ -z "$STRIPE_SECRET_KEY" ] || [ -z "$STRIPE_WEBHOOK_SECRET" ]; then
+            echo "Stripe test credentials are not configured; staging billing and tips will remain disabled."
+            exit 0
+          fi
           aws ssm put-parameter \
             --name "/music-request/staging/stripe-secret-key" \
             --type SecureString \
@@ -63,6 +65,7 @@ jobs:
           PAYPAL_ENVIRONMENT: sandbox
           STRIPE_DJ_PRICE_ID: ${{ secrets.STRIPE_TEST_DJ_PRICE_ID }}
           STRIPE_ORGANIZATION_PRICE_ID: ${{ secrets.STRIPE_TEST_ORGANIZATION_PRICE_ID }}
+          STRIPE_ENABLED: ${{ secrets.STRIPE_TEST_SECRET_KEY != '' && secrets.STRIPE_TEST_WEBHOOK_SECRET != '' && secrets.STRIPE_TEST_DJ_PRICE_ID != '' && secrets.STRIPE_TEST_ORGANIZATION_PRICE_ID != '' }}
           ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
 
       - name: Read staging outputs
@@ -88,17 +91,25 @@ jobs:
           VITE_SENTRY_DSN: ${{ secrets.SENTRY_STAGING_DSN }}
           VITE_SENTRY_ENV: staging
           VITE_RELEASE: ${{ github.sha }}
+          VITE_STRIPE_ENABLED: ${{ secrets.STRIPE_TEST_SECRET_KEY != '' && secrets.STRIPE_TEST_WEBHOOK_SECRET != '' && secrets.STRIPE_TEST_DJ_PRICE_ID != '' && secrets.STRIPE_TEST_ORGANIZATION_PRICE_ID != '' }}
 
       - name: Publish staging frontend
         run: |
           aws s3 sync frontend/dist "s3://${{ steps.outputs.outputs.bucket }}" --delete
-          aws cloudfront create-invalidation \
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
             --distribution-id "${{ steps.outputs.outputs.distribution }}" \
-            --paths "/*"
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+          aws cloudfront wait invalidation-completed \
+            --distribution-id "${{ steps.outputs.outputs.distribution }}" \
+            --id "$INVALIDATION_ID"
 
       - name: Smoke test staging
         run: |
-          curl --fail --retry 10 --retry-delay 5 \
+          curl --fail --silent --show-error --output /dev/null --retry 10 --retry-delay 5 \
             "${{ steps.outputs.outputs.api }}events"
-          curl --fail --retry 10 --retry-delay 5 \
-            "${{ steps.outputs.outputs.frontend }}"
+          for path in platform-admin admin console; do
+            curl --fail --silent --show-error --output /dev/null --retry 10 --retry-delay 5 \
+              "${{ steps.outputs.outputs.frontend }}/${path}?release=${{ github.sha }}"
+          done

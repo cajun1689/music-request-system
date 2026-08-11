@@ -24,10 +24,18 @@ export function LoginPage() {
       const nextSession = await login(email, password);
       let from = requestedFrom;
       if (!from) {
-        const result = await api.getOrganizations(nextSession.idToken);
-        from = result.organizations.some((organization) => organization.accountMode === "legacy")
-          ? "/admin"
-          : "/console";
+        const [result, platformResult] = await Promise.all([
+          api.getOrganizations(nextSession.idToken).catch(() => null),
+          api.getPlatformMe(nextSession.idToken).catch(() => null),
+        ]);
+        if (!result && !platformResult?.access.isPlatformAdmin) {
+          throw new Error("Signed in, but account services are temporarily unavailable.");
+        }
+        from = platformResult?.access.isPlatformAdmin
+          ? "/platform-admin"
+          : result?.organizations.some((organization) => organization.accountMode === "legacy")
+            ? "/admin"
+            : "/console";
       }
       navigate(from, { replace: true });
     } catch (err) {

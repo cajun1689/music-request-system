@@ -58,6 +58,8 @@ export interface OrganizationRecord {
   gracePeriodEndsAt?: string;
   deletionRequestedAt?: string;
   deletionScheduledAt?: string;
+  preDeletionAccountStatus?: "active" | "suspended";
+  suspendedAt?: string;
   entitlements: OrganizationEntitlements;
   createdAt: string;
   updatedAt: string;
@@ -82,6 +84,41 @@ export interface OrganizationInvitationRecord {
   expiresAt: number;
   acceptedAt?: string;
   createdAt: string;
+}
+
+export type PlatformSupportMode = "read_only" | "support_write";
+
+export interface PlatformAuditRecord {
+  recordId: string;
+  recordType: "audit";
+  actorUserId: string;
+  actorEmail: string;
+  action: string;
+  organizationId?: string;
+  targetUserId?: string;
+  supportSessionId?: string;
+  reason?: string;
+  outcome: "pending" | "success" | "failure";
+  sourceIp?: string;
+  details?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface PlatformSupportSessionRecord {
+  recordId: string;
+  recordType: "support_session";
+  actorUserId: string;
+  actorEmail: string;
+  organizationId: string;
+  targetUserId?: string;
+  mode: PlatformSupportMode;
+  reason: string;
+  createdAt: string;
+  expiresAt: number;
+  expiresAtIso: string;
+  retentionExpiresAt: number;
+  revokedAt?: string;
+  revokedBy?: string;
 }
 
 export interface BridgeDeviceRecord {

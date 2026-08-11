@@ -52,6 +52,7 @@ export function OrganizationConsolePage() {
     activeOrganization,
     activeOrganizationId,
     loadingOrganizations,
+    isPlatformAdmin,
     reloadOrganizations,
     setActiveOrganization,
     logout,
@@ -481,6 +482,19 @@ export function OrganizationConsolePage() {
             Casper Requests
           </Link>
           <div className="flex flex-wrap items-center gap-2">
+            {isPlatformAdmin ? (
+              <>
+                <Link
+                  to="/platform-admin"
+                  className="rounded-lg border border-cyan-400/40 px-3 py-2 text-sm text-cyan-300"
+                >
+                  Platform Admin
+                </Link>
+                <Link to="/admin" className="rounded-lg border border-slate-700 px-3 py-2 text-sm">
+                  Legacy Admin
+                </Link>
+              </>
+            ) : null}
             {organizations.length ? (
               <select
                 aria-label="Active organization"
