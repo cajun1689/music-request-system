@@ -1,8 +1,10 @@
-# DJ Bridge club lighting preview
+# DJ Bridge club lighting integration
 
 This is the offline-tested lighting integration for Gaslight, grandMA3 2.4.2.2. **The booth installation and real-room tests are still pending.** Do not replace a working show with an unverified import.
 
-The included two-page **DJ Bridge - Club Lighting Preview Guide.pdf** is a printable operator reference with clearly labeled simulated-interface screenshots. A locally signed Apple Silicon preview is for offline development; the signed/notarized universal distribution is still pending.
+Version 1.14.0 is distributed through the normal DJ Bridge updater. Lighting remains off by default. Updating the app does not install the booth plugin, change the working legacy helpers or start the venue lights.
+
+The included two-page **DJ Bridge - Club Lighting Preview Guide.pdf** is a printable operator reference with clearly labeled simulated-interface screenshots from the earlier preview. The booth installation and physical verification are still required.
 
 ## Everyday use, after booth setup
 
@@ -28,7 +30,7 @@ The side-strobe beat layer runs relative to its 50% brightness master: approxima
 - Verify both native CDJs, Serato/DVS, A9 USB clock and native-CDJ tempo fallback. Player 1 maps to A9 channel 2; player 2 maps to channel 3. Do not change that cabling without updating the profile/state mapping.
 - Test the opening when the first song is already playing and when starting before music; then mix into a second song. Confirm it changes to colored normal rotation and does not automatically return to white.
 - Test manual overrides, an unplugged APC, and Off/Quit cleanup. Test a second DJ's computer taking over, including after the old owner's app crashes.
-- Copy the tested show and printable instructions to Downloads. Only then publish a normal update for all DJs.
+- Copy the tested show and printable instructions to Downloads. Enable the new lighting connectors for normal club use only after these booth checks pass.
 
 ## Connection and resource behavior
 
