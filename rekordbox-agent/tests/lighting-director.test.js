@@ -82,6 +82,7 @@ test('energy banks retain brightness, stopped families and manual depth changes;
  assert(objects['Sequence 111'].temp==50 and objects['Sequence 113'].temp==35)
  local s=table.concat(commands,';')
  assert(not s:find("Plugin 901 '103:",1,true)and not s:find("Plugin 901 '114:",1,true))
+ objects['Sequence 114'].temp=33;invoke('bank:2');assert(objects['Sequence 114'].temp==33)
  for _,c in ipairs(commands)do
   assert(not c:match('^FaderMaster')and not c:match('^Goto')and not c:match('^Patch'))
   if c:match('^Set Sequence 10[123] Property SpeedScale')then assert(c:match('Div[4816]+$'))end
@@ -95,6 +96,7 @@ test('five-minute rotation, hold and show change cancel stale timers, including 
  invoke('resume');root.ManetSocket.Showfile='Gaslight_Club_Live';count=#commands;advance(1400);assert(#commands==count)
  root.ManetSocket.Showfile='Gaslight_Club_Director_Review'
  local co=begin('bank:3');invoke('hold');count=#commands;finish(co);assert(#commands==count)
+ invoke('resume');invoke('home');count=#commands;advance(2000);assert(#commands==count)
 `));
 
 test('next movement/dimmer do not change the other family; manual colors suppress song events and never select opening white', () => run(`

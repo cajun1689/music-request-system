@@ -32,7 +32,11 @@ local function arm()
  if state.armed then return true end
  state.armed=true
  state.caps={};state.applied={};state.manual={}
- for _,id in ipairs({101,102,103,111,112,113,114})do state.caps[id]=temp(id)end
+ for _,id in ipairs({101,102,103,111,112,113,114})do
+  state.caps[id]=temp(id)
+  -- A family enabled later belongs to the operator, including its depth.
+  if not active(id)or temp(id)<=.1 then state.manual[id]=true end
+ end
  return true
 end
 local function valid(token)return rightshow()and state.armed and state.generation==token end
@@ -94,7 +98,11 @@ return function(_,arg)
  if not rightshow()then return end
  local action=tostring(arg)
  if action=='status'then status();return end
- if action=='home'then command('View 102');return end
+ if action=='home'then
+  state.auto=false;state.armed=false;state.colors=false;state.generation=state.generation+1
+  status('Review released; current output retained. Original club controls available.')
+  command('View 102');return
+ end
  if action=='hold'or action=='stop'then
   state.auto=false;state.generation=state.generation+1
   if action=='stop'then state.armed=false;state.colors=false end

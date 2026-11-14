@@ -94,7 +94,7 @@ return function()
    {'CALM','bank:1'},{'GROOVE','bank:2'},{'DRIVE','bank:3'},{'PEAK','bank:4'},{'BREAKDOWN','bank:5'},
    {'AUTO ON','resume'},{'HOLD AUTO','hold'},{'NEXT LOOK','next'},{'NEXT MOVE','movement'},{'NEXT DIMMER','rhythm'},
    {'NEXT COLOR','color'},{'COLORS AUTO','colors_on'},{'COLORS MANUAL','colors_off'},{'STATUS','status'},{'RELEASE REVIEW','stop'},
-   {'TEST SONG CHANGE','track'},{'EXISTING HOME','home'}
+   {'TEST SONG CHANGE','track'},{'EXIT TO CLUB','home'}
   }
   for i,x in ipairs(data.colors)do buttons[#buttons+1]={x.name,'palette:'..x.cue}end
   for i,b in ipairs(buttons)do
