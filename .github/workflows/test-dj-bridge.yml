@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: dj-bridge-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   offline-lighting:
     runs-on: macos-latest
@@ -27,7 +31,9 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm test
       - name: Verify universal receiver
-        run: lipo resources/lighting/DJLightingReceiver -verify_arch arm64 x86_64
+        run: |
+          lipo resources/lighting/DJLightingReceiver -verify_arch arm64
+          lipo resources/lighting/DJLightingReceiver -verify_arch x86_64
       - name: Prepare matching Electron database module
         run: |
           brew install python-setuptools
