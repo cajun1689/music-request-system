@@ -17,7 +17,15 @@ concurrency:
 
 jobs:
   offline-lighting:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
     defaults:
       run:
         working-directory: rekordbox-agent
@@ -28,6 +36,10 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: rekordbox-agent/package-lock.json
+      - name: Check native test host
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: node -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("Use a native runner for each architecture")'
       - run: npm ci --ignore-scripts
       - run: npm test
       - name: Verify universal receiver
