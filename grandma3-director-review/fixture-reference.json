@@ -1,0 +1,3200 @@
+{
+  "source": "Saved Lightkey export; verify against current XT before deployment",
+  "lightkey_sha256": "a53bf422473a976d477b270bcaed1ed6b3f6028c960d38c1cb321562ba1257fc",
+  "dimensions_ft": [
+    100,
+    70,
+    11
+  ],
+  "fixtures": [
+    {
+      "id": 1,
+      "name": "P1",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 1,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 2,
+      "name": "P2",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 13,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 3,
+      "name": "P3",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 25,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 4,
+      "name": "P4",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 37,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 5,
+      "name": "P5",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 49,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 6,
+      "name": "P6",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 61,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 7,
+      "name": "P7",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 73,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 8,
+      "name": "P8",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 85,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 201,
+      "name": "MH1",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 100,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 202,
+      "name": "MH2",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 116,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 203,
+      "name": "MH3",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 132,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 204,
+      "name": "MH4",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 148,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 205,
+      "name": "MH5",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 164,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 206,
+      "name": "MH6",
+      "model": "Rogue R1 Spot",
+      "universe": 1,
+      "address": 180,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "PositionMSpeed",
+        "Dimmer",
+        "Shutter1",
+        "Color1",
+        "Gobo1",
+        "LKRaw11",
+        "Gobo2",
+        "Focus1",
+        "Prism1",
+        "LKRaw15",
+        "Iris",
+        "LKRaw17",
+        "LKRaw18",
+        "LKRaw19"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 3
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            165,
+            0
+          ],
+          "dmx": 17
+        },
+        {
+          "rgb": [
+            42,
+            255,
+            0
+          ],
+          "dmx": 24
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            0
+          ],
+          "dmx": 31
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 38
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            170
+          ],
+          "dmx": 52
+        },
+        {
+          "rgb": [
+            170,
+            0,
+            255
+          ],
+          "dmx": 60
+        }
+      ]
+    },
+    {
+      "id": 207,
+      "name": "MH7",
+      "model": "Rogue R1 Spot",
+      "universe": 1,
+      "address": 199,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "PositionMSpeed",
+        "Dimmer",
+        "Shutter1",
+        "Color1",
+        "Gobo1",
+        "LKRaw11",
+        "Gobo2",
+        "Focus1",
+        "Prism1",
+        "LKRaw15",
+        "Iris",
+        "LKRaw17",
+        "LKRaw18",
+        "LKRaw19"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 3
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            165,
+            0
+          ],
+          "dmx": 17
+        },
+        {
+          "rgb": [
+            42,
+            255,
+            0
+          ],
+          "dmx": 24
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            0
+          ],
+          "dmx": 31
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 38
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            170
+          ],
+          "dmx": 52
+        },
+        {
+          "rgb": [
+            170,
+            0,
+            255
+          ],
+          "dmx": 60
+        }
+      ]
+    },
+    {
+      "id": 208,
+      "name": "MH8",
+      "model": "Rogue R1 Spot",
+      "universe": 1,
+      "address": 218,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "PositionMSpeed",
+        "Dimmer",
+        "Shutter1",
+        "Color1",
+        "Gobo1",
+        "LKRaw11",
+        "Gobo2",
+        "Focus1",
+        "Prism1",
+        "LKRaw15",
+        "Iris",
+        "LKRaw17",
+        "LKRaw18",
+        "LKRaw19"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 3
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            165,
+            0
+          ],
+          "dmx": 17
+        },
+        {
+          "rgb": [
+            42,
+            255,
+            0
+          ],
+          "dmx": 24
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            0
+          ],
+          "dmx": 31
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 38
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            170
+          ],
+          "dmx": 52
+        },
+        {
+          "rgb": [
+            170,
+            0,
+            255
+          ],
+          "dmx": 60
+        }
+      ]
+    },
+    {
+      "id": 209,
+      "name": "MH9",
+      "model": "Rogue R1 Spot",
+      "universe": 1,
+      "address": 237,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "PositionMSpeed",
+        "Dimmer",
+        "Shutter1",
+        "Color1",
+        "Gobo1",
+        "LKRaw11",
+        "Gobo2",
+        "Focus1",
+        "Prism1",
+        "LKRaw15",
+        "Iris",
+        "LKRaw17",
+        "LKRaw18",
+        "LKRaw19"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 3
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            165,
+            0
+          ],
+          "dmx": 17
+        },
+        {
+          "rgb": [
+            42,
+            255,
+            0
+          ],
+          "dmx": 24
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            0
+          ],
+          "dmx": 31
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 38
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            170
+          ],
+          "dmx": 52
+        },
+        {
+          "rgb": [
+            170,
+            0,
+            255
+          ],
+          "dmx": 60
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "P9",
+      "model": "200W RGBWA UV 6in1 COB PAR",
+      "universe": 1,
+      "address": 257,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "ColorRGB_RY",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 10,
+      "name": "P10",
+      "model": "200W RGBWA UV 6in1 COB PAR",
+      "universe": 1,
+      "address": 267,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "ColorRGB_RY",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 11,
+      "name": "P11",
+      "model": "200W RGBWA UV 6in1 COB PAR",
+      "universe": 1,
+      "address": 277,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "ColorRGB_RY",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 12,
+      "name": "P12",
+      "model": "200W RGBWA UV 6in1 COB PAR",
+      "universe": 1,
+      "address": 287,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "ColorRGB_RY",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 13,
+      "name": "P13",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 297,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 14,
+      "name": "P14",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 309,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 15,
+      "name": "P15",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 321,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 16,
+      "name": "P16",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 333,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 17,
+      "name": "P17",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 345,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 18,
+      "name": "P18",
+      "model": "SlimPAR H6 USB",
+      "universe": 1,
+      "address": 357,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_RY",
+        "ColorRGB_W",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 211,
+      "name": "MH11",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 397,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 212,
+      "name": "MH12",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 413,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 213,
+      "name": "MH13",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 429,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 214,
+      "name": "MH14",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 445,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 215,
+      "name": "MH15",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 461,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 216,
+      "name": "MH16",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 477,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 217,
+      "name": "MH17",
+      "model": "275W Beam Spot Wash (SoundSwitch Match, 16CH)",
+      "universe": 1,
+      "address": 493,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "LKRaw5",
+        "LKRaw6",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "LKRaw11",
+        "LKRaw12",
+        "Focus1",
+        "LKRaw14",
+        "LKRaw15",
+        "PositionMSpeed"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 2
+        },
+        {
+          "rgb": [
+            252,
+            1,
+            7
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            169
+          ],
+          "dmx": 18
+        },
+        {
+          "rgb": [
+            254,
+            211,
+            254
+          ],
+          "dmx": 26
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 34
+        },
+        {
+          "rgb": [
+            33,
+            255,
+            6
+          ],
+          "dmx": 42
+        },
+        {
+          "rgb": [
+            253,
+            128,
+            8
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            32,
+            255,
+            255
+          ],
+          "dmx": 58
+        },
+        {
+          "rgb": [
+            252,
+            2,
+            255
+          ],
+          "dmx": 66
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            10
+          ],
+          "dmx": 74
+        },
+        {
+          "rgb": [
+            171,
+            255,
+            164
+          ],
+          "dmx": 82
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "name": "P19",
+      "model": "LED Zoom PAR 18x18W RGBWA UV Lighting (A)",
+      "universe": 2,
+      "address": 1,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "ColorRGB_RY",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "Zoom",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 20,
+      "name": "P20",
+      "model": "LED Zoom PAR 18x18W RGBWA UV Lighting (A)",
+      "universe": 2,
+      "address": 13,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "ColorRGB_RY",
+        "ColorRGB_UV",
+        "Shutter1",
+        "LKRaw9",
+        "Zoom",
+        "LKRaw11",
+        "LKRaw12"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 401,
+      "name": "ST1",
+      "model": "960 RGB Strobe (B08YRRPYWK, 3-9-24CH)",
+      "universe": 2,
+      "address": 25,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "Shutter1",
+        "LKRaw6",
+        "LKRaw7",
+        "LKRaw8",
+        "LKRaw9"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 402,
+      "name": "ST2",
+      "model": "960 RGB Strobe (B08YRRPYWK, 3-9-24CH)",
+      "universe": 2,
+      "address": 34,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "Shutter1",
+        "LKRaw6",
+        "LKRaw7",
+        "LKRaw8",
+        "LKRaw9"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 218,
+      "name": "MH18",
+      "model": "Inno Spot LED",
+      "universe": 2,
+      "address": 43,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "Color1",
+        "Gobo1",
+        "Gobo1PosRotate",
+        "Shutter1",
+        "Dimmer",
+        "LKRaw8",
+        "PositionMSpeed",
+        "Prism1"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 7
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "dmx": 22
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 36
+        },
+        {
+          "rgb": [
+            0,
+            255,
+            0
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            0
+          ],
+          "dmx": 64
+        },
+        {
+          "rgb": [
+            255,
+            174,
+            249
+          ],
+          "dmx": 78
+        },
+        {
+          "rgb": [
+            123,
+            208,
+            255
+          ],
+          "dmx": 92
+        },
+        {
+          "rgb": [
+            174,
+            255,
+            143
+          ],
+          "dmx": 106
+        },
+        {
+          "rgb": [
+            255,
+            242,
+            148
+          ],
+          "dmx": 120
+        }
+      ]
+    },
+    {
+      "id": 219,
+      "name": "MH19",
+      "model": "Inno Spot LED",
+      "universe": 2,
+      "address": 53,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "Color1",
+        "Gobo1",
+        "Gobo1PosRotate",
+        "Shutter1",
+        "Dimmer",
+        "LKRaw8",
+        "PositionMSpeed",
+        "Prism1"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 7
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "dmx": 22
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 36
+        },
+        {
+          "rgb": [
+            0,
+            255,
+            0
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            0
+          ],
+          "dmx": 64
+        },
+        {
+          "rgb": [
+            255,
+            174,
+            249
+          ],
+          "dmx": 78
+        },
+        {
+          "rgb": [
+            123,
+            208,
+            255
+          ],
+          "dmx": 92
+        },
+        {
+          "rgb": [
+            174,
+            255,
+            143
+          ],
+          "dmx": 106
+        },
+        {
+          "rgb": [
+            255,
+            242,
+            148
+          ],
+          "dmx": 120
+        }
+      ]
+    },
+    {
+      "id": 220,
+      "name": "MH20",
+      "model": "Inno Spot LED",
+      "universe": 2,
+      "address": 63,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "Color1",
+        "Gobo1",
+        "Gobo1PosRotate",
+        "Shutter1",
+        "Dimmer",
+        "LKRaw8",
+        "PositionMSpeed",
+        "Prism1"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 7
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "dmx": 22
+        },
+        {
+          "rgb": [
+            0,
+            0,
+            255
+          ],
+          "dmx": 36
+        },
+        {
+          "rgb": [
+            0,
+            255,
+            0
+          ],
+          "dmx": 50
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            0
+          ],
+          "dmx": 64
+        },
+        {
+          "rgb": [
+            255,
+            174,
+            249
+          ],
+          "dmx": 78
+        },
+        {
+          "rgb": [
+            123,
+            208,
+            255
+          ],
+          "dmx": 92
+        },
+        {
+          "rgb": [
+            174,
+            255,
+            143
+          ],
+          "dmx": 106
+        },
+        {
+          "rgb": [
+            255,
+            242,
+            148
+          ],
+          "dmx": 120
+        }
+      ]
+    },
+    {
+      "id": 301,
+      "name": "B1",
+      "model": "IM-MH230 (Steady Open 255)",
+      "universe": 2,
+      "address": 153,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "PositionMSpeed",
+        "Frost1",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "Gobo1",
+        "Gobo1WheelShake",
+        "Focus1",
+        "Prism1",
+        "LKRaw15",
+        "LKRaw16",
+        "LKRaw17",
+        "LKRaw18",
+        "LKRaw19",
+        "LKRaw20"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 0
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "dmx": 8
+        },
+        {
+          "rgb": [
+            255,
+            128,
+            0
+          ],
+          "dmx": 16
+        },
+        {
+          "rgb": [
+            34,
+            255,
+            181
+          ],
+          "dmx": 24
+        },
+        {
+          "rgb": [
+            42,
+            255,
+            0
+          ],
+          "dmx": 32
+        },
+        {
+          "rgb": [
+            149,
+            255,
+            128
+          ],
+          "dmx": 40
+        },
+        {
+          "rgb": [
+            213,
+            128,
+            255
+          ],
+          "dmx": 48
+        },
+        {
+          "rgb": [
+            255,
+            128,
+            213
+          ],
+          "dmx": 56
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            0
+          ],
+          "dmx": 64
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            170
+          ],
+          "dmx": 72
+        },
+        {
+          "rgb": [
+            0,
+            255,
+            212
+          ],
+          "dmx": 80
+        },
+        {
+          "rgb": [
+            0,
+            85,
+            255
+          ],
+          "dmx": 112
+        }
+      ]
+    },
+    {
+      "id": 302,
+      "name": "B2",
+      "model": "IM-MH230 (Steady Open 255)",
+      "universe": 2,
+      "address": 173,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "PositionMSpeed",
+        "Frost1",
+        "Shutter1",
+        "Dimmer",
+        "Color1",
+        "LKRaw10",
+        "Gobo1",
+        "Gobo1WheelShake",
+        "Focus1",
+        "Prism1",
+        "LKRaw15",
+        "LKRaw16",
+        "LKRaw17",
+        "LKRaw18",
+        "LKRaw19",
+        "LKRaw20"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 0
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "dmx": 8
+        },
+        {
+          "rgb": [
+            255,
+            128,
+            0
+          ],
+          "dmx": 16
+        },
+        {
+          "rgb": [
+            34,
+            255,
+            181
+          ],
+          "dmx": 24
+        },
+        {
+          "rgb": [
+            42,
+            255,
+            0
+          ],
+          "dmx": 32
+        },
+        {
+          "rgb": [
+            149,
+            255,
+            128
+          ],
+          "dmx": 40
+        },
+        {
+          "rgb": [
+            213,
+            128,
+            255
+          ],
+          "dmx": 48
+        },
+        {
+          "rgb": [
+            255,
+            128,
+            213
+          ],
+          "dmx": 56
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            0
+          ],
+          "dmx": 64
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            170
+          ],
+          "dmx": 72
+        },
+        {
+          "rgb": [
+            0,
+            255,
+            212
+          ],
+          "dmx": 80
+        },
+        {
+          "rgb": [
+            0,
+            85,
+            255
+          ],
+          "dmx": 112
+        }
+      ]
+    },
+    {
+      "id": 311,
+      "name": "CB1",
+      "model": "Intimidator Beam LED 350",
+      "universe": 2,
+      "address": 193,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "PositionMSpeed",
+        "Color1",
+        "Gobo1",
+        "LKRaw8",
+        "Prism1",
+        "LKRaw10",
+        "Dimmer",
+        "Shutter1",
+        "LKRaw13",
+        "LKRaw14"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 3
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            0
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            128,
+            213
+          ],
+          "dmx": 17
+        },
+        {
+          "rgb": [
+            42,
+            255,
+            0
+          ],
+          "dmx": 24
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "dmx": 31
+        },
+        {
+          "rgb": [
+            128,
+            170,
+            255
+          ],
+          "dmx": 38
+        },
+        {
+          "rgb": [
+            32,
+            196,
+            1
+          ],
+          "dmx": 45
+        },
+        {
+          "rgb": [
+            255,
+            128,
+            0
+          ],
+          "dmx": 52
+        },
+        {
+          "rgb": [
+            0,
+            85,
+            255
+          ],
+          "dmx": 59
+        }
+      ]
+    },
+    {
+      "id": 312,
+      "name": "CB2",
+      "model": "Intimidator Beam LED 350",
+      "universe": 2,
+      "address": 207,
+      "attributes": [
+        "Pan",
+        "Tilt",
+        "PositionMSpeed",
+        "Color1",
+        "Gobo1",
+        "LKRaw8",
+        "Prism1",
+        "LKRaw10",
+        "Dimmer",
+        "Shutter1",
+        "LKRaw13",
+        "LKRaw14"
+      ],
+      "wheel": [
+        {
+          "rgb": [
+            255,
+            255,
+            255
+          ],
+          "dmx": 3
+        },
+        {
+          "rgb": [
+            255,
+            255,
+            0
+          ],
+          "dmx": 10
+        },
+        {
+          "rgb": [
+            255,
+            128,
+            213
+          ],
+          "dmx": 17
+        },
+        {
+          "rgb": [
+            42,
+            255,
+            0
+          ],
+          "dmx": 24
+        },
+        {
+          "rgb": [
+            255,
+            0,
+            0
+          ],
+          "dmx": 31
+        },
+        {
+          "rgb": [
+            128,
+            170,
+            255
+          ],
+          "dmx": 38
+        },
+        {
+          "rgb": [
+            32,
+            196,
+            1
+          ],
+          "dmx": 45
+        },
+        {
+          "rgb": [
+            255,
+            128,
+            0
+          ],
+          "dmx": 52
+        },
+        {
+          "rgb": [
+            0,
+            85,
+            255
+          ],
+          "dmx": 59
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "name": "ED2",
+      "model": "EDP09 9x10W RGBW (B0833TJKNB)",
+      "universe": 2,
+      "address": 221,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "Shutter1",
+        "LKRaw7",
+        "LKRaw8"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 103,
+      "name": "ED3",
+      "model": "EDP09 9x10W RGBW (B0833TJKNB)",
+      "universe": 2,
+      "address": 229,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "Shutter1",
+        "LKRaw7",
+        "LKRaw8"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 101,
+      "name": "ED1",
+      "model": "EDP09 9x10W RGBW (B0833TJKNB)",
+      "universe": 2,
+      "address": 237,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "Shutter1",
+        "LKRaw7",
+        "LKRaw8"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 108,
+      "name": "ED8",
+      "model": "EDP09 9x10W RGBW (B0833TJKNB)",
+      "universe": 2,
+      "address": 245,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "Shutter1",
+        "LKRaw7",
+        "LKRaw8"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 109,
+      "name": "ED9",
+      "model": "EDP09 9x10W RGBW (B0833TJKNB)",
+      "universe": 2,
+      "address": 253,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "Shutter1",
+        "LKRaw7",
+        "LKRaw8"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 110,
+      "name": "ED10",
+      "model": "EDP09 9x10W RGBW (B0833TJKNB)",
+      "universe": 2,
+      "address": 261,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "Shutter1",
+        "LKRaw7",
+        "LKRaw8"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 104,
+      "name": "ED4",
+      "model": "EDP09 9x10W RGBW (B0833TJKNB)",
+      "universe": 2,
+      "address": 269,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "Shutter1",
+        "LKRaw7",
+        "LKRaw8"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 105,
+      "name": "ED5",
+      "model": "EDP09 9x10W RGBW (B0833TJKNB)",
+      "universe": 2,
+      "address": 277,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "Shutter1",
+        "LKRaw7",
+        "LKRaw8"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 106,
+      "name": "ED6",
+      "model": "EDP09 9x10W RGBW (B0833TJKNB)",
+      "universe": 2,
+      "address": 285,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "Shutter1",
+        "LKRaw7",
+        "LKRaw8"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 107,
+      "name": "ED7",
+      "model": "EDP09 9x10W RGBW (B0833TJKNB)",
+      "universe": 2,
+      "address": 293,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "Shutter1",
+        "LKRaw7",
+        "LKRaw8"
+      ],
+      "wheel": []
+    },
+    {
+      "id": 111,
+      "name": "ED11",
+      "model": "EDP09 9x10W RGBW (B0833TJKNB)",
+      "universe": 2,
+      "address": 301,
+      "attributes": [
+        "Dimmer",
+        "ColorRGB_R",
+        "ColorRGB_G",
+        "ColorRGB_B",
+        "ColorRGB_W",
+        "Shutter1",
+        "LKRaw7",
+        "LKRaw8"
+      ],
+      "wheel": []
+    }
+  ],
+  "zones": {
+    "1": [
+      206,
+      301,
+      311,
+      212,
+      201,
+      312,
+      302,
+      207
+    ],
+    "2": [
+      216,
+      215,
+      214,
+      213,
+      208,
+      211,
+      204,
+      209,
+      205,
+      203,
+      202,
+      217
+    ],
+    "3": [
+      218,
+      219,
+      220
+    ],
+    "4": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      8,
+      7
+    ],
+    "5": [
+      13,
+      14,
+      15,
+      19,
+      20,
+      16,
+      17,
+      18
+    ],
+    "6": [
+      9,
+      11,
+      10,
+      12
+    ],
+    "7": [
+      110,
+      109,
+      108,
+      111,
+      107,
+      106,
+      105,
+      104,
+      103,
+      102,
+      101
+    ]
+  },
+  "imrelax": {
+    "301": {
+      "pan": 64.444444,
+      "tilt": 75.925926
+    },
+    "302": {
+      "pan": 35.555556,
+      "tilt": 75.925926
+    },
+    "pan_span": 12,
+    "tilt_span": 7
+  }
+}

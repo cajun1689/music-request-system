@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'rekordbox-agent/**'
+      - 'grandma3-director-review/**'
       - '.github/workflows/test-dj-bridge.yml'
       - '.github/workflows/build-rekordbox-bridge.yml'
   workflow_dispatch:
@@ -41,6 +42,10 @@ jobs:
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: node -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("Use a native runner for each architecture")'
       - run: npm ci --ignore-scripts
+      - name: Check generated director review assets
+        run: |
+          python3 ../grandma3-director-review/build.py
+          git diff --exit-code -- ../grandma3-director-review/generated
       - run: npm test
       - name: Verify universal receiver
         run: |
