@@ -27,7 +27,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm test
       - name: Verify universal receiver
-        run: lipo -verify_arch arm64 x86_64 resources/lighting/DJLightingReceiver
+        run: lipo resources/lighting/DJLightingReceiver -verify_arch arm64 x86_64
       - name: Prepare matching Electron database module
         run: |
           brew install python-setuptools
