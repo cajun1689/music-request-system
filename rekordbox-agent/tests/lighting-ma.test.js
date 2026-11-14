@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { lua, lauxlib, lualib, to_luastring, to_jsstring } = require('fengari');
 const plugin = fs.readFileSync('resources/lighting/GaslightBridge.lua','utf8');
+const installer = fs.readFileSync('resources/lighting/Install Gaslight Bridge.lua','utf8');
 const fixtures = `
 now=0; jobs={}; commands={}; objects={}; lastReply=''
 function Time()return now end
@@ -77,4 +78,25 @@ test('manual End Opening leaves the intro once and keeps manual movement-size ov
  request('normal',owner,string.rep('4',32))
  local starts=0;local nexts=0;for _,c in ipairs(commands)do if c=='Go+ Macro 3701'then starts=starts+1 end;if c=="Plugin 902 'next'"then nexts=nexts+1 end end
  assert(starts==1 and nexts==1)
+`));
+test('MA installer refuses occupied slots and creates feedback only without starting lights',()=>run(`
+ local exists={};local previous=ObjectList
+ function ObjectList(s)if s=='Plugin 930'or s=='OSC 2'then return exists[s]and{object(s)}or{}end;return previous(s)end
+ local oldcmd=Cmd
+ function Cmd(s)
+  if s=='Store Plugin 930 /NC'then exists['Plugin 930']=true;object('Plugin 930').Append=function(self)local part={};self[1]=part;return part end end
+  if s=='Store OSC 2 /NC'then exists['OSC 2']=true end
+  return oldcmd(s)
+ end
+ local expected=[====[${plugin}]====]
+ Enums={PathType={ImportExport=1}}
+ function GetPath(_)return'/mock'end
+ io.open=function(name,mode)assert(name=='/mock/GaslightBridge.lua'and mode=='r');return{read=function()return expected end,close=function()end}end
+ function MessageBox(_)end
+ local install=assert(load([====[${installer}]====]))
+ install();assert(object('Plugin 930')[1].FileContent==expected)
+ local row=object('OSC 2');assert(row.Port==9150 and row.Send and row.SendCommand and not row.Receive and not row.ReceiveCommand)
+ assert(object('OSC').EnableOutput)
+ for _,c in ipairs(commands)do assert(not c:match('^Go')and not c:match('^Fader')and not c:match('^Patch'))end
+ local n=#commands;assert(not pcall(install));assert(#commands==n)
 `));
