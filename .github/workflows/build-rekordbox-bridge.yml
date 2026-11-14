@@ -36,9 +36,6 @@ jobs:
       - name: Install dependencies (skip native compile)
         run: npm ci --ignore-scripts
 
-      - name: Install notarization dependency
-        run: npm install --save-dev @electron/notarize --ignore-scripts
-
       - name: Build app and universal lighting receiver
         run: npm run build
 
@@ -56,6 +53,7 @@ jobs:
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
@@ -72,14 +70,16 @@ jobs:
 
       - name: Package & publish to GitHub Releases
         if: startsWith(github.ref, 'refs/tags/')
-        run: npx electron-builder --mac --publish always
+        # The certificate is already imported above. Avoid the builder importing
+        # it again into a second keychain with the wrong unlock password.
+        run: env -u CSC_LINK -u CSC_KEY_PASSWORD CSC_KEYCHAIN="$RUNNER_TEMP/build.keychain" npx electron-builder --mac --publish always -c.forceCodeSigning=true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.CSC_LINK != '' && 'true' || 'false' }}
 
       - name: Package only (manual trigger)
         if: "!startsWith(github.ref, 'refs/tags/')"
-        run: npx electron-builder --mac --publish never
+        run: env -u CSC_LINK -u CSC_KEY_PASSWORD CSC_KEYCHAIN="$RUNNER_TEMP/build.keychain" npx electron-builder --mac --publish never -c.forceCodeSigning=true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.CSC_LINK != '' && 'true' || 'false' }}
@@ -107,6 +107,7 @@ jobs:
             rekordbox-agent/out/*.zip
             rekordbox-agent/out/*.yml
             rekordbox-agent/out/*.yaml
+            rekordbox-agent/out/*.blockmap
           if-no-files-found: warn
 
       - name: Cleanup keychain
