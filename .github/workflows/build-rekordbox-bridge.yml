@@ -39,13 +39,17 @@ jobs:
       - name: Install notarization dependency
         run: npm install --save-dev @electron/notarize --ignore-scripts
 
-      - name: Build TypeScript
+      - name: Build app and universal lighting receiver
+        run: npm run build
+
+      - name: Run bridge tests
+        run: node --test tests/*.test.js
+
+      - name: Verify Serato database module in Electron
         run: |
-          cp src/main/preload.js dist/main/preload.js 2>/dev/null || true
-          npx tsc
-          rm -rf dist/renderer && cp -r src/renderer dist/renderer
-          cp src/main/preload.js dist/main/preload.js
-          node scripts/stamp-version.js
+          node node_modules/electron/install.js
+          npx electron-builder install-app-deps
+          ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/test-lighting-sqlite.js
 
       - name: Import signing certificate into keychain
         if: env.CSC_LINK != ''

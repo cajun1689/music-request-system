@@ -1,3 +1,16 @@
+## DJ Bridge v1.14.0-beta.1 - lighting preview
+
+- Club Lighting controls: Music connectors, Find MA, Open MA Remote and Start Club Night.
+- A one-time opening song: white, slow phased dimmer pulses and exaggerated slow movement. The next distinct song starts normal colors and five-minute rotation; the opening is excluded from rotation.
+- End Opening / Next Song provides a manual transition if song detection is delayed.
+- Native CDJ/A9 and Serato played-history connectors run only for the active DJ Bridge owner. Off/Quit stops this computer's lighting receivers.
+- Preserves captured brightness and existing MA/APC controls. Lighting works independently of cloud request pairing.
+- Bundled universal Mac receiver; no separate Python installation required.
+
+**Preview only:** the booth plugin installation, hardware verification, helper migration and signed universal distribution are pending. This branch does not publish a stable update or change the running booth show. See `resources/lighting/README.md` for setup, limitations and recovery.
+
+---
+
 ## DJ Bridge v1.12.1
 
 ### Fixed

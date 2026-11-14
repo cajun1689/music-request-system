@@ -1,0 +1,62 @@
+{
+  "id": "gaslight-club-v1",
+  "name": "Gaslight Club",
+  "show": "Gaslight_Club_Live",
+  "station": "CWXT-E9A9VF8LTU",
+  "plugin": 930,
+  "commandPort": 8000,
+  "replyPort": 9150,
+  "webPort": 8080,
+  "prefix": "gma3",
+  "grandMaster": 100,
+  "baseLevels": {
+    "18": 50,
+    "17": 60,
+    "16": 55,
+    "15": 55,
+    "11": 70,
+    "12": 80,
+    "13": 65,
+    "14": 55
+  },
+  "groupLevels": {
+    "8": 100,
+    "7": 100,
+    "6": 100,
+    "5": 100,
+    "4": 100,
+    "3": 100,
+    "2": 100,
+    "1": 100
+  },
+  "effectLevels": {
+    "114": 30,
+    "112": 65,
+    "101": 75,
+    "103": 70,
+    "113": 35,
+    "111": 50,
+    "102": 80
+  },
+  "movementScales": {
+    "101": "Div4",
+    "102": "Div16",
+    "103": "Div16"
+  },
+  "paletteCue": 6,
+  "playerChannels": {
+    "1": 2,
+    "2": 3
+  },
+  "timerSeconds": 300,
+  "opening": {
+    "paletteCue": 12,
+    "movementCue": 13,
+    "movementSize": 100,
+    "movementScale": "Div16",
+    "dimmerCue": 8,
+    "dimmerScale": "Div4",
+    "leaveOn": "next_distinct_track",
+    "includedInRotation": false
+  }
+}

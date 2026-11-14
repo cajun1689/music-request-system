@@ -1,0 +1,37 @@
+name: Test DJ Bridge
+
+on:
+  pull_request:
+    paths:
+      - 'rekordbox-agent/**'
+      - '.github/workflows/test-dj-bridge.yml'
+      - '.github/workflows/build-rekordbox-bridge.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-lighting:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: rekordbox-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: rekordbox-agent/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: Verify universal receiver
+        run: lipo -verify_arch arm64 x86_64 resources/lighting/DJLightingReceiver
+      - name: Prepare matching Electron database module
+        run: |
+          brew install python-setuptools
+          node node_modules/electron/install.js
+          npx electron-builder install-app-deps
+      - name: Check read-only Serato history in Electron
+        run: ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/test-lighting-sqlite.js

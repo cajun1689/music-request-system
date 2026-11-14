@@ -630,3 +630,18 @@ export async function readCurrentSeratoTrack(customPath?: string): Promise<Track
 
   return chosen;
 }
+
+// Lighting fallback uses confirmed played session entries, never log/load-only records.
+export function readLastPlayedSeratoTrack(customPath?: string): TrackInfo | null {
+  try {
+    const directory = resolveSeratoSessionDir(customPath);
+    if (!directory) return null;
+    const filename = findLatestSessionFile(directory);
+    if (!filename || Date.now() - fs.statSync(filename).mtimeMs > STALE_SESSION_MS) return null;
+    const entries = parseSessionFile(filename).filter((entry) => entry.played && entry.startTime > 0);
+    const entry = entries[entries.length - 1];
+    if (!entry) return null;
+    const { title, artist } = splitArtistTitle(entry);
+    return { title, artist, playedAt: new Date(entry.startTime * 1000).toISOString() };
+  } catch { return null; } // Serato may rotate its session file between discovery and reading.
+}

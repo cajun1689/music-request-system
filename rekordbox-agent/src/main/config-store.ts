@@ -5,6 +5,8 @@ import { getPairedSourceId } from "./bridge-auth";
 export type DJSoftwareType = "rekordbox" | "serato" | "showkontrol" | "auto";
 
 export interface ConfigSchema {
+  lightingEnabled: boolean;
+  lightingLegacyMigrated: boolean;
   apiBaseUrl: string;
   eventId: string;
   pushToken: string;
@@ -29,6 +31,8 @@ export interface ConfigSchema {
 
 const store = new Store<ConfigSchema>({
   defaults: {
+    lightingEnabled: false,
+    lightingLegacyMigrated: false,
     apiBaseUrl: "https://zjjnyyeo8c.execute-api.us-east-1.amazonaws.com/prod",
     eventId: "gaslight-residency",
     pushToken: "",
@@ -116,6 +120,8 @@ if (Boolean(storedDeviceId) !== Boolean(storedDeviceToken)) {
 
 export function getConfig(): ConfigSchema {
   return {
+    lightingEnabled: store.get("lightingEnabled"),
+    lightingLegacyMigrated: store.get("lightingLegacyMigrated"),
     apiBaseUrl: store.get("apiBaseUrl"),
     eventId: store.get("eventId"),
     pushToken: readSecret("pushToken"),

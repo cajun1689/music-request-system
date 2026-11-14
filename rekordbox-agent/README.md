@@ -2,6 +2,12 @@
 
 A lightweight macOS menubar app that reads the currently playing track from Rekordbox's local database and pushes it to the Casper Requests cloud API for automatic request matching.
 
+## Club lighting preview (1.14.0-beta.1)
+
+The optional Club Lighting panel connects native CDJs or Serato/DVS to the existing Gaslight grandMA3 show. It provides discovery, MA Remote, connector ownership/handoff and **Start Club Night** with the saved brightness levels. The first song uses a one-time white opening with slow pulses and wide, slow movement; the next distinct song starts normal track colors and five-minute movement/dimmer rotation. The opening is excluded from automatic rotation.
+
+Lighting is independent of cloud event pairing and defaults off. Off/Quit stops its receivers; closing the window keeps the menu-bar app running. The booth plugin, real-room verification and migration of the old helpers are still pending. See the [lighting setup and recovery guide](resources/lighting/README.md) before installing the preview at the venue.
+
 ## How It Works
 
 1. Rekordbox writes play history to a local SQLite (SQLCipher-encrypted) database.
