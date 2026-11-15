@@ -5,6 +5,10 @@ import { performance } from "perf_hooks";
 import { LightingReply, LightingOperation, LIGHTING_REPLY_PORT, LIGHTING_COMMAND_PORT, lightingCommand, oscCommand, parseLightingReply, privateIPv4 } from "./lighting-protocol";
 
 export interface LightingNetwork { name: string; address: string; broadcast: string; netmask: string; mac: string }
+function sameSubnet(address: string, network: LightingNetwork): boolean {
+  const a = address.split(".").map(Number), b = network.address.split(".").map(Number), mask = network.netmask.split(".").map(Number);
+  return a.length === 4 && b.length === 4 && mask.length === 4 && a.every((octet, i) => (octet & mask[i]) === (b[i] & mask[i]));
+}
 export function lightingNetworks(): LightingNetwork[] {
   const result: LightingNetwork[] = [];
   for (const [name, rows] of Object.entries(os.networkInterfaces())) for (const r of rows ?? []) {
@@ -97,12 +101,18 @@ export class LightingController {
     const networks = this.networks(); if (!networks.length) throw new Error("Connect this Mac to the DJ network");
     const targets = networks.flatMap((network) => {
       const result = [{ network, target: network.broadcast, broadcast: true }];
-      if (manualAddress || this.current.address) result.unshift({ network, target: manualAddress || this.current.address!, broadcast: false });
+      const known = manualAddress || this.current.address;
+      if (known && sameSubnet(known, network)) result.unshift({ network, target: known, broadcast: false });
       return result;
     });
     const attempts = targets.map(async ({ network, target, broadcast }) => {
       const reply = await this.request("hello", target, network, "", broadcast);
-      return { network, reply };
+      // MA queues SendOSC and shares its destination row. Parallel discovery
+      // can deliver a virtual-adapter nonce to the physical LAN address.
+      // Select the adapter by the replying MA's subnet, not just that nonce.
+      const selected = sameSubnet(reply.address, network) ? network : networks.find((candidate) => sameSubnet(reply.address, candidate));
+      if (!selected) throw new Error("Connect to the same local lighting network as the booth MA");
+      return { network: selected, reply };
     });
     let found: Awaited<typeof attempts[number]>;
     try { found = await Promise.any(attempts); } catch { throw new Error("MA not found. The booth needs the DJ Bridge plugin and OSC feedback setup."); }

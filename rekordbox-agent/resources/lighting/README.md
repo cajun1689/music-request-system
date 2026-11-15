@@ -2,7 +2,7 @@
 
 This is the offline-tested lighting integration for Gaslight, grandMA3 2.4.2.2. Back up the venue show before installing or updating its native controller. Do not replace a working show with an unverified import.
 
-Version 1.14.1 is distributed through the normal DJ Bridge updater. Lighting remains off by default. Updating the app does not install the booth plugin, change the working legacy helpers or start the venue lights.
+Version 1.14.2 is distributed through the normal DJ Bridge updater. Lighting remains off by default. Updating the app does not install the booth plugin, change the working legacy helpers or start the venue lights.
 
 The earlier Preview Guide PDF shows the previous first-song opening. Version 1.14.1 uses the 30-second opening described here; printed guides must be updated before distributing them.
 
@@ -54,3 +54,5 @@ Run each architecture's execution checks on its native build host. Intel tests r
 ## macOS network access
 
 Allow DJ Bridge to find devices on the local network when macOS asks. Version 1.14.1 assigns stable app-specific executable UUIDs before signing, avoiding the stock Electron identity collision described in Apple TN3179. If MA is reachable in a browser but Bridge reports an unreachable host, check System Settings → Privacy & Security → Local Network for DJ Bridge. Do not disable the Mac firewall or unrelated privacy protections.
+
+Version 1.14.2 selects the physical lighting adapter by the MA reply subnet. The Gaslight native profile accepts reply addresses only on 10.10.1.0/24 to prevent queued OSC replies being redirected by unrelated virtual adapters.

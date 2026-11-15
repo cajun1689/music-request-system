@@ -129,3 +129,19 @@ test('Stop and White borrow a lease while off, never start music listeners, and 
  fail=true;await assert.rejects(()=>c.control('stop'),/stop_check_failed/);assert.equal(owner,'');assert.equal(c.socket,null);
  owner='f'.repeat(32);const n=ops.filter(x=>x==='stop').length;await assert.rejects(()=>c.control('stop'),/Another DJ/);assert.equal(ops.filter(x=>x==='stop').length,n);assert.equal(c.socket,null);
 });
+test('discovery chooses the actual MA subnet even when a virtual-adapter nonce replies first',{skip:!local},async(t)=>{
+ const server=dgram.createSocket('udp4');await new Promise(r=>server.bind(0,local.address,r));t.after(()=>server.close());
+ const replies=[];let owner='';
+ server.on('message',(data,info)=>{
+  const cmd=decodeOSCString(data,'/gma3/cmd');if(!cmd)return;
+  const [op,who,nonce,ip]=cmd.match(/^Plugin 930 '(.*)'$/)[1].split('|');let result=op;
+  if(op==='claim'){owner=who;result='claimed';replies.push(ip);}
+  if(op==='release'){owner='';result='released';}
+  const value=['djbridge1',nonce,result,'gaslight-club-v1','Gaslight_Club_Live','CWXT-E9A9VF8LTU',owner||'-',owner?'DJ':'-',owner?12:0,1,0,0,0].join('|');
+  server.send(Buffer.concat([oscString('/djbridge/status'),oscString(',s'),oscString(value)]),info.port,info.address);
+ });
+ const physical={name:'club',address:local.address,broadcast:local.address,netmask:local.netmask,mac:local.mac};
+ const virtual={...physical,name:'virtual',address:'10.147.17.59',netmask:'255.255.255.0'};
+ let selected=null;const c=new LightingController({replyPort:0,commandPort:server.address().port,networkInterfaces:()=>[virtual,physical],onStatus:()=>{},connectors:{start:async(n)=>{selected=n;},stop:async()=>{}}});t.after(()=>c.disable());
+ await c.enable();assert.equal(c.getStatus().state,'ready');assert.equal(selected.address,local.address);assert.deepEqual(replies,[local.address]);await c.disable();
+});

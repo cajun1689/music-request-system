@@ -148,3 +148,7 @@ test('White Only restores steady white and normal levels with movement and rhyth
 `));
 
 test('native show-control installer compiles before any mutation',()=>run(`assert(load([====[${fs.readFileSync('resources/lighting/Install Show Controls.lua','utf8')}]====]))`));
+test('native venue profile ignores virtual-adapter replies before changing ownership or OSC destination',()=>run(`
+ bridge(nil,'claim|'..owner..'|'..string.rep('1',32)..'|10.147.17.59|Virtual|-');assert(#commands==0)
+ request('claim',other,string.rep('2',32));assert(lastReply:find('|claimed|',1,true))
+`));

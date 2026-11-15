@@ -170,6 +170,9 @@ return function(_,arg)
  if #parts~=6 then return end
  local op,who,nonce,ip,name,payload=table.unpack(parts)
  if not validid(who)or not validid(nonce)or not private(ip)or #name<1 or #name>64 or name:find('[^%w ._-]')then return end
+ -- This venue profile uses 10.10.1.0/24. Ignore other adapter addresses:
+ -- SendOSC dispatch is queued and its destination row is shared by requests.
+ if not ip:match('^10%.10%.1%.%d+$')then return end
  expire()
  if recent[nonce]then reply(nonce,recent[nonce],ip);return end
  if op=='hello'then reply(nonce,'hello',ip);return end
