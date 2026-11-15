@@ -110,3 +110,22 @@ test('failed discovery remains off and releases its temporary UDP socket',{skip:
  const c=new LightingController({replyPort:0,commandPort:9,requestTimeoutMs:30,networkInterfaces:()=>[network],onStatus:()=>{},connectors:{start:async()=>assert.fail(),stop:async()=>{}}});
  await assert.rejects(()=>c.find());assert.equal(c.socket,null);assert.equal(c.pending.size,0);assert.equal(c.getStatus().enabled,false);
 });
+test('Stop and White borrow a lease while off, never start music listeners, and release on success or error',{skip:!local},async(t)=>{
+ const server=dgram.createSocket('udp4');await new Promise(r=>server.bind(0,local.address,r));t.after(()=>server.close());
+ let owner='',fail=false;const ops=[];
+ server.on('message',(data,info)=>{
+  const cmd=decodeOSCString(data,'/gma3/cmd');if(!cmd)return;
+  const [op,who,nonce]=cmd.match(/^Plugin 930 '(.*)'$/)[1].split('|');ops.push(op);let result=op;
+  if(op==='claim'){if(owner&&owner!==who)result='busy';else{owner=who;result='claimed';}}
+  if(op==='stop')result=fail?'stop_check_failed':'stopped';if(op==='white')result='white';
+  if(op==='release'){owner='';result='released';}
+  const value=['djbridge1',nonce,result,'gaslight-club-v1','Gaslight_Club_Live','CWXT-E9A9VF8LTU',owner||'-',owner?'Test DJ':'-',owner?12:0,1,0,0,0].join('|');
+  server.send(Buffer.concat([oscString('/djbridge/status'),oscString(',s'),oscString(value)]),info.port,info.address);
+ });
+ let starts=0;const network={name:'test',address:local.address,broadcast:local.address,netmask:local.netmask,mac:local.mac};
+ const c=new LightingController({replyPort:0,commandPort:server.address().port,networkInterfaces:()=>[network],onStatus:()=>{},connectors:{start:async()=>starts++,stop:async()=>{}}});t.after(()=>c.disable());
+ for(const op of ['stop','white']){await c.control(op);assert.equal(c.getStatus().enabled,false);assert.equal(c.socket,null);assert.equal(c.pending.size,0);assert.equal(owner,'');}
+ assert.equal(starts,0);assert.ok(ops.includes('stop')&&ops.includes('white'));
+ fail=true;await assert.rejects(()=>c.control('stop'),/stop_check_failed/);assert.equal(owner,'');assert.equal(c.socket,null);
+ owner='f'.repeat(32);const n=ops.filter(x=>x==='stop').length;await assert.rejects(()=>c.control('stop'),/Another DJ/);assert.equal(ops.filter(x=>x==='stop').length,n);assert.equal(c.socket,null);
+});

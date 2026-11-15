@@ -45,6 +45,7 @@ export class LightingController {
   private busy = false;
   private owned = false;
   private connectorRunning = false;
+  private utilityBusy = false;
   private openingTrack: string | null = null;
   private lastTempoAt = 0;
   private lastTrackAt = -Infinity;
@@ -82,6 +83,7 @@ export class LightingController {
     });
   }
   async find(manualAddress = ""): Promise<LightingStatus> {
+    if (this.utilityBusy) throw new Error("A lighting control is still finishing");
     if (manualAddress && !privateIPv4(manualAddress)) throw new Error("Enter a private MA IPv4 address");
     if (this.current.enabled) { await this.tick(manualAddress); return this.getStatus(); }
     const epoch = ++this.epoch;
@@ -111,6 +113,7 @@ export class LightingController {
     return true;
   }
   async enable(): Promise<LightingStatus> {
+    if (this.utilityBusy) throw new Error("A lighting control is still finishing");
     if (this.current.enabled) return this.getStatus();
     ++this.epoch; this.emit({ enabled: true, state: "searching", error: null });
     try { await this.open(); } catch (e) { await this.disable(); throw e; }
@@ -148,6 +151,7 @@ export class LightingController {
   }
   async migrated(): Promise<void> { await this.tick(); }
   async startClub(): Promise<LightingStatus> {
+    if (this.utilityBusy) throw new Error("A lighting control is still finishing");
     if (!this.current.enabled) await this.enable();
     if (!this.owned || this.current.state !== "ready" || !this.network || !this.current.address) throw new Error("Connect lighting and acquire control before starting Club Night");
     const epoch = this.epoch;
@@ -157,6 +161,38 @@ export class LightingController {
     if (reply.result !== "started") throw new Error(`MA could not start the club look: ${reply.result}`);
     this.openingTrack = openingTrack;
     this.emit({ timer: reply.timer, colors: reply.colors, opening: reply.opening }); return this.getStatus();
+  }
+  async control(action: "stop" | "white"): Promise<LightingStatus> {
+    if (action !== "stop" && action !== "white") throw new Error("Unknown lighting control");
+    if (this.utilityBusy) throw new Error("A lighting control is still finishing");
+    this.utilityBusy = true;
+    const temporary = !this.current.enabled;
+    const epoch = temporary ? ++this.epoch : this.epoch;
+    let claimed = false;
+    try {
+      // Steady white and blackout must also work with music connectors off.
+      // Borrow a short lease without starting the receiver or its pollers.
+      if (temporary) {
+        await this.open();
+        if (!await this.discover("", epoch)) throw new Error("Lighting connection changed");
+        const claim = await this.request("claim", this.current.address!, this.network!);
+        if (claim.owner !== this.ownerId || claim.result !== "claimed") throw new Error("Another DJ controls the lights. Use the booth buttons or wait for handoff.");
+        claimed = true;
+      } else if (!this.owned) throw new Error("Acquire lighting control first, or use the booth buttons");
+      if (epoch !== this.epoch || !this.network || !this.current.address) throw new Error("Lighting connection changed");
+      const reply = await this.request(action, this.current.address, this.network);
+      if (epoch !== this.epoch) throw new Error("Lighting connection changed");
+      if (reply.result !== (action === "stop" ? "stopped" : "white")) throw new Error(`MA: ${reply.result}`);
+      this.openingTrack = null;
+      this.emit({ timer: reply.timer, colors: reply.colors, opening: reply.opening, error: null });
+    } finally {
+      if (temporary && epoch === this.epoch) {
+        if (claimed && this.network && this.current.address) await this.request("release", this.current.address, this.network).catch(() => null);
+        this.closeSocket(); this.network = null; this.emit({ owner: null });
+      }
+      this.utilityBusy = false;
+    }
+    return this.getStatus();
   }
   async finishOpening(): Promise<LightingStatus> {
     if (!this.owned || !this.current.enabled || !this.network || !this.current.address) throw new Error("Connect lighting first");

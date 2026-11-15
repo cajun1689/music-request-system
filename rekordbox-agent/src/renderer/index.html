@@ -531,12 +531,14 @@
         <label style="margin:0"><input id="lighting-enabled" type="checkbox" aria-label="Enable lighting connectors" style="width:20px;height:20px;accent-color:var(--accent)"></label></div>
       <div id="lighting-detail" style="font-size:11px;color:var(--text-dim);margin:6px 0;white-space:pre-line">Off. No lighting connectors running.</div>
       <div class="btn-row"><button class="btn" id="lighting-start">Start Club Night</button><button class="btn secondary" id="lighting-find">Find MA</button><button class="btn secondary" id="lighting-remote" disabled>Open MA Remote</button></div>
-      <button class="btn secondary" id="lighting-normal" style="display:none">End Opening / Next Song</button>
+      <div class="btn-row"><button class="btn" id="lighting-stop" style="background:#a52b37;color:white">Stop Show</button><button class="btn secondary" id="lighting-white">White Only</button></div>
+      <p style="font-size:11px;color:var(--text-dim);margin:6px 0">Stop Show: all lights down, automation off. White Only: steady white, movement and pulses off. Start Club Night resumes the club show.</p>
+      <button class="btn secondary" id="lighting-normal" style="display:none">End Opening Now</button>
       <button class="btn secondary" id="lighting-migrate" style="display:none">Use Bridge connectors</button>
       <details style="margin-top:10px;font-size:11px;color:var(--text-dim)"><summary>Connection and saved levels</summary>
         <label for="lighting-address">MA address (optional)</label><input id="lighting-address" type="text" placeholder="Find automatically" maxlength="15">
         <p style="margin-top:8px">Stage 70% · Dance 80% · Garage 65% · PARs 55% · Bar 60% · Strobes 50%.</p>
-        <p style="margin-top:6px">Start Club Night restores these levels with a one-time white opening: slow pulses and wide, slow movement. The next song begins normal colors and rotation. Requires the booth's DJ Bridge plugin.</p>
+        <p style="margin-top:6px">Start Club Night restores these levels after a 30-second movers-only white opening: phased pulses and wide, slow movement. Normal colors and automation then begin. Requires the booth's DJ Bridge plugin.</p>
       </details>
       <p style="font-size:10px;color:var(--text-muted);margin-top:10px">Closing this window keeps Bridge in the menu bar. Lighting Off or Quit stops its connectors. The MA keeps running its show.</p>
       <div id="lighting-error" class="error-banner" style="display:none" role="alert"></div>

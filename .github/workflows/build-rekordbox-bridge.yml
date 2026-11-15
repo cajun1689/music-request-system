@@ -87,6 +87,9 @@ jobs:
       - name: Verify Apple Silicon support in every bundled binary
         run: node scripts/verify-macos-native.js "out/mac-universal/DJ Bridge.app"
 
+      - name: Verify app-specific macOS network identities
+        run: node scripts/verify-macos-network-identity.js "out/mac-universal/DJ Bridge.app"
+
       - name: Update release notes
         if: startsWith(github.ref, 'refs/tags/')
         run: |

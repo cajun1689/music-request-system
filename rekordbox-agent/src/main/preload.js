@@ -9,6 +9,8 @@ try {
     findLighting: function (address) { return ipcRenderer.invoke("lighting-find", address || ""); },
     finishLightingOpening: function () { return ipcRenderer.invoke("lighting-normal"); },
     startClubNight: function () { return ipcRenderer.invoke("lighting-start"); },
+    stopClubShow: function () { return ipcRenderer.invoke("lighting-stop"); },
+    whiteOnly: function () { return ipcRenderer.invoke("lighting-white"); },
     openLightingRemote: function () { return ipcRenderer.invoke("lighting-remote"); },
     migrateLighting: function () { return ipcRenderer.invoke("lighting-migrate"); },
     onLightingStatus: function (callback) {

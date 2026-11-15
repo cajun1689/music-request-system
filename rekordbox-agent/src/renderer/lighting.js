@@ -4,6 +4,7 @@
   if (!bridge || !bridge.getLightingStatus) return;
   let state = null;
   let pending = false;
+  let revision = 0;
   function update(s) {
     if (!s) return;
     state = s;
@@ -18,7 +19,7 @@
     if (s.state === 'migration') lines.push('Standalone helpers found. Use Bridge connectors after the booth setup is verified; backups are kept.');
     if (s.state === 'ready') {
       lines.push(s.bpm ? s.bpm.toFixed(1) + ' BPM · ' + s.tempoSource : 'Waiting for fresh A9 / CDJ tempo');
-      if (s.opening) lines.push('Opening song: white, slow pulses and wide slow movement. Normal rotation starts with the next song.');
+      if (s.opening) lines.push('30-second opening: movers only, white phased pulses and wide slow movement. Normal club automation follows.');
       lines.push('Track colors: ' + (s.colors ? 'On' : 'Manual') + ' · Rotation: ' + (s.timer ? 'On' : 'Off'));
       if (s.lastTrack) lines.push('Last track change: ' + s.lastTrack);
     }
@@ -26,6 +27,8 @@
     el('lighting-detail').textContent = lines.join('\n');
     el('lighting-remote').disabled = pending || !s.address;
     el('lighting-start').disabled = pending || (s.enabled && s.state !== 'ready');
+    el('lighting-stop').disabled = s.enabled && s.state === 'standby';
+    el('lighting-white').disabled = pending || (s.enabled && !['ready', 'migration'].includes(s.state));
     el('lighting-enabled').disabled = pending;
     el('lighting-find').disabled = pending;
     el('lighting-migrate').disabled = pending;
@@ -35,13 +38,15 @@
     el('lighting-error').textContent = s.error || '';
     el('lighting-error').style.display = s.error ? 'block' : 'none';
   }
-  async function action(fn) {
-    if (pending) return;
+  async function action(fn, interrupt = false) {
+    if (pending && !interrupt) return;
+    const mine = ++revision;
     pending = true; if (state) update(state);
     let failure = null;
-    try { const result = await fn(); if (result) state = result; }
+    try { const result = await fn(); if (result && mine === revision) state = result; }
     catch (error) { failure = error.message || String(error); }
     finally {
+      if (mine !== revision) return;
       pending = false; if (state) update(state);
       if (failure) { el('lighting-error').textContent = failure; el('lighting-error').style.display = 'block'; }
     }
@@ -51,6 +56,8 @@
   el('lighting-enabled').addEventListener('change', function () { const enabled = this.checked; action(() => bridge.setLightingEnabled(enabled)); });
   el('lighting-find').addEventListener('click', () => action(() => bridge.findLighting(el('lighting-address').value)));
   el('lighting-start').addEventListener('click', () => action(() => bridge.startClubNight()));
+  el('lighting-stop').addEventListener('click', () => action(() => bridge.stopClubShow(), true));
+  el('lighting-white').addEventListener('click', () => action(() => bridge.whiteOnly()));
   el('lighting-remote').addEventListener('click', () => action(() => bridge.openLightingRemote()));
   el('lighting-normal').addEventListener('click', () => action(() => bridge.finishLightingOpening()));
   el('lighting-migrate').addEventListener('click', () => action(() => bridge.migrateLighting()));

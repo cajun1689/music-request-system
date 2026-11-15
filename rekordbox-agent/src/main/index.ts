@@ -766,7 +766,7 @@ function stopRequestsPolling(): void {
 }
 
 function positionWindowTopRight(): void {
-  if (!mainWindow) return;
+  if (isQuitting || !mainWindow || mainWindow.isDestroyed()) return;
   const { screen } = require("electron");
   const display = screen.getPrimaryDisplay();
   const { width: screenW, height: screenH } = display.workAreaSize;
@@ -801,6 +801,10 @@ function createWindow(): void {
     },
   });
 
+  const createdWindow = mainWindow;
+  createdWindow.on("closed", () => {
+    if (mainWindow === createdWindow) { mainWindow = null; setLogWindow(null); }
+  });
   setLogWindow(mainWindow);
 
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
@@ -829,7 +833,8 @@ function createWindow(): void {
 }
 
 function showWindow(): void {
-  if (!mainWindow) {
+  if (isQuitting) return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow();
   }
   if (mainWindow) {
@@ -840,7 +845,8 @@ function showWindow(): void {
 }
 
 function toggleWindow(): void {
-  if (!mainWindow) {
+  if (isQuitting) return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow();
   }
   if (mainWindow && mainWindow.isVisible()) {
@@ -1405,6 +1411,14 @@ ipcMain.handle("lighting-find", async (_event, address: unknown) => {
 ipcMain.handle("lighting-start", async () => {
   if (!lighting) throw new Error("Lighting is unavailable");
   const state = await lighting.startClub(); setConfig({ lightingEnabled: true }); return state;
+});
+ipcMain.handle("lighting-stop", () => {
+  if (!lighting) throw new Error("Lighting is unavailable");
+  return lighting.control("stop");
+});
+ipcMain.handle("lighting-white", () => {
+  if (!lighting) throw new Error("Lighting is unavailable");
+  return lighting.control("white");
 });
 ipcMain.handle("lighting-remote", async () => {
   if (!lighting) throw new Error("Find the MA first");

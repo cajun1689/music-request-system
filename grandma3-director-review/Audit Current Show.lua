@@ -24,7 +24,7 @@ return function()
   local h=o('Sequence '..id);if not h then return nil end
   return {properties=properties(h),master=fader(h,'FaderMaster'),temp=fader(h,'FaderTemp'),active=attempt('active',function()return h:HasActivePlayback()end)}
  end
- local folder=assert(GetPath(Enums.PathType.ImportExport),'ImportExport path missing')
+ local folder=assert(GetPath('plugins'),'Native plugin folder missing')
  local prefix='Gaslight-Director-Audit-'..os.date('%Y%m%d-%H%M%S')
  local exports={}
  local function export(h,name)
@@ -35,6 +35,9 @@ return function()
   host=attempt('hostname',function()return Root().ManetSocket:Get('HOSTNAME')end),groups={},pages={},sequences={},fixtures={},plugins={},errors=errors,exports=exports,
   notes={'Saved audit is a readback, not proof of beam direction or music phase.','Group numbers must be resolved by actual name and membership before restoring masters.','Export full native plugin XML before editing controller sources.'}}
  d.grand_master=fader(o('Master 2.1'),'FaderMaster')
+ d.osc={properties=properties(o('OSC')),rows={}}
+ local osc=o('OSC');if osc then attempt('OSC rows',function()for i=1,osc:Count()do d.osc.rows[tostring(i)]=properties(osc:Ptr(i))end end)end
+ d.tempo=properties(o('Master 3.4'))
  for id=1,32 do local h=o('Group '..id);if h then d.groups[tostring(id)]={properties=properties(h),master=fader(h,'FaderMaster')};export(h,'Group-'..id)end end
  for id=1,8 do
   local h=o('Page '..id)
@@ -82,4 +85,5 @@ return function()
  local path=folder..'/'..prefix..'.json'
  local file=assert(io.open(path,'w'));file:write(encode(d));file:close()
  Printf('Read-only audit saved: %s (%d API read errors; inspect before relying on it)',path,#errors)
+ return path,d
 end

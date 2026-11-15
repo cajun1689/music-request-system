@@ -4,7 +4,7 @@ assert(tostring(Root().ManetSocket.Showfile):gsub('%.show$','')=='Gaslight_Club_
 assert(tostring((Root().ManetSocket:Get('HOSTNAME')))=='CWXT-E9A9VF8LTU','Install on the booth XT')
 assert(not o('Plugin 930'),'Plugin 930 is occupied; do not overwrite it')
 assert(not o('OSC 2'),'OSC row 2 is occupied; adjust the installation before proceeding')
-local file=GetPath(Enums.PathType.ImportExport)..'/GaslightBridge.lua'
+local file=assert(GetPath('plugins'),'Native plugin folder missing')..'/GaslightBridge.lua'
 local f=assert(io.open(file,'r'),'Place GaslightBridge.lua in the MA import/export directory');local source=f:read('*a');f:close();assert(load(source),'Bridge source must compile')
 local function c(s)assert(Cmd(s)=='OK',s)end
 c('Store Plugin 930 /NC');c('Label Plugin 930 "DJ BRIDGE CLUB"');o('Plugin 930'):Append().FileContent=source

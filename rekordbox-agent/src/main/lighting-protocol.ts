@@ -68,11 +68,11 @@ export function parseLightingReply(packet: Buffer): LightingReply | null {
     timer: fields[10] === "1", colors: fields[11] === "1", opening: fields[12] === "1" };
 }
 
-export type LightingOperation = "hello" | "claim" | "heartbeat" | "release" | "start" | "normal" | "tempo" | "track";
+export type LightingOperation = "hello" | "claim" | "heartbeat" | "release" | "start" | "stop" | "white" | "normal" | "tempo" | "track";
 export function lightingCommand(operation: LightingOperation, owner: string, nonce: string,
   replyAddress: string, label: string, payload = ""): string {
   if (!ID.test(owner) || !ID.test(nonce) || !privateIPv4(replyAddress)) throw new Error("Invalid lighting request");
-  if (!["hello", "claim", "heartbeat", "release", "start", "normal", "tempo", "track"].includes(operation)) throw new Error("Unknown lighting action");
+  if (!["hello", "claim", "heartbeat", "release", "start", "stop", "white", "normal", "tempo", "track"].includes(operation)) throw new Error("Unknown lighting action");
   if (operation === "tempo" && (!/^\d{2,3}(\.\d{1,3})?$/.test(payload) || Number(payload) < 30 || Number(payload) > 225)) throw new Error("Tempo must be 30–225 BPM");
   if (operation === "track" && !["cdj", "serato"].includes(payload)) throw new Error("Invalid track source");
   if (operation !== "tempo" && operation !== "track" && payload) throw new Error("Unexpected lighting payload");

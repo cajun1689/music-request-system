@@ -162,7 +162,7 @@ test('native verifier compiles without running playback',()=>run(`
 
 test('audit saves usable JSON, tolerates missing objects and API failures, and issues zero console commands', () => {
  const data=JSON.parse(run(`
- local output='';Enums={PathType={ImportExport=1}};function GetPath(_)return'/audit'end
+ local output='';function GetPath(kind)assert(kind=='plugins');return'/audit'end
  io={open=function(p,m)assert(p:match('^/audit/Gaslight%-Director%-Audit%-')and m=='w');return{write=function(_,s)output=s end,close=function()end}end}
  obj('Group 13').master=47;obj('Page 1');objects['Page 1'].children={{PropertyCount=function()error('read failure')end}}
  local audit=(function()\n${audit}\nend)();audit()
