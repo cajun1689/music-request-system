@@ -36,22 +36,24 @@ jobs:
       - name: Install dependencies (skip native compile)
         run: npm ci --ignore-scripts
 
-      - name: Install notarization dependency
-        run: npm install --save-dev @electron/notarize --ignore-scripts
+      - name: Build app and universal lighting receiver
+        run: npm run build
 
-      - name: Build TypeScript
+      - name: Run bridge tests
+        run: node --test tests/*.test.js
+
+      - name: Verify Serato database module in Electron
         run: |
-          cp src/main/preload.js dist/main/preload.js 2>/dev/null || true
-          npx tsc
-          rm -rf dist/renderer && cp -r src/renderer dist/renderer
-          cp src/main/preload.js dist/main/preload.js
-          node scripts/stamp-version.js
+          node node_modules/electron/install.js
+          npx electron-builder install-app-deps
+          ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/test-lighting-sqlite.js
 
       - name: Import signing certificate into keychain
         if: env.CSC_LINK != ''
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
@@ -68,17 +70,25 @@ jobs:
 
       - name: Package & publish to GitHub Releases
         if: startsWith(github.ref, 'refs/tags/')
-        run: npx electron-builder --mac --publish always
+        # The certificate is already imported above. Avoid the builder importing
+        # it again into a second keychain with the wrong unlock password.
+        run: env -u CSC_LINK -u CSC_KEY_PASSWORD CSC_KEYCHAIN="$RUNNER_TEMP/build.keychain" npx electron-builder --mac --publish always -c.forceCodeSigning=true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.CSC_LINK != '' && 'true' || 'false' }}
 
       - name: Package only (manual trigger)
         if: "!startsWith(github.ref, 'refs/tags/')"
-        run: npx electron-builder --mac --publish never
+        run: env -u CSC_LINK -u CSC_KEY_PASSWORD CSC_KEYCHAIN="$RUNNER_TEMP/build.keychain" npx electron-builder --mac --publish never -c.forceCodeSigning=true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.CSC_LINK != '' && 'true' || 'false' }}
+
+      - name: Verify Apple Silicon support in every bundled binary
+        run: node scripts/verify-macos-native.js "out/mac-universal/DJ Bridge.app"
+
+      - name: Verify app-specific macOS network identities
+        run: node scripts/verify-macos-network-identity.js "out/mac-universal/DJ Bridge.app"
 
       - name: Update release notes
         if: startsWith(github.ref, 'refs/tags/')
@@ -103,6 +113,7 @@ jobs:
             rekordbox-agent/out/*.zip
             rekordbox-agent/out/*.yml
             rekordbox-agent/out/*.yaml
+            rekordbox-agent/out/*.blockmap
           if-no-files-found: warn
 
       - name: Cleanup keychain

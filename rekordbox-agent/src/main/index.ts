@@ -29,6 +29,7 @@ import {
 } from "./rekordbox-reader";
 import {
   readCurrentSeratoTrack,
+  readLastPlayedSeratoTrack,
   readSeratoLibrary,
   resolveSeratoSessionDir,
 } from "./serato-reader";
@@ -65,6 +66,10 @@ import {
   onUpdateStatus,
 } from "./updater";
 
+import { LightingController } from "./lighting-controller";
+import { LightingConnectors } from "./lighting-connectors";
+import { legacyLightingFiles, migrateLegacyLighting } from "./lighting-legacy";
+
 log.info("DJ Bridge starting", { version: app.getVersion() });
 
 process.on("unhandledRejection", (reason) => {
@@ -73,6 +78,8 @@ process.on("unhandledRejection", (reason) => {
 
 let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
+let lighting: LightingController | null = null;
+let lightingCleanupComplete = false;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let pollQueue: Promise<void> = Promise.resolve();
 let requestsPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -759,7 +766,7 @@ function stopRequestsPolling(): void {
 }
 
 function positionWindowTopRight(): void {
-  if (!mainWindow) return;
+  if (isQuitting || !mainWindow || mainWindow.isDestroyed()) return;
   const { screen } = require("electron");
   const display = screen.getPrimaryDisplay();
   const { width: screenW, height: screenH } = display.workAreaSize;
@@ -794,6 +801,10 @@ function createWindow(): void {
     },
   });
 
+  const createdWindow = mainWindow;
+  createdWindow.on("closed", () => {
+    if (mainWindow === createdWindow) { mainWindow = null; setLogWindow(null); }
+  });
   setLogWindow(mainWindow);
 
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
@@ -822,7 +833,8 @@ function createWindow(): void {
 }
 
 function showWindow(): void {
-  if (!mainWindow) {
+  if (isQuitting) return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow();
   }
   if (mainWindow) {
@@ -833,7 +845,8 @@ function showWindow(): void {
 }
 
 function toggleWindow(): void {
-  if (!mainWindow) {
+  if (isQuitting) return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow();
   }
   if (mainWindow && mainWindow.isVisible()) {
@@ -843,6 +856,22 @@ function toggleWindow(): void {
     mainWindow.show();
     mainWindow.focus();
   }
+}
+
+function initializeLighting(): void {
+  const directory = app.isPackaged ? path.join(process.resourcesPath, "lighting") : path.join(__dirname, "..", "..", "resources", "lighting");
+  const connectors = new LightingConnectors({
+    helperPath: path.join(directory, "DJLightingReceiver"),
+    onTempo: (bpm) => lighting?.tempo(bpm),
+    onTrack: (source, description, key) => lighting?.track(source, description, key),
+    onStatus: (value) => lighting?.musicStatus(value),
+    legacySerato: () => readLastPlayedSeratoTrack(getConfig().musicLibraryPath || undefined),
+  });
+  lighting = new LightingController({ connectors,
+    legacyNeedsMigration: () => !getConfig().lightingLegacyMigrated && legacyLightingFiles().length > 0,
+    onStatus: (value) => mainWindow?.webContents.send("lighting-status", value),
+  });
+  if (getConfig().lightingEnabled) void lighting.enable().catch((error) => log.warn("Lighting startup:", String(error)));
 }
 
 app.on("ready", () => {
@@ -879,6 +908,7 @@ app.on("ready", () => {
 
   createWindow();
   mainWindow?.show();
+  initializeLighting();
 
   const config = getConfig();
   status.mode = config.mode;
@@ -898,9 +928,14 @@ app.on("ready", () => {
   });
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   isQuitting = true;
-  void stopShowKontrolReader();
+  if (lightingCleanupComplete) return;
+  event.preventDefault();
+  if (pollTimer) clearInterval(pollTimer);
+  if (requestsPollTimer) clearInterval(requestsPollTimer);
+  Promise.all([lighting?.disable(), stopShowKontrolReader()]).catch((error) => log.warn("Shutdown:", String(error)))
+    .finally(() => { lightingCleanupComplete = true; app.quit(); });
 });
 
 app.on("window-all-closed", () => {
@@ -1360,4 +1395,42 @@ ipcMain.handle("quit-and-install", () => {
   log.info("Quit-and-install requested, setting isQuitting=true");
   isQuitting = true;
   quitAndInstall();
+});
+
+// Lighting is local and independent of request-event pairing.
+ipcMain.handle("lighting-status", () => lighting?.getStatus() ?? null);
+ipcMain.handle("lighting-enable", async (_event, enabled: unknown) => {
+  if (typeof enabled !== "boolean" || !lighting) throw new Error("Invalid lighting setting");
+  const state = enabled ? await lighting.enable() : await lighting.disable();
+  setConfig({ lightingEnabled: enabled }); return state;
+});
+ipcMain.handle("lighting-find", async (_event, address: unknown) => {
+  if (typeof address !== "string" || address.length > 15 || !lighting) throw new Error("Invalid MA address");
+  return lighting.find(address.trim());
+});
+ipcMain.handle("lighting-start", async () => {
+  if (!lighting) throw new Error("Lighting is unavailable");
+  const state = await lighting.startClub(); setConfig({ lightingEnabled: true }); return state;
+});
+ipcMain.handle("lighting-stop", () => {
+  if (!lighting) throw new Error("Lighting is unavailable");
+  return lighting.control("stop");
+});
+ipcMain.handle("lighting-white", () => {
+  if (!lighting) throw new Error("Lighting is unavailable");
+  return lighting.control("white");
+});
+ipcMain.handle("lighting-remote", async () => {
+  if (!lighting) throw new Error("Find the MA first");
+  const { shell } = await import("electron"); await shell.openExternal(lighting.remoteUrl());
+});
+ipcMain.handle("lighting-migrate", async () => {
+  if (!lighting?.canMigrate()) throw new Error("Connect to the booth MA and acquire lighting control first");
+  await migrateLegacyLighting(path.join(app.getPath("userData"), "lighting-legacy-backup"));
+  setConfig({ lightingLegacyMigrated: true }); await lighting.migrated(); return lighting.getStatus();
+});
+
+ipcMain.handle("lighting-normal", () => {
+  if (!lighting) throw new Error("Lighting is unavailable");
+  return lighting.finishOpening();
 });

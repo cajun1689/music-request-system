@@ -4,6 +4,20 @@ try {
   var ipcRenderer = electron.ipcRenderer;
 
   contextBridge.exposeInMainWorld("bridge", {
+    getLightingStatus: function () { return ipcRenderer.invoke("lighting-status"); },
+    setLightingEnabled: function (enabled) { return ipcRenderer.invoke("lighting-enable", enabled); },
+    findLighting: function (address) { return ipcRenderer.invoke("lighting-find", address || ""); },
+    finishLightingOpening: function () { return ipcRenderer.invoke("lighting-normal"); },
+    startClubNight: function () { return ipcRenderer.invoke("lighting-start"); },
+    stopClubShow: function () { return ipcRenderer.invoke("lighting-stop"); },
+    whiteOnly: function () { return ipcRenderer.invoke("lighting-white"); },
+    openLightingRemote: function () { return ipcRenderer.invoke("lighting-remote"); },
+    migrateLighting: function () { return ipcRenderer.invoke("lighting-migrate"); },
+    onLightingStatus: function (callback) {
+      var handler = function (_event, value) { callback(value); };
+      ipcRenderer.on("lighting-status", handler);
+      return function () { ipcRenderer.removeListener("lighting-status", handler); };
+    },
     getAppVersion: function () { return ipcRenderer.invoke("get-app-version"); },
     getConfig: function () { return ipcRenderer.invoke("get-config"); },
     setConfig: function (partial) { return ipcRenderer.invoke("set-config", partial); },
