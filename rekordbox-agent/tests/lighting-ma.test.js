@@ -58,7 +58,7 @@ test('MA Lua runs a 30-second movers-only white opening, ignores song changes du
  request('claim',owner,string.rep('1',32));request('start',owner,string.rep('2',32));advance(1.5)
  assert(lastReply:find('|started|',1,true));assert(object('Sequence 121').cue==12)
  assert(not object('Sequence 160').active)
- for id,w in pairs({[11]=70,[12]=80,[13]=65,[14]=55,[15]=55,[16]=55,[17]=60,[18]=50})do assert(object('Sequence '..id).master==w)end
+ for id,w in pairs({[11]=70,[12]=80,[13]=65,[14]=0,[15]=0,[16]=0,[17]=0,[18]=0})do assert(object('Sequence '..id).master==w)end
  for id=11,13 do assert(object('Sequence '..id).active)end
  for id=14,18 do assert(not object('Sequence '..id).active)end
  assert(not object('Sequence 114').active and not object('Sequence 117').active)
@@ -123,7 +123,7 @@ test('native deferred selector completion cannot undo final opening sizes or str
  end
  request('claim',owner,string.rep('1',32));request('start',owner,string.rep('2',32));advance(1.5)
  assert(lastReply:find('|started|',1,true))
- assert(object('Sequence 18').master==50 and object('Sequence 101').temp==100 and object('Sequence 102').temp==100)
+ assert(object('Sequence 18').master==0 and object('Sequence 101').temp==100 and object('Sequence 102').temp==100)
 `));
 test('Stop Show cancels an opening in progress and delayed selector revival without bringing intensity back',()=>run(`
  request('claim',owner,string.rep('1',32));request('start',owner,string.rep('2',32))
@@ -151,4 +151,19 @@ test('native show-control installer compiles before any mutation',()=>run(`asser
 test('native venue profile ignores virtual-adapter replies before changing ownership or OSC destination',()=>run(`
  bridge(nil,'claim|'..owner..'|'..string.rep('1',32)..'|10.147.17.59|Virtual|-');assert(#commands==0)
  request('claim',other,string.rep('2',32));assert(lastReply:find('|claimed|',1,true))
+`));
+
+test('opening keeps every non-mover master at zero even if MA auto-starts a base playback',()=>run(`
+ local original=Cmd
+ function Cmd(s)local result=original(s);if s=='Off Sequence 14 Thru 18'then Timer(function()object('Sequence 18').active=true end,.15,1)end;return result end
+ request('claim',owner,string.rep('1',32));request('start',owner,string.rep('2',32));advance(2)
+ assert(lastReply:find('|started|',1,true));for id=14,18 do assert(object('Sequence '..id).master==0)end
+ advance(32);assert(object('Sequence 160').active);assert(object('Sequence 18').master==50)
+`));
+
+test('normal handoff settles PAR depth after the timer selector primes a full-depth layer',()=>run(`
+ local old=Cmd
+ function Cmd(s)local result=old(s);if s=='Go+ Macro 3701'then Timer(function()object('Sequence 114').temp=100 end,1.2,1)end;return result end
+ request('claim',owner,string.rep('1',32));request('start',owner,string.rep('2',32));advance(34)
+ assert(object('Sequence 114').temp==30 and object('Sequence 18').master==50)
 `));

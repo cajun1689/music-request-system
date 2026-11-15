@@ -5,6 +5,7 @@
   let state = null;
   let pending = false;
   let revision = 0;
+  let actionError = null;
   function update(s) {
     if (!s) return;
     state = s;
@@ -35,18 +36,21 @@
     el('lighting-normal').disabled = pending;
     el('lighting-normal').style.display = s.opening && s.state === 'ready' ? 'inline-flex' : 'none';
     el('lighting-migrate').style.display = s.state === 'migration' ? 'inline-flex' : 'none';
-    el('lighting-error').textContent = s.error || '';
-    el('lighting-error').style.display = s.error ? 'block' : 'none';
+    const error = actionError || s.error;
+    el('lighting-error').textContent = error || '';
+    el('lighting-error').style.display = error ? 'block' : 'none';
   }
   async function action(fn, interrupt = false) {
     if (pending && !interrupt) return;
     const mine = ++revision;
+    actionError = null;
     pending = true; if (state) update(state);
     let failure = null;
     try { const result = await fn(); if (result && mine === revision) state = result; }
     catch (error) { failure = error.message || String(error); }
     finally {
       if (mine !== revision) return;
+      actionError = failure;
       pending = false; if (state) update(state);
       if (failure) { el('lighting-error').textContent = failure; el('lighting-error').style.display = 'block'; }
     }

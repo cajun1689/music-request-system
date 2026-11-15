@@ -53,7 +53,7 @@ local function clubstart(nonce,ip,who)
   command('FaderMaster Master 2.1 At 100')
   for group=1,8 do command('FaderMaster Group '..group..' At 100')end
   command('FaderMaster Group 10 At 100')
-  local bases={{11,70},{12,80},{13,65},{14,55},{15,55},{16,55},{17,60},{18,50}}
+  local bases={{11,70},{12,80},{13,65},{14,0},{15,0},{16,0},{17,0},{18,0}}
   for _,x in ipairs(bases)do
    command((x[1]<=13 and 'Goto Cue 1 Sequence 'or'Off Sequence ')..x[1]);command('FaderMaster Sequence '..x[1]..' At '..x[2])
   end
@@ -70,7 +70,7 @@ local function clubstart(nonce,ip,who)
   if generation~=mine then return end
   if owner~=who or Time()>=expires or showname()~=SHOW then starting=false;reply(nonce,'not_owner',ip);return end
   local success=pcall(function()
-   command('Off Sequence 14 Thru 18');command('Off Sequence 114');command('Off Sequence 117');command('FaderMaster Sequence 18 At 50')
+   command('Off Sequence 14 Thru 18');command('Off Sequence 114');command('Off Sequence 117');command('FaderMaster Sequence 18 At 0')
   end)
   Timer(function()
    if generation~=mine then return end
@@ -78,7 +78,7 @@ local function clubstart(nonce,ip,who)
    -- Native Cmd dispatches selector plugins asynchronously. Reapply final values
    -- after 901/920 and Macro 5 have finished, then read them on a later frame.
    if success then success=pcall(function()
-    command('FaderMaster Sequence 18 At 50');command('Set Sequence 117 Property SpeedScale Div4')
+    command('FaderMaster Sequence 18 At 0');command('Set Sequence 117 Property SpeedScale Div4')
     for _,x in ipairs({{101,100},{102,100},{103,100},{111,50},{112,65},{113,35},{121,100}})do command('FaderTemp Sequence '..x[1]..' At '..x[2])end
    end)end
    Timer(function()
@@ -86,11 +86,13 @@ local function clubstart(nonce,ip,who)
    if owner~=who or Time()>=expires or showname()~=SHOW then starting=false;pendingStart=nil;reply(nonce,'not_owner',ip);return end
    starting=false
    local good=success and not active(160)and active(11)and active(101)and active(102)and active(103)and active(111)and active(112)and active(113)and not active(114)and not active(117)
-   for id,wanted in pairs({[11]=70,[12]=80,[13]=65,[14]=55,[15]=55,[16]=55,[17]=60,[18]=50})do good=good and level(id,wanted)end
-   for id=14,18 do good=good and not active(id)end
+   for id,wanted in pairs({[11]=70,[12]=80,[13]=65,[14]=0,[15]=0,[16]=0,[17]=0,[18]=0})do good=good and level(id,wanted)end
+   -- A zero master guarantees blackout even if MA auto-starts a base playback.
+   for id=14,18 do good=good and level(id,0)end
    if good then Timer(function()
     if generation==mine and opening and showname()==SHOW and station()==STATION then normalrotation();command("Plugin 902 'next'")end
    end,30,1)end
+   if not good then opening=false end
    pendingStart=nil;recent[nonce]=good and'started'or'start_check_failed';reply(nonce,recent[nonce],ip)
    end,.2,1)
   end,.5,1)
@@ -158,6 +160,11 @@ normalrotation=function()
  command('FaderTemp Sequence 114 At 30');command('FaderTemp Sequence 117 At 100');command("Plugin 901 '114:8'");command("Plugin 920 'auto_on'");command("Plugin 902 'mode_auto'")
  local mine=generation
  Timer(function()if generation==mine and showname()==SHOW and not opening then command('FaderMaster Sequence 18 At 50');command('Set Sequence 117 Property SpeedScale Div4')end end,.6,1)
+ Timer(function()
+  if generation==mine and showname()==SHOW and not opening then
+   local s=o('Sequence 114');if s:HasActivePlayback()and s:GetFader({token='FaderTemp'})>99.9 then command('FaderTemp Sequence 114 At 30')end
+  end
+ end,1.8,1)
  local levels={{101,75},{102,80},{103,70},{111,50},{112,65},{113,35},{114,30}}
  for _,x in ipairs(levels)do local seq=o('Sequence '..x[1]);local v=seq:GetFader({token='FaderTemp'});if seq:HasActivePlayback()and v>.1 then if x[1]>=111 or math.abs(v-100)<.1 then command('FaderTemp Sequence '..x[1]..' At '..x[2])end end end
  command('Go+ Macro 3701')

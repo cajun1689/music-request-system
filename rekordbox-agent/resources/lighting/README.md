@@ -2,9 +2,9 @@
 
 This is the offline-tested lighting integration for Gaslight, grandMA3 2.4.2.2. Back up the venue show before installing or updating its native controller. Do not replace a working show with an unverified import.
 
-Version 1.14.2 is distributed through the normal DJ Bridge updater. Lighting remains off by default. Updating the app does not install the booth plugin, change the working legacy helpers or start the venue lights.
+Version 1.14.3 is distributed through the normal DJ Bridge updater. Lighting remains off by default. Updating the app does not install the booth plugin, change the working legacy helpers or start the venue lights.
 
-The earlier Preview Guide PDF shows the previous first-song opening. Version 1.14.1 uses the 30-second opening described here; printed guides must be updated before distributing them.
+The bundled **DJ Bridge - Club Lighting Quick Guide.pdf** is the updated one-page visual reference for Start Club Night, Stop Show, White Only, and the wing brightness bank.
 
 ## Everyday use, after booth setup
 
